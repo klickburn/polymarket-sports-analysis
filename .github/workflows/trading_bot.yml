@@ -1,0 +1,39 @@
+name: Trading Bot
+
+on:
+  schedule:
+    # Run every 30 minutes
+    - cron: '*/30 * * * *'
+  workflow_dispatch: # Manual trigger
+
+jobs:
+  scan-and-bet:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests cryptography
+
+      - name: Run trading bot (live)
+        env:
+          PM_API_KEY: ${{ secrets.PM_API_KEY }}
+          PM_API_SECRET: ${{ secrets.PM_API_SECRET }}
+        run: python trading_bot.py --live
+
+      - name: Upload bot bets log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bot-log-${{ github.run_number }}
+          path: |
+            trading_bot.log
+            trading_bot_bets.json
+          retention-days: 30
