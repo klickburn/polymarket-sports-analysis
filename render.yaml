@@ -1,0 +1,28 @@
+services:
+  # Web service — Dashboard
+  - type: web
+    name: polymarket-dashboard
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python web_server.py
+    envVars:
+      - key: PM_API_KEY
+        sync: false
+      - key: PM_API_SECRET
+        sync: false
+      - key: PYTHON_VERSION
+        value: "3.11"
+
+  # Background worker — Trading bot
+  - type: worker
+    name: polymarket-bot
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot_worker.py
+    envVars:
+      - key: PM_API_KEY
+        sync: false
+      - key: PM_API_SECRET
+        sync: false
+      - key: PYTHON_VERSION
+        value: "3.11"

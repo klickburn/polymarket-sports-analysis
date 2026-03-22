@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Polymarket Trading Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --card: #1a1d28;
+    --border: #2a2d3a;
+    --text: #e1e4eb;
+    --muted: #8b8fa3;
+    --green: #22c55e;
+    --red: #ef4444;
+    --blue: #3b82f6;
+    --purple: #a855f7;
+    --orange: #f59e0b;
+    --cyan: #06b6d4;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    padding: 24px;
+    min-height: 100vh;
+  }
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 28px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .header h1 {
+    font-size: 26px;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--blue), var(--purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .header .subtitle { color: var(--muted); font-size: 14px; }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 32px 0 16px 0;
+  }
+  .section-header h2 {
+    font-size: 20px;
+    font-weight: 700;
+  }
+  .section-header .badge {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .badge-bot { background: rgba(168,85,247,0.2); color: var(--purple); }
+  .badge-manual { background: rgba(59,130,246,0.2); color: var(--blue); }
+  .section-divider {
+    border: none;
+    border-top: 2px solid var(--border);
+    margin: 36px 0 8px 0;
+  }
+
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+  .kpi {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px;
+    text-align: center;
+  }
+  .kpi .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; }
+  .kpi .value { font-size: 26px; font-weight: 700; }
+  .kpi .value.green { color: var(--green); }
+  .kpi .value.red { color: var(--red); }
+  .kpi .value.blue { color: var(--blue); }
+  .kpi .value.purple { color: var(--purple); }
+  .kpi .sub { color: var(--muted); font-size: 11px; margin-top: 4px; }
+
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 24px;
+  }
+  .grid-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 24px;
+  }
+  .grid-4 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+  @media (max-width: 900px) {
+    .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .card.bot-card { border-color: rgba(168,85,247,0.3); }
+  .card h3 {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .chart-container { position: relative; width: 100%; }
+  .chart-container.tall { height: 300px; }
+  .chart-container.short { height: 220px; }
+  .chart-container.med { height: 260px; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  th {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 2px solid var(--border);
+    color: var(--muted);
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  tr:hover { background: rgba(59, 130, 246, 0.05); }
+  .tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .tag.win { background: rgba(34,197,94,0.15); color: var(--green); }
+  .tag.loss { background: rgba(239,68,68,0.15); color: var(--red); }
+  .tag.open { background: rgba(59,130,246,0.15); color: var(--blue); }
+  .tag.pending { background: rgba(245,158,11,0.15); color: var(--orange); }
+  .tag.nba { background: rgba(239,68,68,0.15); color: var(--red); }
+  .tag.cbb { background: rgba(59,130,246,0.15); color: var(--blue); }
+  .tag.nhl { background: rgba(6,182,212,0.15); color: var(--cyan); }
+  .tag.ucl { background: rgba(168,85,247,0.15); color: var(--purple); }
+  .tag.epl { background: rgba(245,158,11,0.15); color: var(--orange); }
+  .tag.ufc { background: rgba(245,158,11,0.15); color: var(--orange); }
+  .tag.t1 { background: rgba(34,197,94,0.15); color: var(--green); }
+  .tag.t2 { background: rgba(59,130,246,0.15); color: var(--blue); }
+  .tag.t3 { background: rgba(168,85,247,0.15); color: var(--purple); }
+  .tag.t4 { background: rgba(245,158,11,0.15); color: var(--orange); }
+  .tag.manual { background: rgba(107,114,128,0.15); color: #9ca3af; }
+  .tag.bot { background: rgba(168,85,247,0.15); color: var(--purple); }
+
+  .pnl-pos { color: var(--green); font-weight: 600; }
+  .pnl-neg { color: var(--red); font-weight: 600; }
+
+  .scroll-table { max-height: 500px; overflow-y: auto; }
+  .scroll-table::-webkit-scrollbar { width: 6px; }
+  .scroll-table::-webkit-scrollbar-track { background: var(--card); }
+  .scroll-table::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .tabs { display: flex; gap: 4px; margin-bottom: 16px; flex-wrap: wrap; }
+  .tab {
+    padding: 8px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid transparent;
+    transition: all 0.2s;
+  }
+  .tab:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+  .tab.active { color: var(--text); background: rgba(59,130,246,0.15); border-color: var(--blue); }
+
+  .tier-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    text-align: center;
+  }
+  .tier-card .tier-label { font-size: 11px; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
+  .tier-card .tier-title { font-size: 13px; font-weight: 600; margin-bottom: 10px; }
+  .tier-card .tier-stat { font-size: 22px; font-weight: 700; }
+  .tier-card .tier-detail { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  .empty-state {
+    text-align: center;
+    padding: 48px 24px;
+    color: var(--muted);
+  }
+  .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+  .empty-state .msg { font-size: 16px; font-weight: 500; }
+  .empty-state .sub { font-size: 13px; margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="header">
+  <div>
+    <h1>Polymarket Dashboard</h1>
+    <div class="subtitle">Trading Performance & Bot Analytics</div>
+  </div>
+  <div style="text-align:right">
+    <div style="color:var(--muted);font-size:12px">Last updated</div>
+    <div style="font-size:14px;font-weight:600" id="lastUpdated"></div>
+  </div>
+</div>
+
+<!-- ═══ OVERALL KPIs ═══ -->
+<div class="kpi-row" id="kpis"></div>
+
+<div class="grid-2">
+  <div class="card">
+    <h3>Cumulative P&L (All Bets)</h3>
+    <div class="chart-container tall"><canvas id="pnlChart"></canvas></div>
+  </div>
+  <div class="card">
+    <h3>Win / Loss by Sport</h3>
+    <div class="chart-container tall"><canvas id="winLossChart"></canvas></div>
+  </div>
+</div>
+
+<!-- ═══ BOT SECTION ═══ -->
+<hr class="section-divider">
+<div class="section-header">
+  <h2>Bot Performance</h2>
+  <span class="badge badge-bot">Automated</span>
+</div>
+
+<div class="kpi-row" id="botKpis"></div>
+
+<div id="botContent"></div>
+
+<!-- ═══ MANUAL SECTION ═══ -->
+<hr class="section-divider">
+<div class="section-header">
+  <h2>Manual Bets (Pre-Bot)</h2>
+  <span class="badge badge-manual">Historical</span>
+</div>
+
+<div class="kpi-row" id="manualKpis"></div>
+
+<div class="grid-2" style="margin-bottom:24px">
+  <div class="card">
+    <h3>Top Winners</h3>
+    <div id="topWinners"></div>
+  </div>
+  <div class="card">
+    <h3>Top Losers</h3>
+    <div id="topLosers"></div>
+  </div>
+</div>
+
+<div class="grid-3" style="margin-bottom:24px">
+  <div class="card">
+    <h3>P&L by Sport</h3>
+    <div class="chart-container short"><canvas id="sportPnlChart"></canvas></div>
+  </div>
+  <div class="card">
+    <h3>Win Rate by Sport</h3>
+    <div class="chart-container short"><canvas id="sportWrChart"></canvas></div>
+  </div>
+  <div class="card">
+    <h3>Bet Size Distribution</h3>
+    <div class="chart-container short"><canvas id="betSizeChart"></canvas></div>
+  </div>
+</div>
+
+<!-- ═══ ALL BETS TABLE ═══ -->
+<hr class="section-divider">
+<div class="section-header">
+  <h2>All Bets</h2>
+</div>
+
+<div class="card" style="margin-bottom:24px">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+    <div class="tabs" id="mainTabs">
+      <div class="tab active" onclick="filterTable('all')">All</div>
+      <div class="tab" onclick="filterTable('bot')">Bot</div>
+      <div class="tab" onclick="filterTable('manual')">Manual</div>
+      <div class="tab" onclick="filterTable('resolved')">Resolved</div>
+      <div class="tab" onclick="filterTable('open')">Open</div>
+      <div class="tab" onclick="filterTable('wins')">Wins</div>
+      <div class="tab" onclick="filterTable('losses')">Losses</div>
+    </div>
+  </div>
+  <div class="scroll-table">
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Market</th>
+          <th>Bet On</th>
+          <th>Source</th>
+          <th>Tier</th>
+          <th>Sport</th>
+          <th>Cost</th>
+          <th>P&L</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="betsBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══ OPEN POSITIONS ═══ -->
+<div class="card">
+  <h3>Open Positions</h3>
+  <div class="scroll-table">
+    <table>
+      <thead>
+        <tr><th>Market</th><th>Bet On</th><th>Source</th><th>Sport</th><th>Cost</th></tr>
+      </thead>
+      <tbody id="openBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const REPORT = REPORT_DATA_PLACEHOLDER;
+const BOT_BETS = BOT_DATA_PLACEHOLDER;
+const BOT_CUTOFF = "2026-03-21T23:59:59Z"; // Bot starts from today
+
+// Build set of bot market slugs
+const botSlugs = new Set(BOT_BETS.map(b => b.market_slug));
+
+function getSport(slug) {
+  if (slug.startsWith('aec-nba') || slug.includes('-nba-')) return 'NBA';
+  if (slug.startsWith('aec-cbb') || slug.includes('-cbb-')) return 'CBB';
+  if (slug.startsWith('aec-nhl') || slug.includes('-nhl-')) return 'NHL';
+  if (slug.startsWith('atc-ucl') || slug.includes('-ucl-')) return 'UCL';
+  if (slug.startsWith('atc-epl') || slug.includes('-epl-')) return 'EPL';
+  return 'Other';
+}
+
+function getDate(ts) {
+  if (!ts) return '';
+  return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function pnlHtml(val) {
+  if (val === null || val === undefined) return '-';
+  const cls = val >= 0 ? 'pnl-pos' : 'pnl-neg';
+  return `<span class="${cls}">${val >= 0 ? '+' : ''}$${val.toFixed(2)}</span>`;
+}
+
+function sportTag(sport) {
+  return `<span class="tag ${sport.toLowerCase()}">${sport}</span>`;
+}
+
+function tierTag(tier) {
+  if (!tier) return '<span class="tag manual">-</span>';
+  return `<span class="tag t${tier}">T${tier}</span>`;
+}
+
+function isBot(slug) { return botSlugs.has(slug); }
+
+// ══════════════════════════════════════════════════════════════════
+// OVERALL KPIs
+// ══════════════════════════════════════════════════════════════════
+document.getElementById('lastUpdated').textContent = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+const roi = (REPORT.total_resolved_pnl / REPORT.total_deposited * 100).toFixed(1);
+const avgWinPnl = REPORT.resolved_markets.filter(m => m.won).length > 0
+  ? REPORT.resolved_markets.filter(m => m.won).reduce((s, m) => s + m.total_pnl, 0) / REPORT.wins : 0;
+const avgLossPnl = REPORT.resolved_markets.filter(m => !m.won).length > 0
+  ? REPORT.resolved_markets.filter(m => !m.won).reduce((s, m) => s + m.total_pnl, 0) / REPORT.losses : 0;
+
+const kpis = [
+  { label: 'Deposited', value: `$${REPORT.total_deposited.toFixed(0)}`, cls: '', sub: `${REPORT.total_trades} total trades` },
+  { label: 'Balance', value: `$${REPORT.estimated_balance.toFixed(2)}`, cls: 'green', sub: `+$${REPORT.total_resolved_pnl.toFixed(2)} P&L` },
+  { label: 'ROI', value: `${roi}%`, cls: parseFloat(roi) >= 0 ? 'green' : 'red', sub: 'on resolved bets' },
+  { label: 'Win Rate', value: `${REPORT.win_rate}%`, cls: REPORT.win_rate >= 50 ? 'green' : 'red', sub: `${REPORT.wins}W - ${REPORT.losses}L` },
+  { label: 'Open', value: REPORT.open_count, cls: 'blue', sub: `$${REPORT.open_cost.toFixed(2)} at risk` },
+  { label: 'Avg Win', value: `$${avgWinPnl.toFixed(2)}`, cls: 'green', sub: `Avg loss: -$${Math.abs(avgLossPnl).toFixed(2)}` },
+];
+document.getElementById('kpis').innerHTML = kpis.map(k =>
+  `<div class="kpi"><div class="label">${k.label}</div><div class="value ${k.cls}">${k.value}</div><div class="sub">${k.sub}</div></div>`
+).join('');
+
+// ══════════════════════════════════════════════════════════════════
+// OVERALL CHARTS
+// ══════════════════════════════════════════════════════════════════
+const sorted = [...REPORT.resolved_markets].sort((a, b) => (a.first_trade || '').localeCompare(b.first_trade || ''));
+let cumPnl = 0;
+const cumData = sorted.map(m => {
+  cumPnl += m.total_pnl;
+  return { x: getDate(m.first_trade), y: parseFloat(cumPnl.toFixed(2)), pnl: m.total_pnl, title: m.title, bot: isBot(m.market_slug) };
+});
+
+new Chart(document.getElementById('pnlChart'), {
+  type: 'line',
+  data: {
+    labels: cumData.map(d => d.x),
+    datasets: [{
+      data: cumData.map(d => d.y),
+      borderColor: '#3b82f6',
+      backgroundColor: 'rgba(59,130,246,0.1)',
+      fill: true, tension: 0.3, pointRadius: 4, borderWidth: 2,
+      pointBackgroundColor: cumData.map(d => d.bot ? '#a855f7' : (d.pnl >= 0 ? '#22c55e' : '#ef4444')),
+      pointBorderColor: cumData.map(d => d.bot ? '#a855f7' : (d.pnl >= 0 ? '#22c55e' : '#ef4444')),
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: { label: (ctx) => {
+        const d = cumData[ctx.dataIndex];
+        return [`Cum P&L: $${d.y.toFixed(2)}`, `This bet: ${d.pnl >= 0 ? '+' : ''}$${d.pnl.toFixed(2)}`, d.title.substring(0, 40), d.bot ? '(BOT)' : '(Manual)'];
+      }}}
+    },
+    scales: {
+      x: { display: false },
+      y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3', callback: v => '$' + v } }
+    }
+  }
+});
+
+// Win/Loss by sport
+const sports = {};
+REPORT.resolved_markets.forEach(m => {
+  const s = getSport(m.market_slug);
+  if (!sports[s]) sports[s] = { wins: 0, losses: 0, pnl: 0, count: 0 };
+  sports[s].count++; sports[s].pnl += m.total_pnl;
+  if (m.won) sports[s].wins++; else sports[s].losses++;
+});
+const sportNames = Object.keys(sports).sort();
+const sportColors = { NBA: '#ef4444', CBB: '#3b82f6', NHL: '#06b6d4', UCL: '#a855f7', EPL: '#f59e0b', Other: '#8b8fa3' };
+
+new Chart(document.getElementById('winLossChart'), {
+  type: 'bar',
+  data: {
+    labels: sportNames,
+    datasets: [
+      { label: 'Wins', data: sportNames.map(s => sports[s].wins), backgroundColor: 'rgba(34,197,94,0.7)', borderRadius: 4 },
+      { label: 'Losses', data: sportNames.map(s => sports[s].losses), backgroundColor: 'rgba(239,68,68,0.7)', borderRadius: 4 },
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { labels: { color: '#8b8fa3' } } },
+    scales: {
+      x: { stacked: true, grid: { display: false }, ticks: { color: '#8b8fa3' } },
+      y: { stacked: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3' } }
+    }
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════
+// BOT SECTION
+// ══════════════════════════════════════════════════════════════════
+const botResolved = REPORT.resolved_markets.filter(m => isBot(m.market_slug));
+const botOpen = REPORT.open_markets.filter(m => isBot(m.market_slug));
+const botPending = BOT_BETS.filter(b => {
+  const resolved = REPORT.resolved_markets.some(m => m.market_slug === b.market_slug);
+  const inOpen = REPORT.open_markets.some(m => m.market_slug === b.market_slug);
+  return !resolved && !inOpen;
+});
+
+const botWins = botResolved.filter(m => m.won).length;
+const botLosses = botResolved.filter(m => !m.won).length;
+const botTotalPnl = botResolved.reduce((s, m) => s + m.total_pnl, 0);
+const botOpenCost = botOpen.reduce((s, m) => s + m.total_cost, 0);
+const botTotalBets = BOT_BETS.length;
+const botWr = botResolved.length > 0 ? (botWins / botResolved.length * 100).toFixed(1) : '—';
+
+// Bot-specific bets with tier info
+const botBetMap = {};
+BOT_BETS.forEach(b => { botBetMap[b.market_slug] = b; });
+
+// Bot KPIs
+const botKpiData = [
+  { label: 'Bot Bets Placed', value: botTotalBets || '0', cls: 'purple', sub: botTotalBets === 0 ? 'No bets yet' : `${botResolved.length} resolved` },
+  { label: 'Bot P&L', value: botTotalBets > 0 ? `$${botTotalPnl >= 0 ? '+' : ''}${botTotalPnl.toFixed(2)}` : '$0.00', cls: botTotalPnl >= 0 ? 'green' : 'red', sub: botOpen.length > 0 ? `${botOpen.length} open ($${botOpenCost.toFixed(2)})` : 'No open positions' },
+  { label: 'Bot Win Rate', value: botWr === '—' ? '—' : `${botWr}%`, cls: parseFloat(botWr) >= 50 ? 'green' : (botWr === '—' ? '' : 'red'), sub: botResolved.length > 0 ? `${botWins}W - ${botLosses}L` : 'Awaiting results' },
+  { label: 'Bot ROI', value: botTotalBets > 0 && botResolved.length > 0 ? `${(botTotalPnl / botResolved.reduce((s,m) => s + m.cost_basis, 0.01) * 100).toFixed(1)}%` : '—', cls: botTotalPnl >= 0 ? 'green' : 'red', sub: 'on resolved bot bets' },
+];
+document.getElementById('botKpis').innerHTML = botKpiData.map(k =>
+  `<div class="kpi"><div class="label">${k.label}</div><div class="value ${k.cls}">${k.value}</div><div class="sub">${k.sub}</div></div>`
+).join('');
+
+// Bot content
+const botEl = document.getElementById('botContent');
+if (botTotalBets === 0) {
+  botEl.innerHTML = `
+    <div class="card bot-card">
+      <div class="empty-state">
+        <div class="icon">&#x1F916;</div>
+        <div class="msg">Bot hasn't placed any bets yet</div>
+        <div class="sub">Run <code>python3 trading_bot.py --live</code> to start the 4-tier strategy</div>
+      </div>
+    </div>`;
+} else {
+  // Tier breakdown
+  const tierStats = {};
+  BOT_BETS.forEach(b => {
+    const t = b.tier || 0;
+    if (!tierStats[t]) tierStats[t] = { bets: 0, wins: 0, losses: 0, pnl: 0, open: 0, wagered: 0 };
+    tierStats[t].bets++;
+    tierStats[t].wagered += b.bet_amount || 0;
+    const resolved = botResolved.find(m => m.market_slug === b.market_slug);
+    if (resolved) {
+      if (resolved.won) tierStats[t].wins++; else tierStats[t].losses++;
+      tierStats[t].pnl += resolved.total_pnl;
+    } else {
+      tierStats[t].open++;
+    }
+  });
+
+  const tierNames = { 1: 'B Fav 75-90%', 2: 'CBB Coin Flip', 3: 'CBB B Dog 50-55%', 4: 'NBA 50/50' };
+  const tierWrs = { 1: '87.6%', 2: '60.6%', 3: '65.8%', 4: '61.3%' };
+  const tierColors = { 1: 'var(--green)', 2: 'var(--blue)', 3: 'var(--purple)', 4: 'var(--orange)' };
+
+  let tierHtml = '<div class="grid-4" style="margin-bottom:20px">';
+  for (const t of [1, 2, 3, 4]) {
+    const s = tierStats[t] || { bets: 0, wins: 0, losses: 0, pnl: 0, open: 0 };
+    const wr = (s.wins + s.losses) > 0 ? (s.wins / (s.wins + s.losses) * 100).toFixed(0) + '%' : '—';
+    tierHtml += `
+      <div class="tier-card">
+        <div class="tier-label">Tier ${t}</div>
+        <div class="tier-title" style="color:${tierColors[t]}">${tierNames[t]}</div>
+        <div class="tier-stat" style="color:${s.pnl >= 0 ? 'var(--green)' : 'var(--red)'}">$${s.pnl >= 0 ? '+' : ''}${s.pnl.toFixed(2)}</div>
+        <div class="tier-detail">${s.bets} bets · ${wr} WR · ${s.open} open</div>
+        <div class="tier-detail" style="margin-top:2px">Backtest: ${tierWrs[t]} WR</div>
+      </div>`;
+  }
+  tierHtml += '</div>';
+
+  // Bot P&L chart
+  const botSorted = [...botResolved].sort((a, b) => (a.first_trade || '').localeCompare(b.first_trade || ''));
+  let botCum = 0;
+  const botCumData = botSorted.map(m => {
+    botCum += m.total_pnl;
+    const bb = botBetMap[m.market_slug];
+    return { x: getDate(m.first_trade), y: parseFloat(botCum.toFixed(2)), pnl: m.total_pnl, title: m.title, tier: bb ? bb.tier : 0 };
+  });
+
+  let botChartHtml = '';
+  if (botCumData.length > 1) {
+    botChartHtml = `
+      <div class="grid-2" style="margin-bottom:20px">
+        <div class="card bot-card">
+          <h3>Bot Cumulative P&L</h3>
+          <div class="chart-container med"><canvas id="botPnlChart"></canvas></div>
+        </div>
+        <div class="card bot-card">
+          <h3>Bot P&L by Tier</h3>
+          <div class="chart-container med"><canvas id="botTierChart"></canvas></div>
+        </div>
+      </div>`;
+  }
+
+  // Bot bets table
+  let botTableHtml = `
+    <div class="card bot-card">
+      <h3>Bot Bets</h3>
+      <div class="scroll-table">
+        <table>
+          <thead><tr><th>Date</th><th>Market</th><th>Bet On</th><th>Tier</th><th>Sport</th><th>Bet Size</th><th>P&L</th><th>Status</th></tr></thead>
+          <tbody>`;
+
+  const botRows = BOT_BETS.map(b => {
+    const resolved = botResolved.find(m => m.market_slug === b.market_slug);
+    const openPos = botOpen.find(m => m.market_slug === b.market_slug);
+    let status, pnl;
+    if (resolved) { status = resolved.won ? 'win' : 'loss'; pnl = resolved.total_pnl; }
+    else if (openPos) { status = 'open'; pnl = null; }
+    else { status = 'pending'; pnl = null; }
+    return { ...b, status, pnl, resolved };
+  }).sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
+
+  botRows.forEach(r => {
+    botTableHtml += `<tr>
+      <td>${getDate(r.timestamp)}</td>
+      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis">${r.question || r.market_slug}</td>
+      <td>${r.team_b}</td>
+      <td>${tierTag(r.tier)}</td>
+      <td>${sportTag(getSport(r.market_slug))}</td>
+      <td>$${(r.bet_amount || 0).toFixed(2)}</td>
+      <td>${pnlHtml(r.pnl)}</td>
+      <td><span class="tag ${r.status}">${r.status.toUpperCase()}</span></td>
+    </tr>`;
+  });
+
+  botTableHtml += '</tbody></table></div></div>';
+  botEl.innerHTML = tierHtml + botChartHtml + botTableHtml;
+
+  // Render bot charts if data exists
+  if (botCumData.length > 1) {
+    const tierColorMap = { 1: '#22c55e', 2: '#3b82f6', 3: '#a855f7', 4: '#f59e0b', 0: '#8b8fa3' };
+
+    new Chart(document.getElementById('botPnlChart'), {
+      type: 'line',
+      data: {
+        labels: botCumData.map(d => d.x),
+        datasets: [{
+          data: botCumData.map(d => d.y),
+          borderColor: '#a855f7', backgroundColor: 'rgba(168,85,247,0.1)',
+          fill: true, tension: 0.3, pointRadius: 4, borderWidth: 2,
+          pointBackgroundColor: botCumData.map(d => tierColorMap[d.tier] || '#a855f7'),
+          pointBorderColor: botCumData.map(d => tierColorMap[d.tier] || '#a855f7'),
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { display: false },
+          y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3', callback: v => '$' + v } }
+        }
+      }
+    });
+
+    new Chart(document.getElementById('botTierChart'), {
+      type: 'bar',
+      data: {
+        labels: [1, 2, 3, 4].map(t => `T${t}: ${tierNames[t]}`),
+        datasets: [{
+          data: [1, 2, 3, 4].map(t => parseFloat(((tierStats[t] || {}).pnl || 0).toFixed(2))),
+          backgroundColor: [1, 2, 3, 4].map(t => {
+            const p = (tierStats[t] || {}).pnl || 0;
+            return p >= 0 ? 'rgba(34,197,94,0.7)' : 'rgba(239,68,68,0.7)';
+          }),
+          borderRadius: 4,
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: '#8b8fa3', font: { size: 10 } } },
+          y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3', callback: v => '$' + v } }
+        }
+      }
+    });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// MANUAL SECTION
+// ══════════════════════════════════════════════════════════════════
+const manualResolved = REPORT.resolved_markets.filter(m => !isBot(m.market_slug));
+const manualWins = manualResolved.filter(m => m.won).length;
+const manualLosses = manualResolved.length - manualWins;
+const manualPnl = manualResolved.reduce((s, m) => s + m.total_pnl, 0);
+const manualOpen = REPORT.open_markets.filter(m => !isBot(m.market_slug));
+const manualOpenCost = manualOpen.reduce((s, m) => s + m.total_cost, 0);
+
+const manualKpiData = [
+  { label: 'Manual Bets', value: manualResolved.length, cls: 'blue', sub: `${manualOpen.length} still open` },
+  { label: 'Manual P&L', value: `$${manualPnl >= 0 ? '+' : ''}${manualPnl.toFixed(2)}`, cls: manualPnl >= 0 ? 'green' : 'red', sub: `$${manualOpenCost.toFixed(2)} open` },
+  { label: 'Manual Win Rate', value: manualResolved.length > 0 ? `${(manualWins / manualResolved.length * 100).toFixed(1)}%` : '—', cls: 'green', sub: `${manualWins}W - ${manualLosses}L` },
+];
+document.getElementById('manualKpis').innerHTML = manualKpiData.map(k =>
+  `<div class="kpi"><div class="label">${k.label}</div><div class="value ${k.cls}">${k.value}</div><div class="sub">${k.sub}</div></div>`
+).join('');
+
+// Top performers (manual only)
+function topList(items, container) {
+  if (items.length === 0) { container.innerHTML = '<div style="color:var(--muted);text-align:center;padding:20px">No data</div>'; return; }
+  container.innerHTML = items.map(m => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+      <div>
+        <div style="font-size:13px;font-weight:500">${m.title.substring(0, 36)}</div>
+        <div style="font-size:11px;color:var(--muted)">${m.outcome_bet} · ${getSport(m.market_slug)}</div>
+      </div>
+      ${pnlHtml(m.total_pnl)}
+    </div>
+  `).join('');
+}
+const winners = manualResolved.filter(m => m.total_pnl > 0).sort((a, b) => b.total_pnl - a.total_pnl).slice(0, 5);
+const losers = manualResolved.filter(m => m.total_pnl < 0).sort((a, b) => a.total_pnl - b.total_pnl).slice(0, 5);
+topList(winners, document.getElementById('topWinners'));
+topList(losers, document.getElementById('topLosers'));
+
+// Manual sport charts
+const mSports = {};
+manualResolved.forEach(m => {
+  const s = getSport(m.market_slug);
+  if (!mSports[s]) mSports[s] = { wins: 0, losses: 0, pnl: 0, count: 0 };
+  mSports[s].count++; mSports[s].pnl += m.total_pnl;
+  if (m.won) mSports[s].wins++; else mSports[s].losses++;
+});
+const mSportNames = Object.keys(mSports).sort();
+
+new Chart(document.getElementById('sportPnlChart'), {
+  type: 'bar',
+  data: {
+    labels: mSportNames,
+    datasets: [{ data: mSportNames.map(s => parseFloat(mSports[s].pnl.toFixed(2))),
+      backgroundColor: mSportNames.map(s => mSports[s].pnl >= 0 ? 'rgba(34,197,94,0.7)' : 'rgba(239,68,68,0.7)'), borderRadius: 4 }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: { x: { grid: { display: false }, ticks: { color: '#8b8fa3' } },
+      y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3', callback: v => '$' + v } } }
+  }
+});
+
+new Chart(document.getElementById('sportWrChart'), {
+  type: 'bar',
+  data: {
+    labels: mSportNames,
+    datasets: [{ data: mSportNames.map(s => parseFloat((mSports[s].wins / mSports[s].count * 100).toFixed(1))),
+      backgroundColor: mSportNames.map(s => sportColors[s] || '#8b8fa3'), borderRadius: 4 }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: { x: { grid: { display: false }, ticks: { color: '#8b8fa3' } },
+      y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3', callback: v => v + '%' }, max: 100 } }
+  }
+});
+
+const costBuckets = { '$0-1': 0, '$1-2': 0, '$2-5': 0, '$5-10': 0, '$10+': 0 };
+manualResolved.forEach(m => {
+  const c = m.cost_basis;
+  if (c < 1) costBuckets['$0-1']++; else if (c < 2) costBuckets['$1-2']++;
+  else if (c < 5) costBuckets['$2-5']++; else if (c < 10) costBuckets['$5-10']++; else costBuckets['$10+']++;
+});
+new Chart(document.getElementById('betSizeChart'), {
+  type: 'doughnut',
+  data: { labels: Object.keys(costBuckets), datasets: [{ data: Object.values(costBuckets),
+    backgroundColor: ['#3b82f6', '#06b6d4', '#22c55e', '#f59e0b', '#ef4444'], borderWidth: 0 }] },
+  options: { responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: 'right', labels: { color: '#8b8fa3', padding: 12, font: { size: 11 } } } } }
+});
+
+// ══════════════════════════════════════════════════════════════════
+// ALL BETS TABLE
+// ══════════════════════════════════════════════════════════════════
+let allRows = [];
+
+sorted.forEach(m => {
+  const bb = botBetMap[m.market_slug];
+  allRows.push({
+    date: m.first_trade, title: m.title, outcome: m.outcome_bet,
+    sport: getSport(m.market_slug), cost: m.cost_basis, pnl: m.total_pnl,
+    status: m.won ? 'win' : 'loss', type: 'resolved',
+    source: isBot(m.market_slug) ? 'bot' : 'manual',
+    tier: bb ? bb.tier : null,
+  });
+});
+
+REPORT.open_markets.forEach(m => {
+  const bb = botBetMap[m.market_slug];
+  allRows.push({
+    date: '', title: m.title, outcome: m.outcome_bet,
+    sport: getSport(m.market_slug), cost: m.total_cost, pnl: null,
+    status: 'open', type: 'open',
+    source: isBot(m.market_slug) ? 'bot' : 'manual',
+    tier: bb ? bb.tier : null,
+  });
+});
+
+function renderTable(filter) {
+  let rows = allRows;
+  if (filter === 'resolved') rows = rows.filter(r => r.type === 'resolved');
+  if (filter === 'open') rows = rows.filter(r => r.type === 'open');
+  if (filter === 'wins') rows = rows.filter(r => r.status === 'win');
+  if (filter === 'losses') rows = rows.filter(r => r.status === 'loss');
+  if (filter === 'bot') rows = rows.filter(r => r.source === 'bot');
+  if (filter === 'manual') rows = rows.filter(r => r.source === 'manual');
+
+  document.getElementById('betsBody').innerHTML = rows.map(r => `
+    <tr>
+      <td>${r.date ? getDate(r.date) : '-'}</td>
+      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis">${r.title}</td>
+      <td>${r.outcome}</td>
+      <td><span class="tag ${r.source}">${r.source.toUpperCase()}</span></td>
+      <td>${tierTag(r.tier)}</td>
+      <td>${sportTag(r.sport)}</td>
+      <td>$${r.cost.toFixed(2)}</td>
+      <td>${pnlHtml(r.pnl)}</td>
+      <td><span class="tag ${r.status}">${r.status.toUpperCase()}</span></td>
+    </tr>
+  `).join('');
+}
+
+function filterTable(f) {
+  document.querySelectorAll('#mainTabs .tab').forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+  renderTable(f);
+}
+renderTable('all');
+
+// Open positions
+document.getElementById('openBody').innerHTML = REPORT.open_markets.map(m => `
+  <tr>
+    <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis">${m.title}</td>
+    <td>${m.outcome_bet}</td>
+    <td><span class="tag ${isBot(m.market_slug) ? 'bot' : 'manual'}">${isBot(m.market_slug) ? 'BOT' : 'MANUAL'}</span></td>
+    <td>${sportTag(getSport(m.market_slug))}</td>
+    <td>$${m.total_cost.toFixed(2)}</td>
+  </tr>
+`).join('');
+</script>
+</body>
+</html>
