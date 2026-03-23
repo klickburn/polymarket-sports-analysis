@@ -1,16 +1,16 @@
 """
-Polymarket Trading Bot — Hybrid 5-Tier Strategy
+Polymarket Trading Bot — Hybrid 5-Tier Strategy (Kalshi-validated)
 =======================================================
-Scans NBA, CBB & EPL markets. Bets 3% of bankroll per qualifying market.
+Scans NBA, CBB, EPL, NHL, MLB, ATP, WTA markets.
 
-Strategy:
-  T1: Team B is favorite @ 75-90%      → 87.6% WR, +8.9% ROI  (NBA/CBB)
-  T2: Coin flip (fav 40-60%)            → 61.1%/58.9% WR (CBB/NBA)
-  T3: CBB Team B underdog (fav 50-55%) → 65.8% WR, +34.9% ROI (CBB)
-  T4: NBA exact 50/50 (fav <50.6%)     → 61.3% WR, +22.8% ROI (NBA)
-  T5: EPL Draw (draw priced <35%)      → 33.3% WR, +48.5% ROI (EPL)
+Strategy (validated against 1500+ Kalshi games):
+  T1: Team B fav @ 75-90%             → 1.5% sizing (Polymarket-specific edge, unconfirmed on Kalshi)
+  T2: Coin flip (fav 40-60%)          → Bet FAVORITE for NBA/NFL/MLB/ATP/WTA, UNDERDOG for CBB/NHL
+  T3: CBB Team B underdog (fav 50-55%) → 65.8% WR, +34.9% ROI (CBB) — confirmed on Kalshi
+  T4: NBA exact 50/50 (fav <50.6%)    → 61.3% WR, +22.8% ROI (NBA) — confirmed on Kalshi
+  T5: EPL Draw (draw priced <35%)     → 33.3% WR, +48.5% ROI (EPL)
 
-Sizing: 3% of bankroll per bet (compounding)
+Sizing: 3% proven, 2% new leagues, 1.5% T1 (reduced confidence)
 Uses Polymarket US API (api.polymarket.us / gateway.polymarket.us)
 
 Usage:
@@ -36,17 +36,21 @@ API_SECRET = os.environ.get("PM_API_SECRET", "")
 
 BANKROLL_PCT = 0.03          # 3% of bankroll per bet (proven leagues)
 BANKROLL_PCT_NEW = 0.02      # 2% of bankroll per bet (new/unproven leagues)
+BANKROLL_PCT_T1 = 0.015      # 1.5% for T1 (Polymarket-specific, unconfirmed on Kalshi)
 MIN_BET = 1.00               # Minimum bet size
 MAX_BET = 500.00             # Safety cap per bet
 
 LEAGUES = ["nba", "cbb", "epl", "nhl", "mlb", "atp", "wta"]
 NEW_LEAGUES = {"nhl", "mlb", "atp", "wta"}  # Leagues without backtest data — use reduced sizing
+# In T2 coin flips: these leagues bet UNDERDOG (Kalshi-validated), rest bet FAVORITE
+T2_UNDERDOG_LEAGUES = {"cbb", "nhl"}
 SCAN_INTERVAL = 300           # 5 minutes between scans in monitor mode
 
 TIER_NAMES = {
     1: "T1: B fav 75-90%",
     5: "T5: EPL Draw 24-35%",
-    2: "T2: Coin flip",
+    2: "T2: Coin flip fav",
+    6: "T2: Coin flip dog",
     3: "T3: CBB B dog 50-55%",
     4: "T4: NBA 50/50",
 }
@@ -283,9 +287,12 @@ def assign_tier(parsed, league):
     if league == "nba" and fav_price < 0.506 and min(price_a, price_b) >= 0.40:
         return 4, TIER_NAMES[4]
 
-    # Tier 2: Coin flips — both teams in reasonable range
+    # Tier 2/6: Coin flips — both teams in reasonable range
+    # T2 = bet favorite (NBA/NFL/MLB/ATP/WTA), T6 = bet underdog (CBB/NHL) — Kalshi-validated
     if league in ("cbb", "nba", "nhl", "mlb", "atp", "wta") and is_coin_flip and min(price_a, price_b) >= 0.30:
-        return 2, TIER_NAMES[2]
+        if league in T2_UNDERDOG_LEAGUES:
+            return 6, TIER_NAMES[6]  # Bet underdog
+        return 2, TIER_NAMES[2]  # Bet favorite
 
     # Tier 5: EPL Draw — draw market priced under 35% (Yes price)
     if league == "epl" and parsed.get("is_draw"):
@@ -317,19 +324,17 @@ def save_bet(bet_info):
 def place_bet(market_slug, bet_price, bet_amount, buy_yes=False):
     """
     Place a bet on a market.
-    - For Team B bets (NBA/CBB): BUY_SHORT (buy NO on Team A).
-      price.value = 1 - team_b_price (always the YES/long side price).
-    - For Draw bets (EPL): BUY_LONG (buy YES on Draw).
-      price.value = draw_price (the YES price directly).
+    - buy_yes=True: BUY_LONG (Team A bets, Draw bets). price.value = bet_price.
+    - buy_yes=False: BUY_SHORT (Team B bets). price.value = 1 - bet_price.
     """
     quantity = max(1, int(bet_amount / bet_price))
 
     if buy_yes:
-        # EPL Draw: buy YES directly, price.value IS the yes price
+        # Team A or Draw: buy YES directly
         long_side_price = round(bet_price, 2)
         intent = "ORDER_INTENT_BUY_LONG"
     else:
-        # Team B: buy NO, price.value is the YES (long) side = 1 - team_b_price
+        # Team B: buy NO, price.value = 1 - team_b_price
         long_side_price = round(1.0 - bet_price, 2)
         intent = "ORDER_INTENT_BUY_SHORT"
 
@@ -421,6 +426,22 @@ def scan_markets(live=False):
                 if is_draw:
                     bet_price = min(parsed["price_a"], parsed["price_b"])
                     bet_label = "Draw"
+                elif tier == 6:
+                    # T6: Coin flip underdog (CBB/NHL) — bet the cheaper side
+                    if parsed["price_a"] <= parsed["price_b"]:
+                        bet_price = parsed["price_a"]
+                        bet_label = parsed["team_a"]
+                    else:
+                        bet_price = parsed["price_b"]
+                        bet_label = parsed["team_b"]
+                elif tier == 2:
+                    # T2: Coin flip favorite (NBA/NFL/MLB) — bet the pricier side
+                    if parsed["price_a"] >= parsed["price_b"]:
+                        bet_price = parsed["price_a"]
+                        bet_label = parsed["team_a"]
+                    else:
+                        bet_price = parsed["price_b"]
+                        bet_label = parsed["team_b"]
                 else:
                     bet_price = parsed["price_b"]
                     bet_label = parsed["team_b"]
@@ -459,9 +480,16 @@ def scan_markets(live=False):
         P("  PLACING BETS:")
         P("  " + "-" * 65)
         for mkt in new_markets:
-            # Use reduced sizing for unproven leagues
-            mkt_bet_size = bet_size_new if mkt["league"] in NEW_LEAGUES else bet_size
-            sizing_label = "2%" if mkt["league"] in NEW_LEAGUES else "3%"
+            # Sizing: T1=1.5%, new leagues=2%, proven=3%
+            if mkt["tier"] == 1:
+                mkt_bet_size = max(MIN_BET, min(bankroll * BANKROLL_PCT_T1, MAX_BET))
+                sizing_label = "1.5%"
+            elif mkt["league"] in NEW_LEAGUES:
+                mkt_bet_size = bet_size_new
+                sizing_label = "2%"
+            else:
+                mkt_bet_size = bet_size
+                sizing_label = "3%"
 
             if mkt_bet_size < MIN_BET:
                 P(f"    SKIP (bet too small): ${mkt_bet_size:.2f}")
@@ -478,12 +506,30 @@ def scan_markets(live=False):
                 if fresh_tier == 0:
                     P(f"    SKIP {mkt['bet_label']} — price moved out of tier range")
                     continue
-                bet_price = min(fresh_a, fresh_b) if is_draw else fresh_b
+                # Determine bet price based on tier
+                if is_draw:
+                    bet_price = min(fresh_a, fresh_b)
+                elif fresh_tier == 6:
+                    bet_price = min(fresh_a, fresh_b)  # underdog = cheaper side
+                elif fresh_tier == 2:
+                    bet_price = max(fresh_a, fresh_b)  # favorite = pricier side
+                else:
+                    bet_price = fresh_b
             else:
                 bet_price = mkt["bet_price"]
 
+            # Determine buy direction
+            # T6 underdog / T2 fav on Team A: need buy YES (long) on Team A
+            # T1/T3/default Team B: buy NO (short) on Team A
+            if is_draw:
+                buy_yes = True
+            elif mkt["tier"] in (2, 6) and mkt["bet_label"] == mkt["team_a"]:
+                buy_yes = True  # Betting on Team A = buy YES
+            else:
+                buy_yes = False  # Betting on Team B = buy NO
+
             P(f"    [{mkt['tier_name']}] Betting ${mkt_bet_size:.2f} ({sizing_label}) on {mkt['bet_label']} @ {bet_price:.1%} | {mkt['league'].upper()} {mkt['question'][:30]}")
-            result = place_bet(mkt["slug"], bet_price, mkt_bet_size, buy_yes=is_draw)
+            result = place_bet(mkt["slug"], bet_price, mkt_bet_size, buy_yes=buy_yes)
 
             if result:
                 save_bet({
@@ -516,8 +562,15 @@ def scan_markets(live=False):
         P("  DRY RUN — use --live to actually place bets")
         P("  " + "-" * 65)
         for mkt in new_markets:
-            mkt_bet_size = bet_size_new if mkt["league"] in NEW_LEAGUES else bet_size
-            sizing_label = "2%" if mkt["league"] in NEW_LEAGUES else "3%"
+            if mkt["tier"] == 1:
+                mkt_bet_size = max(MIN_BET, min(bankroll * BANKROLL_PCT_T1, MAX_BET)) if bankroll > 0 else 0
+                sizing_label = "1.5%"
+            elif mkt["league"] in NEW_LEAGUES:
+                mkt_bet_size = bet_size_new
+                sizing_label = "2%"
+            else:
+                mkt_bet_size = bet_size
+                sizing_label = "3%"
             P(f"    [{mkt['tier_name']}] WOULD BET ${mkt_bet_size:.2f} ({sizing_label}) on {mkt['bet_label']:<15} @{mkt['bet_price']:.1%} | {mkt['league'].upper()} {mkt['question'][:30]}")
 
     return qualifying
