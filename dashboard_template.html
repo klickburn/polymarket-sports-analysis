@@ -416,7 +416,7 @@ const avgLossPnl = REPORT.resolved_markets.filter(m => !m.won).length > 0
 
 const kpis = [
   { label: 'Deposited', value: `$${REPORT.total_deposited.toFixed(0)}`, cls: '', sub: `${REPORT.total_trades} total trades` },
-  { label: 'Balance', value: `$${REPORT.estimated_balance.toFixed(2)}`, cls: 'green', sub: `+$${REPORT.total_resolved_pnl.toFixed(2)} P&L` },
+  { label: 'Balance', value: `$${REPORT.estimated_balance.toFixed(2)}`, cls: 'green', sub: `$${(REPORT.buying_power || 0).toFixed(2)} buying power` },
   { label: 'ROI', value: `${roi}%`, cls: parseFloat(roi) >= 0 ? 'green' : 'red', sub: 'on resolved bets' },
   { label: 'Win Rate', value: `${REPORT.win_rate}%`, cls: REPORT.win_rate >= 50 ? 'green' : 'red', sub: `${REPORT.wins}W - ${REPORT.losses}L` },
   { label: 'Open', value: REPORT.open_count, cls: 'blue', sub: `$${REPORT.open_cost.toFixed(2)} at risk` },

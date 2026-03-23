@@ -107,6 +107,21 @@ def fetch_open_positions():
         return None  # None = couldn't check, fall back to old behavior
 
 
+def get_balance():
+    """Fetch actual balance from API."""
+    try:
+        data = auth_get("/v1/account/balances")
+        balances = data.get("balances", [])
+        if balances:
+            return {
+                "buying_power": float(balances[0].get("buyingPower", 0)),
+                "current_balance": float(balances[0].get("currentBalance", 0)),
+            }
+    except Exception as e:
+        P(f"  WARNING: Could not fetch balance: {e}")
+    return None
+
+
 # ── P&L Calculation ────────────────────────────────────────────────────
 def calculate_pnl(activities):
     """Calculate per-market and total P&L from activity data."""
@@ -225,6 +240,16 @@ def calculate_pnl(activities):
     wins = sum(1 for m in resolved_markets if m["won"])
     losses = len(resolved_markets) - wins
 
+    # Fetch real balance from API
+    real_balance = get_balance()
+    if real_balance:
+        balance_display = real_balance["current_balance"]
+        buying_power = real_balance["buying_power"]
+    else:
+        # Fallback: subtract open position costs from estimated
+        balance_display = round(total_deposited + total_resolved_pnl - total_open_cost, 2)
+        buying_power = balance_display
+
     return {
         "total_deposited": total_deposited,
         "total_resolved_pnl": round(total_resolved_pnl, 2),
@@ -234,7 +259,8 @@ def calculate_pnl(activities):
         "win_rate": round(wins / len(resolved_markets) * 100, 1) if resolved_markets else 0,
         "open_count": len(open_markets),
         "open_cost": round(total_open_cost, 2),
-        "estimated_balance": round(total_deposited + total_resolved_pnl, 2),
+        "estimated_balance": round(balance_display, 2),
+        "buying_power": round(buying_power, 2),
         "resolved_markets": resolved_markets,
         "open_markets": open_markets,
         "total_trades": len(trades),
@@ -250,7 +276,7 @@ def display_report(report):
 
     P(f"  Total Deposited:     ${report['total_deposited']:>10,.2f}")
     P(f"  Resolved P&L:        ${report['total_resolved_pnl']:>+10,.2f}")
-    P(f"  Estimated Balance:   ${report['estimated_balance']:>10,.2f}  (excl. open position market value)")
+    P(f"  Balance:             ${report['estimated_balance']:>10,.2f}  (buying power: ${report.get('buying_power', 0):,.2f})")
     P()
 
     P(f"  Resolved Markets:    {report['resolved_count']}")
