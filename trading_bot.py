@@ -383,7 +383,11 @@ def scan_markets(live=False):
     P()
 
     placed_bets = load_placed_bets()
-    placed_slugs = {b["market_slug"] for b in placed_bets}  # Only skip bot's own bets
+    placed_slugs = {b["market_slug"] for b in placed_bets}  # Bot's own history
+
+    # Also check API for existing positions (catches duplicates if bets file was stale)
+    active_positions = get_existing_positions()
+    placed_slugs = placed_slugs | active_positions  # Merge both sets
 
     qualifying = []
 
