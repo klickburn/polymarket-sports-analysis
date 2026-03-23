@@ -47,6 +47,15 @@ def refresh_data():
     except Exception as e:
         print(f"[web] Refresh error: {e}", flush=True)
 
+    # Pull latest bot bets from repo (committed by GitHub Actions)
+    try:
+        import subprocess
+        subprocess.run(["git", "pull", "--rebase", "origin", "main"],
+                       capture_output=True, timeout=30)
+        print("[web] Git pulled latest bot data", flush=True)
+    except Exception as e:
+        print(f"[web] Git pull skipped: {e}", flush=True)
+
     # Load bot bets
     try:
         if os.path.exists("trading_bot_bets.json"):
