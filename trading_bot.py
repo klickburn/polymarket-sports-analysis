@@ -39,8 +39,8 @@ BANKROLL_PCT_NEW = 0.02      # 2% of bankroll per bet (new/unproven leagues)
 MIN_BET = 1.00               # Minimum bet size
 MAX_BET = 500.00             # Safety cap per bet
 
-LEAGUES = ["nba", "cbb", "epl", "nhl", "mlb"]
-NEW_LEAGUES = {"nhl", "mlb"}  # Leagues without backtest data — use reduced sizing
+LEAGUES = ["nba", "cbb", "epl", "nhl", "mlb", "atp", "wta"]
+NEW_LEAGUES = {"nhl", "mlb", "atp", "wta"}  # Leagues without backtest data — use reduced sizing
 SCAN_INTERVAL = 300           # 5 minutes between scans in monitor mode
 
 TIER_NAMES = {
@@ -284,7 +284,7 @@ def assign_tier(parsed, league):
         return 4, TIER_NAMES[4]
 
     # Tier 2: Coin flips — both teams in reasonable range
-    if league in ("cbb", "nba", "nhl", "mlb") and is_coin_flip and min(price_a, price_b) >= 0.30:
+    if league in ("cbb", "nba", "nhl", "mlb", "atp", "wta") and is_coin_flip and min(price_a, price_b) >= 0.30:
         return 2, TIER_NAMES[2]
 
     # Tier 5: EPL Draw — draw market priced under 35% (Yes price)
