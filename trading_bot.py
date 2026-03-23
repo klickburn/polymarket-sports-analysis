@@ -556,6 +556,16 @@ if __name__ == "__main__":
     if monitor:
         monitor_loop(live=live)
     else:
-        scan_markets(live=live)
+        qualifying = scan_markets(live=live)
+
+        # Save bot status for dashboard
+        status = {
+            "last_run": datetime.now(timezone.utc).isoformat(),
+            "mode": "LIVE" if live else "DRY RUN",
+            "markets_scanned": len(qualifying),
+            "bets_placed": len(load_placed_bets()),
+        }
+        with open("bot_status.json", "w") as f:
+            json.dump(status, f, indent=2)
 
     _log.close()

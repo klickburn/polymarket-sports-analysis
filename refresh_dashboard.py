@@ -55,8 +55,14 @@ with open(template_file) as f:
 
 refresh_time = datetime.now(timezone.utc).isoformat()
 
+bot_status = {}
+if os.path.exists("bot_status.json"):
+    with open("bot_status.json") as f:
+        bot_status = json.load(f)
+
 html = html.replace("REPORT_DATA_PLACEHOLDER", json.dumps(report, default=str))
 html = html.replace("BOT_DATA_PLACEHOLDER", json.dumps(bot_bets, default=str))
+html = html.replace("BOT_STATUS_PLACEHOLDER", json.dumps(bot_status, default=str))
 html = html.replace("DATA_REFRESHED_PLACEHOLDER", refresh_time)
 
 with open("dashboard.html", "w") as f:

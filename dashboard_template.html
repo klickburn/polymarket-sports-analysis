@@ -230,8 +230,10 @@
     <div class="subtitle">Trading Performance & Bot Analytics</div>
   </div>
   <div style="text-align:right">
-    <div style="color:var(--muted);font-size:12px">Last updated</div>
+    <div style="color:var(--muted);font-size:12px">Data refreshed</div>
     <div style="font-size:14px;font-weight:600" id="lastUpdated"></div>
+    <div style="color:var(--muted);font-size:12px;margin-top:4px">Bot last run</div>
+    <div style="font-size:13px;font-weight:600" id="botLastRun"></div>
   </div>
 </div>
 
@@ -350,6 +352,7 @@
 const REPORT = REPORT_DATA_PLACEHOLDER;
 const BOT_BETS = BOT_DATA_PLACEHOLDER;
 const DATA_REFRESHED_AT = "DATA_REFRESHED_PLACEHOLDER";
+const BOT_STATUS = BOT_STATUS_PLACEHOLDER;
 const BOT_CUTOFF = "2026-03-21T23:59:59Z"; // Bot starts from today
 
 // Build set of bot market slugs
@@ -393,6 +396,17 @@ const refreshDate = new Date(DATA_REFRESHED_AT);
 const ago = Math.round((Date.now() - refreshDate.getTime()) / 60000);
 const agoText = ago < 1 ? 'just now' : ago < 60 ? `${ago}m ago` : `${Math.round(ago/60)}h ago`;
 document.getElementById('lastUpdated').textContent = refreshDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) + ` (${agoText})`;
+
+// Bot last run
+if (BOT_STATUS && BOT_STATUS.last_run) {
+  const botDate = new Date(BOT_STATUS.last_run);
+  const botAgo = Math.round((Date.now() - botDate.getTime()) / 60000);
+  const botAgoText = botAgo < 1 ? 'just now' : botAgo < 60 ? `${botAgo}m ago` : `${Math.round(botAgo/60)}h ago`;
+  document.getElementById('botLastRun').textContent = botDate.toLocaleDateString('en-US', { hour: '2-digit', minute: '2-digit' }) + ` (${botAgoText}) — ${BOT_STATUS.bets_placed} bets placed`;
+} else {
+  document.getElementById('botLastRun').textContent = 'No data';
+  document.getElementById('botLastRun').style.color = 'var(--muted)';
+}
 
 const roi = (REPORT.total_resolved_pnl / REPORT.total_deposited * 100).toFixed(1);
 const avgWinPnl = REPORT.resolved_markets.filter(m => m.won).length > 0

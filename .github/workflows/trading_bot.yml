@@ -35,6 +35,6 @@ jobs:
         run: |
           git config user.name "trading-bot"
           git config user.email "bot@polymarket-bot.local"
-          git add trading_bot_bets.json trading_bot.log || true
+          git add trading_bot_bets.json trading_bot.log bot_status.json || true
           git diff --staged --quiet || git commit -m "bot: update bets $(date -u +%Y-%m-%dT%H:%M:%SZ)"
           git push || true
