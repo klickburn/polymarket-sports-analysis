@@ -6,6 +6,9 @@ on:
     - cron: '*/30 * * * *'
   workflow_dispatch: # Manual trigger
 
+permissions:
+  contents: write
+
 jobs:
   scan-and-bet:
     runs-on: ubuntu-latest
@@ -28,12 +31,10 @@ jobs:
           PM_API_SECRET: ${{ secrets.PM_API_SECRET }}
         run: python trading_bot.py --live
 
-      - name: Upload bot bets log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: bot-log-${{ github.run_number }}
-          path: |
-            trading_bot.log
-            trading_bot_bets.json
-          retention-days: 30
+      - name: Commit bot bets data
+        run: |
+          git config user.name "trading-bot"
+          git config user.email "bot@polymarket-bot.local"
+          git add trading_bot_bets.json trading_bot.log || true
+          git diff --staged --quiet || git commit -m "bot: update bets $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          git push || true
