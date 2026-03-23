@@ -173,8 +173,10 @@
   .tag.ufc { background: rgba(245,158,11,0.15); color: var(--orange); }
   .tag.t1 { background: rgba(34,197,94,0.15); color: var(--green); }
   .tag.t2 { background: rgba(59,130,246,0.15); color: var(--blue); }
+  .tag.t6 { background: rgba(234,179,8,0.15); color: #eab308; }
   .tag.t3 { background: rgba(168,85,247,0.15); color: var(--purple); }
   .tag.t4 { background: rgba(245,158,11,0.15); color: var(--orange); }
+  .tag.t5 { background: rgba(6,182,212,0.15); color: var(--cyan); }
   .tag.manual { background: rgba(107,114,128,0.15); color: #9ca3af; }
   .tag.bot { background: rgba(168,85,247,0.15); color: var(--purple); }
 
@@ -536,7 +538,7 @@ if (botTotalBets === 0) {
       <div class="empty-state">
         <div class="icon">&#x1F916;</div>
         <div class="msg">Bot hasn't placed any bets yet</div>
-        <div class="sub">Run <code>python3 trading_bot.py --live</code> to start the 4-tier strategy</div>
+        <div class="sub">Run <code>python3 trading_bot.py --live</code> to start the 6-tier Kalshi-validated strategy</div>
       </div>
     </div>`;
 } else {
@@ -556,12 +558,12 @@ if (botTotalBets === 0) {
     }
   });
 
-  const tierNames = { 1: 'B Fav 75-90%', 2: 'Coin Flip', 3: 'CBB B Dog 50-55%', 4: 'NBA 50/50', 5: 'EPL Draw 24-35%' };
-  const tierWrs = { 1: '87.6%', 2: '60.6%', 3: '65.8%', 4: '61.3%', 5: '33.3%' };
-  const tierColors = { 1: 'var(--green)', 2: 'var(--blue)', 3: 'var(--purple)', 4: 'var(--orange)', 5: 'var(--cyan)' };
+  const tierNames = { 1: 'B Fav 75-90% (1.5%)', 2: 'Coin Flip Fav', 6: 'Coin Flip Dog (CBB/NHL)', 3: 'CBB B Dog 50-55%', 4: 'NBA 50/50', 5: 'EPL Draw 24-35%' };
+  const tierWrs = { 1: '87.6%', 2: '60.6%', 6: '55%', 3: '65.8%', 4: '61.3%', 5: '33.3%' };
+  const tierColors = { 1: 'var(--green)', 2: 'var(--blue)', 6: 'var(--yellow, #eab308)', 3: 'var(--purple)', 4: 'var(--orange)', 5: 'var(--cyan)' };
 
   let tierHtml = '<div class="card bot-card" style="margin-bottom:20px"><h3>Strategy Performance (by Tier)</h3><div class="scroll-table"><table><thead><tr><th>Tier</th><th>Strategy</th><th>Bets</th><th>W-L</th><th>Win Rate</th><th>P&L</th><th>Open</th><th>Backtest WR</th></tr></thead><tbody>';
-  for (const t of [1, 2, 3, 4, 5]) {
+  for (const t of [1, 2, 6, 3, 4, 5]) {
     const s = tierStats[t] || { bets: 0, wins: 0, losses: 0, pnl: 0, open: 0 };
     if (s.bets === 0) continue;
     const wr = (s.wins + s.losses) > 0 ? (s.wins / (s.wins + s.losses) * 100).toFixed(1) + '%' : '—';
@@ -675,7 +677,7 @@ if (botTotalBets === 0) {
 
   // Render bot charts if data exists
   if (botCumData.length > 1) {
-    const tierColorMap = { 1: '#22c55e', 2: '#3b82f6', 3: '#a855f7', 4: '#f59e0b', 5: '#06b6d4', 0: '#8b8fa3' };
+    const tierColorMap = { 1: '#22c55e', 2: '#3b82f6', 6: '#eab308', 3: '#a855f7', 4: '#f59e0b', 5: '#06b6d4', 0: '#8b8fa3' };
 
     new Chart(document.getElementById('botPnlChart'), {
       type: 'line',
@@ -702,10 +704,10 @@ if (botTotalBets === 0) {
     new Chart(document.getElementById('botTierChart'), {
       type: 'bar',
       data: {
-        labels: [1, 2, 3, 4].map(t => `T${t}: ${tierNames[t]}`),
+        labels: [1, 2, 6, 3, 4, 5].map(t => `T${t}: ${tierNames[t]}`),
         datasets: [{
-          data: [1, 2, 3, 4].map(t => parseFloat(((tierStats[t] || {}).pnl || 0).toFixed(2))),
-          backgroundColor: [1, 2, 3, 4].map(t => {
+          data: [1, 2, 6, 3, 4, 5].map(t => parseFloat(((tierStats[t] || {}).pnl || 0).toFixed(2))),
+          backgroundColor: [1, 2, 6, 3, 4, 5].map(t => {
             const p = (tierStats[t] || {}).pnl || 0;
             return p >= 0 ? 'rgba(34,197,94,0.7)' : 'rgba(239,68,68,0.7)';
           }),
