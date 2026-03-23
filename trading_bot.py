@@ -34,11 +34,13 @@ GATEWAY_BASE = "https://gateway.polymarket.us"
 API_KEY = os.environ.get("PM_API_KEY", "")
 API_SECRET = os.environ.get("PM_API_SECRET", "")
 
-BANKROLL_PCT = 0.03          # 3% of bankroll per bet
+BANKROLL_PCT = 0.03          # 3% of bankroll per bet (proven leagues)
+BANKROLL_PCT_NEW = 0.02      # 2% of bankroll per bet (new/unproven leagues)
 MIN_BET = 1.00               # Minimum bet size
 MAX_BET = 500.00             # Safety cap per bet
 
-LEAGUES = ["nba", "cbb", "epl"]
+LEAGUES = ["nba", "cbb", "epl", "nhl", "mlb"]
+NEW_LEAGUES = {"nhl", "mlb"}  # Leagues without backtest data — use reduced sizing
 SCAN_INTERVAL = 300           # 5 minutes between scans in monitor mode
 
 TIER_NAMES = {
@@ -281,8 +283,8 @@ def assign_tier(parsed, league):
     if league == "nba" and fav_price < 0.506 and min(price_a, price_b) >= 0.40:
         return 4, TIER_NAMES[4]
 
-    # Tier 2: Coin flips — both teams in reasonable range (CBB + NBA)
-    if league in ("cbb", "nba") and is_coin_flip and min(price_a, price_b) >= 0.30:
+    # Tier 2: Coin flips — both teams in reasonable range
+    if league in ("cbb", "nba", "nhl", "mlb") and is_coin_flip and min(price_a, price_b) >= 0.30:
         return 2, TIER_NAMES[2]
 
     # Tier 5: EPL Draw — draw market priced under 35% (Yes price)
@@ -379,7 +381,8 @@ def scan_markets(live=False):
         P("  Could not fetch balance — running in scan-only mode")
 
     bet_size = max(MIN_BET, min(bankroll * BANKROLL_PCT, MAX_BET)) if bankroll > 0 else 0
-    P(f"  Bet size (3% of bankroll): ${bet_size:.2f}")
+    bet_size_new = max(MIN_BET, min(bankroll * BANKROLL_PCT_NEW, MAX_BET)) if bankroll > 0 else 0
+    P(f"  Bet size: ${bet_size:.2f} (3% proven) / ${bet_size_new:.2f} (2% new leagues)")
     P()
 
     placed_bets = load_placed_bets()
@@ -456,8 +459,12 @@ def scan_markets(live=False):
         P("  PLACING BETS:")
         P("  " + "-" * 65)
         for mkt in new_markets:
-            if bet_size < MIN_BET:
-                P(f"    SKIP (bet too small): ${bet_size:.2f}")
+            # Use reduced sizing for unproven leagues
+            mkt_bet_size = bet_size_new if mkt["league"] in NEW_LEAGUES else bet_size
+            sizing_label = "2%" if mkt["league"] in NEW_LEAGUES else "3%"
+
+            if mkt_bet_size < MIN_BET:
+                P(f"    SKIP (bet too small): ${mkt_bet_size:.2f}")
                 continue
 
             is_draw = mkt.get("is_draw", False)
@@ -475,8 +482,8 @@ def scan_markets(live=False):
             else:
                 bet_price = mkt["bet_price"]
 
-            P(f"    [{mkt['tier_name']}] Betting ${bet_size:.2f} on {mkt['bet_label']} @ {bet_price:.1%} | {mkt['question'][:35]}")
-            result = place_bet(mkt["slug"], bet_price, bet_size, buy_yes=is_draw)
+            P(f"    [{mkt['tier_name']}] Betting ${mkt_bet_size:.2f} ({sizing_label}) on {mkt['bet_label']} @ {bet_price:.1%} | {mkt['league'].upper()} {mkt['question'][:30]}")
+            result = place_bet(mkt["slug"], bet_price, mkt_bet_size, buy_yes=is_draw)
 
             if result:
                 save_bet({
@@ -485,7 +492,7 @@ def scan_markets(live=False):
                     "team_a": mkt["team_a"],
                     "team_b": mkt["bet_label"],
                     "price_b_at_bet": bet_price,
-                    "bet_amount": bet_size,
+                    "bet_amount": mkt_bet_size,
                     "tier": mkt["tier"],
                     "tier_name": mkt["tier_name"],
                     "league": mkt["league"],
@@ -509,7 +516,9 @@ def scan_markets(live=False):
         P("  DRY RUN — use --live to actually place bets")
         P("  " + "-" * 65)
         for mkt in new_markets:
-            P(f"    [{mkt['tier_name']}] WOULD BET ${bet_size:.2f} on {mkt['bet_label']:<15} @{mkt['bet_price']:.1%} | {mkt['question'][:35]}")
+            mkt_bet_size = bet_size_new if mkt["league"] in NEW_LEAGUES else bet_size
+            sizing_label = "2%" if mkt["league"] in NEW_LEAGUES else "3%"
+            P(f"    [{mkt['tier_name']}] WOULD BET ${mkt_bet_size:.2f} ({sizing_label}) on {mkt['bet_label']:<15} @{mkt['bet_price']:.1%} | {mkt['league'].upper()} {mkt['question'][:30]}")
 
     return qualifying
 
@@ -547,7 +556,8 @@ if __name__ == "__main__":
     P("  POLYMARKET — HYBRID 5-TIER BOT")
     P(f"  Mode: {'LIVE' if live else 'DRY RUN'} | Sizing: {BANKROLL_PCT*100:.0f}% of bankroll")
     P(f"  Leagues: {', '.join(LEAGUES)}")
-    P(f"  Tiers: T1=B fav 75-90% | T2=CBB coin flip")
+    P(f"  Sizing: 3% (NBA/CBB/EPL) | 2% (NHL/MLB)")
+    P(f"  Tiers: T1=B fav 75-90% | T2=Coin flip")
     P(f"         T3=CBB B dog 50-55% | T4=NBA 50/50")
     P(f"         T5=EPL Draw <35%")
     P("=" * 65)

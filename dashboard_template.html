@@ -556,24 +556,63 @@ if (botTotalBets === 0) {
     }
   });
 
-  const tierNames = { 1: 'B Fav 75-90%', 2: 'CBB Coin Flip', 3: 'CBB B Dog 50-55%', 4: 'NBA 50/50' };
-  const tierWrs = { 1: '87.6%', 2: '60.6%', 3: '65.8%', 4: '61.3%' };
-  const tierColors = { 1: 'var(--green)', 2: 'var(--blue)', 3: 'var(--purple)', 4: 'var(--orange)' };
+  const tierNames = { 1: 'B Fav 75-90%', 2: 'Coin Flip', 3: 'CBB B Dog 50-55%', 4: 'NBA 50/50', 5: 'EPL Draw 24-35%' };
+  const tierWrs = { 1: '87.6%', 2: '60.6%', 3: '65.8%', 4: '61.3%', 5: '33.3%' };
+  const tierColors = { 1: 'var(--green)', 2: 'var(--blue)', 3: 'var(--purple)', 4: 'var(--orange)', 5: 'var(--cyan)' };
 
-  let tierHtml = '<div class="grid-4" style="margin-bottom:20px">';
-  for (const t of [1, 2, 3, 4]) {
+  let tierHtml = '<div class="card bot-card" style="margin-bottom:20px"><h3>Strategy Performance (by Tier)</h3><div class="scroll-table"><table><thead><tr><th>Tier</th><th>Strategy</th><th>Bets</th><th>W-L</th><th>Win Rate</th><th>P&L</th><th>Open</th><th>Backtest WR</th></tr></thead><tbody>';
+  for (const t of [1, 2, 3, 4, 5]) {
     const s = tierStats[t] || { bets: 0, wins: 0, losses: 0, pnl: 0, open: 0 };
-    const wr = (s.wins + s.losses) > 0 ? (s.wins / (s.wins + s.losses) * 100).toFixed(0) + '%' : '—';
-    tierHtml += `
-      <div class="tier-card">
-        <div class="tier-label">Tier ${t}</div>
-        <div class="tier-title" style="color:${tierColors[t]}">${tierNames[t]}</div>
-        <div class="tier-stat" style="color:${s.pnl >= 0 ? 'var(--green)' : 'var(--red)'}">$${s.pnl >= 0 ? '+' : ''}${s.pnl.toFixed(2)}</div>
-        <div class="tier-detail">${s.bets} bets · ${wr} WR · ${s.open} open</div>
-        <div class="tier-detail" style="margin-top:2px">Backtest: ${tierWrs[t]} WR</div>
-      </div>`;
+    if (s.bets === 0) continue;
+    const wr = (s.wins + s.losses) > 0 ? (s.wins / (s.wins + s.losses) * 100).toFixed(1) + '%' : '—';
+    const pnlColor = s.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    tierHtml += `<tr>
+      <td>${tierTag(t)}</td>
+      <td style="color:${tierColors[t]}">${tierNames[t]}</td>
+      <td>${s.bets}</td>
+      <td>${s.wins}W-${s.losses}L</td>
+      <td>${wr}</td>
+      <td style="color:${pnlColor}">$${s.pnl >= 0 ? '+' : ''}${s.pnl.toFixed(2)}</td>
+      <td>${s.open}</td>
+      <td>${tierWrs[t]}</td>
+    </tr>`;
   }
-  tierHtml += '</div>';
+  tierHtml += '</tbody></table></div></div>';
+
+  // Per-sport breakdown
+  const sportStats = {};
+  BOT_BETS.forEach(b => {
+    const sport = (b.league || getSport(b.market_slug) || 'unknown').toUpperCase();
+    if (!sportStats[sport]) sportStats[sport] = { bets: 0, wins: 0, losses: 0, pnl: 0, open: 0, wagered: 0 };
+    sportStats[sport].bets++;
+    sportStats[sport].wagered += b.bet_amount || 0;
+    const resolved = botResolved.find(m => m.market_slug === b.market_slug);
+    if (resolved) {
+      if (resolved.won) sportStats[sport].wins++; else sportStats[sport].losses++;
+      sportStats[sport].pnl += resolved.total_pnl;
+    } else {
+      sportStats[sport].open++;
+    }
+  });
+
+  tierHtml += '<div class="card bot-card" style="margin-bottom:20px"><h3>Performance by Sport</h3><div class="scroll-table"><table><thead><tr><th>Sport</th><th>Bets</th><th>W-L</th><th>Win Rate</th><th>P&L</th><th>Wagered</th><th>ROI</th><th>Open</th></tr></thead><tbody>';
+  const sportColors = { NBA: 'var(--blue)', CBB: 'var(--purple)', EPL: 'var(--green)', NHL: 'var(--cyan)', MLB: 'var(--orange)' };
+  for (const [sport, s] of Object.entries(sportStats).sort((a,b) => b[1].pnl - a[1].pnl)) {
+    const wr = (s.wins + s.losses) > 0 ? (s.wins / (s.wins + s.losses) * 100).toFixed(1) + '%' : '—';
+    const roi = s.wagered > 0 ? (s.pnl / s.wagered * 100).toFixed(1) + '%' : '—';
+    const pnlColor = s.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    tierHtml += `<tr>
+      <td style="color:${sportColors[sport] || 'var(--text)'};font-weight:600">${sport}</td>
+      <td>${s.bets}</td>
+      <td>${s.wins}W-${s.losses}L</td>
+      <td>${wr}</td>
+      <td style="color:${pnlColor}">$${s.pnl >= 0 ? '+' : ''}${s.pnl.toFixed(2)}</td>
+      <td>$${s.wagered.toFixed(2)}</td>
+      <td style="color:${pnlColor}">${roi}</td>
+      <td>${s.open}</td>
+    </tr>`;
+  }
+  tierHtml += '</tbody></table></div></div>';
 
   // Bot P&L chart
   const botSorted = [...botResolved].sort((a, b) => (a.first_trade || '').localeCompare(b.first_trade || ''));
@@ -636,7 +675,7 @@ if (botTotalBets === 0) {
 
   // Render bot charts if data exists
   if (botCumData.length > 1) {
-    const tierColorMap = { 1: '#22c55e', 2: '#3b82f6', 3: '#a855f7', 4: '#f59e0b', 0: '#8b8fa3' };
+    const tierColorMap = { 1: '#22c55e', 2: '#3b82f6', 3: '#a855f7', 4: '#f59e0b', 5: '#06b6d4', 0: '#8b8fa3' };
 
     new Chart(document.getElementById('botPnlChart'), {
       type: 'line',
