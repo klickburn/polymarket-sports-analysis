@@ -349,6 +349,7 @@
 <script>
 const REPORT = REPORT_DATA_PLACEHOLDER;
 const BOT_BETS = BOT_DATA_PLACEHOLDER;
+const DATA_REFRESHED_AT = "DATA_REFRESHED_PLACEHOLDER";
 const BOT_CUTOFF = "2026-03-21T23:59:59Z"; // Bot starts from today
 
 // Build set of bot market slugs
@@ -388,7 +389,10 @@ function isBot(slug) { return botSlugs.has(slug); }
 // ══════════════════════════════════════════════════════════════════
 // OVERALL KPIs
 // ══════════════════════════════════════════════════════════════════
-document.getElementById('lastUpdated').textContent = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+const refreshDate = new Date(DATA_REFRESHED_AT);
+const ago = Math.round((Date.now() - refreshDate.getTime()) / 60000);
+const agoText = ago < 1 ? 'just now' : ago < 60 ? `${ago}m ago` : `${Math.round(ago/60)}h ago`;
+document.getElementById('lastUpdated').textContent = refreshDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) + ` (${agoText})`;
 
 const roi = (REPORT.total_resolved_pnl / REPORT.total_deposited * 100).toFixed(1);
 const avgWinPnl = REPORT.resolved_markets.filter(m => m.won).length > 0

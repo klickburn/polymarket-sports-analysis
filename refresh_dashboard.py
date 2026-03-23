@@ -9,6 +9,7 @@ Usage:
 import json
 import os
 import sys
+from datetime import datetime, timezone
 
 # Step 1: Refresh activities from API
 print("  [1/3] Fetching fresh activities from API...")
@@ -52,8 +53,11 @@ if not os.path.exists(template_file):
 with open(template_file) as f:
     html = f.read()
 
+refresh_time = datetime.now(timezone.utc).isoformat()
+
 html = html.replace("REPORT_DATA_PLACEHOLDER", json.dumps(report, default=str))
 html = html.replace("BOT_DATA_PLACEHOLDER", json.dumps(bot_bets, default=str))
+html = html.replace("DATA_REFRESHED_PLACEHOLDER", refresh_time)
 
 with open("dashboard.html", "w") as f:
     f.write(html)
