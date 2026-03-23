@@ -2,12 +2,13 @@ name: Trading Bot
 
 on:
   schedule:
-    # Run every 30 minutes
-    - cron: '*/30 * * * *'
+    - cron: '0 * * * *'
+    - cron: '30 * * * *'
   workflow_dispatch: # Manual trigger
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   scan-and-bet:
@@ -31,7 +32,7 @@ jobs:
           PM_API_SECRET: ${{ secrets.PM_API_SECRET }}
         run: python trading_bot.py --live
 
-      - name: Commit bot bets data
+      - name: Commit bot data
         run: |
           git config user.name "trading-bot"
           git config user.email "bot@polymarket-bot.local"
