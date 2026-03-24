@@ -22,9 +22,10 @@ import sys
 import json
 import time
 import uuid
+import re
 import base64
 import requests
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 # ── Config ──────────────────────────────────────────────────────────────
 API_BASE = "https://api.elections.kalshi.com/trade-api/v2"
@@ -212,6 +213,46 @@ def get_existing_positions():
     except Exception as e:
         P(f"  WARNING: Could not fetch positions: {e}")
         return set()
+
+
+# ── Game date filter ──────────────────────────────────────────────────
+MONTHS = {'JAN': 1, 'FEB': 2, 'MAR': 3, 'APR': 4, 'MAY': 5, 'JUN': 6,
+          'JUL': 7, 'AUG': 8, 'SEP': 9, 'OCT': 10, 'NOV': 11, 'DEC': 12}
+
+
+def get_game_date(ticker):
+    """Parse game date from ticker like KXNBAGAME-26MAR25TORLAC-LAC → 2026-03-25."""
+    m = re.search(r'-(\d{2})([A-Z]{3})(\d{2})', ticker)
+    if m:
+        yr = int('20' + m.group(1))
+        mon = MONTHS.get(m.group(2), 0)
+        day = int(m.group(3))
+        if mon > 0:
+            try:
+                return datetime(yr, mon, day, tzinfo=timezone.utc).date()
+            except ValueError:
+                pass
+    return None
+
+
+def is_pregame(markets):
+    """Return True if game hasn't started yet (game date is today or future).
+    Skip games that are already live — we only want pre-game prices."""
+    if not markets:
+        return False
+    ticker = markets[0].get("ticker", "")
+    game_date = get_game_date(ticker)
+    if not game_date:
+        return True  # If we can't parse, allow it (better than skipping everything)
+    now_utc = datetime.now(timezone.utc)
+    today = now_utc.date()
+    if game_date > today:
+        return True  # Future game — safe
+    if game_date < today:
+        return False  # Past game — definitely live or over
+    # Same day: only bet if it's before 4pm UTC (11am ET) to avoid live games
+    # Most US games start in the evening ET, soccer/esports vary
+    return now_utc.hour < 16
 
 
 # ── Market scanning ─────────────────────────────────────────────────────
@@ -473,6 +514,11 @@ def scan_markets(live=False):
             event_ticker = event.get("event_ticker", "")
             title = event.get("title", "Unknown")
             markets = get_markets_for_event(event_ticker)
+
+            # Skip live/in-progress games — only bet pre-game
+            if not is_pregame(markets):
+                P(f"    [SKIP] {title[:40]} (game already started)")
+                continue
 
             signals = classify_market(league, markets)
 
