@@ -333,6 +333,76 @@ def save_bets(bets):
         json.dump(bets, f, indent=2, default=str)
 
 
+# ── Trade a single crypto ───────────────────────────────────────────────
+def trade_crypto(crypto, cfg, existing, bets, live):
+    """Attempt to place a bet for one crypto. Returns bet record or None."""
+    series = cfg["series"]
+    entry_window = cfg["entry_window"]
+    window_start, window_end = get_current_window()
+
+    P(f"\n  --- {crypto} (entry window: last {entry_window} min) ---")
+
+    market, event = find_current_market(series)
+    if not market:
+        P(f"    No open market found")
+        return None
+
+    ticker = market["ticker"]
+    event_ticker = event["event_ticker"]
+    P(f"    Market: {ticker}")
+    P(f"    Event: {event.get('title', event_ticker)}")
+
+    if ticker in existing:
+        P(f"    Already have position — skipping")
+        return None
+
+    already_bet = any(b.get("ticker") == ticker for b in bets)
+    if already_bet:
+        P(f"    Already bet this market — skipping")
+        return None
+
+    side, price = get_dominant_side(ticker)
+    if not side or not price:
+        P(f"    Could not determine dominant side")
+        return None
+
+    P(f"    Dominant: {side.upper()} @ {price:.4f}")
+
+    if price < MIN_PRICE:
+        P(f"    Price {price:.4f} < {MIN_PRICE} threshold — skipping")
+        return None
+
+    bet_record = {
+        "crypto": crypto,
+        "ticker": ticker,
+        "event_ticker": event_ticker,
+        "side": side,
+        "price": price,
+        "bet_amount": BET_AMOUNT,
+        "entry_window": entry_window,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "window_end": window_end.isoformat(),
+        "result": "open",
+    }
+
+    if live:
+        result = place_order(ticker, side, price, BET_AMOUNT)
+        if result:
+            order = result.get("order", {})
+            bet_record["order_id"] = order.get("order_id", "")
+            bet_record["status"] = order.get("status", "")
+            bet_record["fill_price"] = order.get("avg_price", price)
+            P(f"    BET PLACED: {side.upper()} @ {price:.4f}")
+            return bet_record
+        else:
+            P(f"    Order failed — not recorded")
+            return None
+    else:
+        P(f"    [DRY RUN] Would bet {side.upper()} @ {price:.4f}")
+        bet_record["status"] = "dry_run"
+        return bet_record
+
+
 # ── Main ────────────────────────────────────────────────────────────────
 def run(live=False):
     P("=" * 65)
@@ -341,10 +411,9 @@ def run(live=False):
     P(f"  Cryptos: {', '.join(CRYPTOS.keys())}")
     P("=" * 65)
 
-    mins_left = minutes_until_strike()
     window_start, window_end = get_current_window()
     P(f"  Current window: {window_start.strftime('%H:%M')} - {window_end.strftime('%H:%M')} UTC")
-    P(f"  Minutes until strike: {mins_left:.1f}")
+    P(f"  Minutes until strike: {minutes_until_strike():.1f}")
 
     # Check balance
     bal = get_balance()
@@ -359,89 +428,41 @@ def run(live=False):
 
     bets = load_bets()
     new_bets = 0
-    skipped = 0
 
-    for crypto, cfg in CRYPTOS.items():
-        series = cfg["series"]
+    # Sort cryptos by entry window: largest first (BTC 10min first, SOL 2min last)
+    sorted_cryptos = sorted(CRYPTOS.items(), key=lambda x: -x[1]["entry_window"])
+
+    # Schedule: wait until each crypto's entry window, then trade
+    # Bot starts ~10 min before strike. Each crypto enters at its optimal time.
+    #   BTC  (10 min): enter immediately
+    #   XRP  ( 4 min): wait until 4 min before strike
+    #   ETH  ( 3 min): wait until 3 min before strike
+    #   DOGE ( 3 min): wait until 3 min before strike
+    #   SOL  ( 2 min): wait until 2 min before strike
+
+    for crypto, cfg in sorted_cryptos:
         entry_window = cfg["entry_window"]
 
-        P(f"\n  --- {crypto} (entry window: last {entry_window} min) ---")
-
-        # Check if we're within the entry window
+        # Wait until we're within this crypto's entry window
+        mins_left = minutes_until_strike()
         if mins_left > entry_window:
-            P(f"    Skipping: {mins_left:.1f} min left > {entry_window} min window")
-            skipped += 1
+            wait_secs = (mins_left - entry_window) * 60
+            # Add 5 second buffer so we're clearly inside the window
+            wait_secs = max(0, wait_secs + 5)
+            P(f"\n  Waiting {wait_secs:.0f}s for {crypto} entry window ({entry_window} min before strike)...")
+            time.sleep(wait_secs)
+
+        # Now we're in the entry window — trade
+        mins_left = minutes_until_strike()
+        P(f"  {crypto}: {mins_left:.1f} min left (window: {entry_window} min)")
+
+        if mins_left < 0.5:
+            P(f"  Too close to strike (<30s) — skipping {crypto}")
             continue
 
-        # Find current market
-        market, event = find_current_market(series)
-        if not market:
-            P(f"    No open market found")
-            skipped += 1
-            continue
-
-        ticker = market["ticker"]
-        event_ticker = event["event_ticker"]
-        P(f"    Market: {ticker}")
-        P(f"    Event: {event.get('title', event_ticker)}")
-
-        # Skip if already have position
-        if ticker in existing:
-            P(f"    Already have position — skipping")
-            skipped += 1
-            continue
-
-        # Check if we already bet this event
-        already_bet = any(b.get("ticker") == ticker for b in bets)
-        if already_bet:
-            P(f"    Already bet this market — skipping")
-            skipped += 1
-            continue
-
-        # Get dominant side and price
-        side, price = get_dominant_side(ticker)
-        if not side or not price:
-            P(f"    Could not determine dominant side")
-            skipped += 1
-            continue
-
-        P(f"    Dominant: {side.upper()} @ {price:.4f}")
-
-        if price < MIN_PRICE:
-            P(f"    Price {price:.4f} < {MIN_PRICE} threshold — skipping")
-            skipped += 1
-            continue
-
-        # Place bet
-        bet_record = {
-            "crypto": crypto,
-            "ticker": ticker,
-            "event_ticker": event_ticker,
-            "side": side,
-            "price": price,
-            "bet_amount": BET_AMOUNT,
-            "entry_window": entry_window,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "window_end": window_end.isoformat(),
-            "result": "open",
-        }
-
-        if live:
-            result = place_order(ticker, side, price, BET_AMOUNT)
-            if result:
-                order = result.get("order", {})
-                bet_record["order_id"] = order.get("order_id", "")
-                bet_record["status"] = order.get("status", "")
-                bet_record["fill_price"] = order.get("avg_price", price)
-                bets.append(bet_record)
-                new_bets += 1
-                P(f"    BET PLACED: {side.upper()} @ {price:.4f}")
-            else:
-                P(f"    Order failed — not recorded")
-        else:
-            P(f"    [DRY RUN] Would bet {side.upper()} @ {price:.4f}")
-            bet_record["status"] = "dry_run"
-            bets.append(bet_record)
+        bet = trade_crypto(crypto, cfg, existing, bets, live)
+        if bet:
+            bets.append(bet)
             new_bets += 1
 
         time.sleep(0.2)
@@ -455,7 +476,6 @@ def run(live=False):
         "mode": "live" if live else "dry_run",
         "window": f"{window_start.strftime('%H:%M')}-{window_end.strftime('%H:%M')} UTC",
         "new_bets": new_bets,
-        "skipped": skipped,
         "total_bets": len(bets),
         "balance": bal["balance"] if bal else None,
     }
@@ -463,7 +483,7 @@ def run(live=False):
         json.dump(status, f, indent=2, default=str)
 
     P(f"\n  {'='*40}")
-    P(f"  Done! New bets: {new_bets} | Skipped: {skipped}")
+    P(f"  Done! New bets: {new_bets}")
     P(f"  Total bets on file: {len(bets)}")
     P(f"  {'='*40}")
 
