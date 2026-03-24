@@ -400,9 +400,10 @@ def save_bet(bet_info):
 
 # ── Order placement ─────────────────────────────────────────────────────
 def place_order(ticker, side, price_dollars, amount_dollars):
-    """Place a limit order on Kalshi."""
-    price_cents = int(round(price_dollars * 100))
-    count = max(1, int(amount_dollars / price_dollars))
+    """Place a limit order on Kalshi. Uses GTC so orders rest until filled."""
+    # Buy at the ask price (1-2 cents above bid) to fill immediately
+    price_cents = min(99, int(round(price_dollars * 100)) + 2)
+    count = max(1, int(amount_dollars / (price_cents / 100)))
 
     order = {
         "ticker": ticker,
@@ -412,18 +413,20 @@ def place_order(ticker, side, price_dollars, amount_dollars):
         "count": count,
         "yes_price": price_cents if side == "yes" else None,
         "no_price": price_cents if side == "no" else None,
-        "time_in_force": "immediate_or_cancel",
         "client_order_id": str(uuid.uuid4()),
     }
     # Remove None values
     order = {k: v for k, v in order.items() if v is not None}
 
     try:
-        P(f"    Placing order: {count} contracts @ ${price_dollars:.2f} ({side.upper()}) = ${amount_dollars:.2f}")
+        P(f"    Placing order: {count} contracts @ {price_cents}c ({side.upper()}) = ~${count * price_cents / 100:.2f}")
         result = auth_post("/portfolio/orders", data=order)
         order_data = result.get("order", {})
         status = order_data.get("status", "unknown")
         P(f"    Order status: {status}")
+        if status == "canceled":
+            P(f"    Order was canceled (no liquidity)")
+            return None
         return result
     except Exception as e:
         P(f"    ORDER FAILED: {e}")
