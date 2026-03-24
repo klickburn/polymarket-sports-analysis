@@ -1,12 +1,10 @@
 name: Crypto 15m Bot
 
 on:
-  # Run at :05, :20, :35, :50 — gives 10 min before each strike
-  # BTC needs 10 min window so we enter early
-  # Other cryptos (2-4 min window) will wait until closer to strike
-  schedule:
-    - cron: '5,20,35,50 * * * *'
-  workflow_dispatch: # Manual trigger
+  # DISABLED — moved to Railway for reliability
+  # schedule:
+  #   - cron: '5,20,35,50 * * * *'
+  workflow_dispatch: # Manual trigger only (backup)
 
 permissions:
   contents: write
