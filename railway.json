@@ -1,0 +1,12 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "NIXPACKS",
+    "buildCommand": "pip install -r requirements-crypto.txt"
+  },
+  "deploy": {
+    "startCommand": "python crypto_15m_bot.py --live",
+    "cronSchedule": "5,20,35,50 * * * *",
+    "restartPolicyType": "NEVER"
+  }
+}
