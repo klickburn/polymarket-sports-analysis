@@ -88,36 +88,93 @@ if KALSHI_KEY_ID and KALSHI_PRIVATE_KEY:
     except Exception as e:
         P(f"  WARNING: Could not fetch Kalshi data: {e}")
 
-P(f"  Loaded {len(bot_bets)} bets")
+P(f"  Loaded {len(bot_bets)} sports bets")
 
-# Step 2: Build report
-P("  [2/3] Building report...")
+# Load crypto bets
+crypto_bets_file = "crypto_15m_bets.json"
+crypto_bets = []
+if os.path.exists(crypto_bets_file):
+    with open(crypto_bets_file) as f:
+        crypto_bets = json.load(f)
 
-resolved = [b for b in bot_bets if b.get("result") in ("win", "loss")]
-open_bets = [b for b in bot_bets if b.get("result") == "open"]
-pending = [b for b in bot_bets if b.get("result") not in ("win", "loss", "open")]
+crypto_status_file = "crypto_15m_status.json"
+crypto_status = {}
+if os.path.exists(crypto_status_file):
+    with open(crypto_status_file) as f:
+        crypto_status = json.load(f)
 
-wins = [b for b in resolved if b["result"] == "win"]
-losses = [b for b in resolved if b["result"] == "loss"]
-total_pnl = sum(b.get("pnl", 0) for b in resolved)
-total_wagered = sum(b.get("bet_amount", 0) for b in bot_bets)
-open_cost = sum(b.get("bet_amount", 0) for b in open_bets)
+P(f"  Loaded {len(crypto_bets)} crypto bets")
 
-report = {
-    "total_bets": len(bot_bets),
-    "resolved": len(resolved),
-    "wins": len(wins),
-    "losses": len(losses),
-    "win_rate": round(len(wins) / len(resolved) * 100, 1) if resolved else 0,
-    "total_pnl": round(total_pnl, 2),
-    "total_wagered": round(total_wagered, 2),
-    "open_count": len(open_bets),
-    "open_cost": round(open_cost, 2),
-    "pending_count": len(pending),
-    "balance": balance_info.get("balance", 0),
-    "portfolio_value": balance_info.get("portfolio_value", 0),
-    "bets": bot_bets,
-}
+# Check crypto bet outcomes if API available
+if KALSHI_KEY_ID and KALSHI_PRIVATE_KEY:
+    try:
+        from kalshi_bot import public_get
+        P("  Checking crypto bet outcomes...")
+        for bet in crypto_bets:
+            ticker = bet.get("ticker", "")
+            if not ticker:
+                continue
+            if bet.get("result") not in ("win", "loss"):
+                try:
+                    mkt = public_get(f"/markets/{ticker}")
+                    market = mkt.get("market", {})
+                    status = market.get("status", "")
+                    result_val = market.get("result", "")
+                    if status in ("settled", "finalized") and result_val:
+                        won = (result_val == "yes" and bet.get("side") == "yes") or \
+                              (result_val == "no" and bet.get("side") == "no")
+                        bet["result"] = "win" if won else "loss"
+                        bet["market_result"] = result_val
+                        price = bet.get("price", 0)
+                        amount = bet.get("bet_amount", 0)
+                        contracts = int(amount / price) if price > 0 else 0
+                        if won:
+                            bet["pnl"] = round(contracts * (1.0 - price), 2)
+                        else:
+                            bet["pnl"] = round(-contracts * price, 2)
+                    elif status == "open":
+                        bet["result"] = "open"
+                    else:
+                        bet["result"] = "pending"
+                except Exception:
+                    pass
+        with open(crypto_bets_file, "w") as f:
+            json.dump(crypto_bets, f, indent=2, default=str)
+    except Exception as e:
+        P(f"  WARNING: Could not check crypto outcomes: {e}")
+
+# Step 2: Build reports
+P("  [2/3] Building reports...")
+
+
+def build_report(bets):
+    resolved = [b for b in bets if b.get("result") in ("win", "loss")]
+    open_bets = [b for b in bets if b.get("result") == "open"]
+    pending = [b for b in bets if b.get("result") not in ("win", "loss", "open")]
+    wins = [b for b in resolved if b["result"] == "win"]
+    losses = [b for b in resolved if b["result"] == "loss"]
+    total_pnl = sum(b.get("pnl", 0) for b in resolved)
+    total_wagered = sum(b.get("bet_amount", 0) for b in bets)
+    open_cost = sum(b.get("bet_amount", 0) for b in open_bets)
+    return {
+        "total_bets": len(bets),
+        "resolved": len(resolved),
+        "wins": len(wins),
+        "losses": len(losses),
+        "win_rate": round(len(wins) / len(resolved) * 100, 1) if resolved else 0,
+        "total_pnl": round(total_pnl, 2),
+        "total_wagered": round(total_wagered, 2),
+        "open_count": len(open_bets),
+        "open_cost": round(open_cost, 2),
+        "pending_count": len(pending),
+        "balance": balance_info.get("balance", 0),
+        "portfolio_value": balance_info.get("portfolio_value", 0),
+        "bets": bets,
+    }
+
+
+report = build_report(bot_bets)
+crypto_report = build_report(crypto_bets)
 
 # Step 3: Build dashboard
 P("  [3/3] Building Kalshi dashboard...")
@@ -134,15 +191,18 @@ refresh_time = datetime.now(timezone.utc).isoformat()
 
 html = html.replace("KALSHI_REPORT_PLACEHOLDER", json.dumps(report, default=str))
 html = html.replace("KALSHI_STATUS_PLACEHOLDER", json.dumps(bot_status, default=str))
+html = html.replace("CRYPTO_REPORT_PLACEHOLDER", json.dumps(crypto_report, default=str))
+html = html.replace("CRYPTO_STATUS_PLACEHOLDER", json.dumps(crypto_status, default=str))
 html = html.replace("DATA_REFRESHED_PLACEHOLDER", refresh_time)
 
 with open("kalshi_dashboard.html", "w") as f:
     f.write(html)
 
+s_resolved = [b for b in bot_bets if b.get("result") in ("win", "loss")]
+c_resolved = [b for b in crypto_bets if b.get("result") in ("win", "loss")]
+
 P()
 P(f"  Kalshi Dashboard refreshed!")
-P(f"  Total bets: {len(bot_bets)}")
-P(f"  Resolved: {len(resolved)} ({len(wins)}W-{len(losses)}L)")
-P(f"  P&L: ${total_pnl:+.2f}")
-P(f"  Open: {len(open_bets)} | Pending: {len(pending)}")
+P(f"  Sports: {len(bot_bets)} bets, {len(s_resolved)} resolved, P&L: ${sum(b.get('pnl',0) for b in s_resolved):+.2f}")
+P(f"  Crypto: {len(crypto_bets)} bets, {len(c_resolved)} resolved, P&L: ${sum(b.get('pnl',0) for b in c_resolved):+.2f}")
 P(f"  -> Open kalshi_dashboard.html to view")

@@ -33,7 +33,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 28px;
+    margin-bottom: 20px;
     flex-wrap: wrap;
     gap: 12px;
   }
@@ -45,8 +45,32 @@
     -webkit-text-fill-color: transparent;
   }
   .header .subtitle { color: var(--muted); font-size: 14px; }
-  .header .link { color: var(--blue); font-size: 12px; text-decoration: none; }
-  .header .link:hover { text-decoration: underline; }
+
+  /* Top-level mode tabs */
+  .mode-tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 24px;
+    border-bottom: 2px solid var(--border);
+    padding-bottom: 12px;
+  }
+  .mode-tab {
+    padding: 10px 24px;
+    border-radius: 10px 10px 0 0;
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 600;
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid transparent;
+    border-bottom: none;
+    transition: all 0.2s;
+  }
+  .mode-tab:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+  .mode-tab.active-sports { color: var(--teal); background: rgba(20,184,166,0.1); border-color: var(--teal); }
+  .mode-tab.active-crypto { color: var(--orange); background: rgba(245,158,11,0.1); border-color: var(--orange); }
+  .mode-section { display: none; }
+  .mode-section.active { display: block; }
 
   .kpi-row {
     display: grid;
@@ -68,6 +92,7 @@
   .kpi .value.blue { color: var(--blue); }
   .kpi .value.purple { color: var(--purple); }
   .kpi .value.cyan { color: var(--cyan); }
+  .kpi .value.orange { color: var(--orange); }
   .kpi .sub { color: var(--muted); font-size: 11px; margin-top: 4px; }
 
   .grid-2 {
@@ -120,6 +145,7 @@
   }
   .badge-auto { background: rgba(20,184,166,0.2); color: var(--teal); }
   .badge-strat { background: rgba(168,85,247,0.2); color: var(--purple); }
+  .badge-crypto { background: rgba(245,158,11,0.2); color: var(--orange); }
 
   table {
     width: 100%;
@@ -187,7 +213,6 @@
     padding: 48px 24px;
     color: var(--muted);
   }
-  .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
   .empty-state .msg { font-size: 16px; font-weight: 500; }
   .empty-state .sub { font-size: 13px; margin-top: 6px; }
 
@@ -200,130 +225,196 @@
     background: rgba(107,114,128,0.15);
     color: #9ca3af;
   }
+  .crypto-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .crypto-tag.btc { background: rgba(247,147,26,0.15); color: #f7931a; }
+  .crypto-tag.eth { background: rgba(98,126,234,0.15); color: #627eea; }
+  .crypto-tag.sol { background: rgba(0,255,163,0.15); color: #00ffa3; }
+  .crypto-tag.xrp { background: rgba(0,162,224,0.15); color: #00a2e0; }
+  .crypto-tag.doge { background: rgba(196,176,64,0.15); color: #c4b040; }
 </style>
 </head>
 <body>
 <div class="header">
   <div>
     <h1>Kalshi Dashboard</h1>
-    <div class="subtitle">Automated Multi-Sport Strategy &middot; 2% Sizing</div>
+    <div class="subtitle">Sports + Crypto Automated Trading</div>
   </div>
   <div style="text-align:right">
     <div style="color:var(--muted);font-size:12px">Data refreshed</div>
     <div style="font-size:14px;font-weight:600" id="lastUpdated"></div>
-    <div style="color:var(--muted);font-size:12px;margin-top:4px">Bot last run</div>
-    <div style="font-size:13px;font-weight:600" id="botLastRun"></div>
   </div>
 </div>
 
-<!-- KPIs -->
-<div class="kpi-row" id="kpis"></div>
-
-<!-- Charts -->
-<div class="grid-2">
-  <div class="card">
-    <h3>Cumulative P&L</h3>
-    <div class="chart-container tall"><canvas id="pnlChart"></canvas></div>
-  </div>
-  <div class="card">
-    <h3>Win / Loss by League</h3>
-    <div class="chart-container tall"><canvas id="leagueChart"></canvas></div>
-  </div>
+<!-- Mode Tabs -->
+<div class="mode-tabs">
+  <div class="mode-tab active-sports" id="tabSports" onclick="switchMode('sports')">Sports</div>
+  <div class="mode-tab" id="tabCrypto" onclick="switchMode('crypto')">Crypto 15m</div>
 </div>
 
-<!-- Strategy Breakdown -->
-<hr class="section-divider">
-<div class="section-header">
-  <h2>Strategy Performance</h2>
-  <span class="badge badge-strat">4 Strategies</span>
-</div>
+<!-- ═══════════════════ SPORTS SECTION ═══════════════════ -->
+<div class="mode-section active" id="sectionSports">
+  <div class="kpi-row" id="sportsKpis"></div>
 
-<div id="stratContent"></div>
-
-<!-- League Breakdown -->
-<hr class="section-divider">
-<div class="section-header">
-  <h2>Performance by League</h2>
-  <span class="badge badge-auto">20 Leagues</span>
-</div>
-
-<div id="leagueContent"></div>
-
-<div class="grid-2" style="margin-top:20px">
-  <div class="card">
-    <h3>P&L by League</h3>
-    <div class="chart-container med"><canvas id="leaguePnlChart"></canvas></div>
-  </div>
-  <div class="card">
-    <h3>P&L by Strategy</h3>
-    <div class="chart-container med"><canvas id="stratPnlChart"></canvas></div>
-  </div>
-</div>
-
-<!-- All Bets Table -->
-<hr class="section-divider">
-<div class="section-header">
-  <h2>All Bets</h2>
-</div>
-
-<div class="card" style="margin-bottom:24px">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
-    <div class="tabs" id="mainTabs">
-      <div class="tab active" onclick="filterTable('all')">All</div>
-      <div class="tab" onclick="filterTable('resolved')">Resolved</div>
-      <div class="tab" onclick="filterTable('open')">Open</div>
-      <div class="tab" onclick="filterTable('wins')">Wins</div>
-      <div class="tab" onclick="filterTable('losses')">Losses</div>
-      <div class="tab" onclick="filterTable('S1')">S1: Fav</div>
-      <div class="tab" onclick="filterTable('S2')">S2: Dog</div>
-      <div class="tab" onclick="filterTable('S3')">S3: UCL</div>
-      <div class="tab" onclick="filterTable('S4')">S4: Draw</div>
+  <div class="grid-2">
+    <div class="card">
+      <h3>Cumulative P&L</h3>
+      <div class="chart-container tall"><canvas id="sportsPnlChart"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Win / Loss by League</h3>
+      <div class="chart-container tall"><canvas id="sportsLeagueChart"></canvas></div>
     </div>
   </div>
-  <div class="scroll-table">
-    <table>
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Event</th>
-          <th>Bet On</th>
-          <th>Strategy</th>
-          <th>League</th>
-          <th>Price</th>
-          <th>Amount</th>
-          <th>P&L</th>
-          <th>Status</th>
-        </tr>
-      </thead>
-      <tbody id="betsBody"></tbody>
-    </table>
+
+  <hr class="section-divider">
+  <div class="section-header">
+    <h2>Strategy Performance</h2>
+    <span class="badge badge-strat">4 Strategies</span>
+  </div>
+  <div id="sportsStratContent"></div>
+
+  <hr class="section-divider">
+  <div class="section-header">
+    <h2>Performance by League</h2>
+    <span class="badge badge-auto">20 Leagues</span>
+  </div>
+  <div id="sportsLeagueContent"></div>
+
+  <div class="grid-2" style="margin-top:20px">
+    <div class="card">
+      <h3>P&L by League</h3>
+      <div class="chart-container med"><canvas id="sportsLeaguePnlChart"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>P&L by Strategy</h3>
+      <div class="chart-container med"><canvas id="sportsStratPnlChart"></canvas></div>
+    </div>
+  </div>
+
+  <hr class="section-divider">
+  <div class="section-header"><h2>All Sports Bets</h2></div>
+  <div class="card" style="margin-bottom:24px">
+    <div class="tabs" id="sportsTabs">
+      <div class="tab active" onclick="filterSportsTable('all',this)">All</div>
+      <div class="tab" onclick="filterSportsTable('resolved',this)">Resolved</div>
+      <div class="tab" onclick="filterSportsTable('open',this)">Open</div>
+      <div class="tab" onclick="filterSportsTable('wins',this)">Wins</div>
+      <div class="tab" onclick="filterSportsTable('losses',this)">Losses</div>
+      <div class="tab" onclick="filterSportsTable('S1',this)">S1</div>
+      <div class="tab" onclick="filterSportsTable('S2',this)">S2</div>
+      <div class="tab" onclick="filterSportsTable('S3',this)">S3</div>
+      <div class="tab" onclick="filterSportsTable('S4',this)">S4</div>
+    </div>
+    <div class="scroll-table">
+      <table>
+        <thead><tr><th>Date</th><th>Event</th><th>Bet On</th><th>Strategy</th><th>League</th><th>Price</th><th>Amount</th><th>P&L</th><th>Status</th></tr></thead>
+        <tbody id="sportsBetsBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ CRYPTO SECTION ═══════════════════ -->
+<div class="mode-section" id="sectionCrypto">
+  <div class="kpi-row" id="cryptoKpis"></div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3>Cumulative P&L</h3>
+      <div class="chart-container tall"><canvas id="cryptoPnlChart"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Win / Loss by Crypto</h3>
+      <div class="chart-container tall"><canvas id="cryptoByAssetChart"></canvas></div>
+    </div>
+  </div>
+
+  <hr class="section-divider">
+  <div class="section-header">
+    <h2>Performance by Crypto</h2>
+    <span class="badge badge-crypto">5 Assets</span>
+  </div>
+  <div id="cryptoAssetContent"></div>
+
+  <div class="grid-2" style="margin-top:20px">
+    <div class="card">
+      <h3>P&L by Crypto</h3>
+      <div class="chart-container med"><canvas id="cryptoAssetPnlChart"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Entry Window Stats</h3>
+      <div class="chart-container med"><canvas id="cryptoWindowChart"></canvas></div>
+    </div>
+  </div>
+
+  <hr class="section-divider">
+  <div class="section-header"><h2>All Crypto Bets</h2></div>
+  <div class="card" style="margin-bottom:24px">
+    <div class="tabs" id="cryptoTabs">
+      <div class="tab active" onclick="filterCryptoTable('all',this)">All</div>
+      <div class="tab" onclick="filterCryptoTable('resolved',this)">Resolved</div>
+      <div class="tab" onclick="filterCryptoTable('open',this)">Open</div>
+      <div class="tab" onclick="filterCryptoTable('wins',this)">Wins</div>
+      <div class="tab" onclick="filterCryptoTable('losses',this)">Losses</div>
+      <div class="tab" onclick="filterCryptoTable('BTC',this)">BTC</div>
+      <div class="tab" onclick="filterCryptoTable('ETH',this)">ETH</div>
+      <div class="tab" onclick="filterCryptoTable('SOL',this)">SOL</div>
+      <div class="tab" onclick="filterCryptoTable('XRP',this)">XRP</div>
+      <div class="tab" onclick="filterCryptoTable('DOGE',this)">DOGE</div>
+    </div>
+    <div class="scroll-table">
+      <table>
+        <thead><tr><th>Date</th><th>Crypto</th><th>Side</th><th>Entry Window</th><th>Price</th><th>Amount</th><th>P&L</th><th>Status</th></tr></thead>
+        <tbody id="cryptoBetsBody"></tbody>
+      </table>
+    </div>
   </div>
 </div>
 
 <script>
-const R = KALSHI_REPORT_PLACEHOLDER;
-const BOT_STATUS = KALSHI_STATUS_PLACEHOLDER;
+// ═══ Data ═══
+const SR = KALSHI_REPORT_PLACEHOLDER;
+const SPORTS_STATUS = KALSHI_STATUS_PLACEHOLDER;
+const CR = CRYPTO_REPORT_PLACEHOLDER;
+const CRYPTO_STATUS = CRYPTO_STATUS_PLACEHOLDER;
 const DATA_REFRESHED_AT = "DATA_REFRESHED_PLACEHOLDER";
-const BETS = R.bets || [];
+const SPORTS_BETS = SR.bets || [];
+const CRYPTO_BETS = CR.bets || [];
 
 const stratNames = { S1: 'Coin Flip Fav', S2: 'Coin Flip Dog', S3: 'UCL Underdog', S4: 'Bundesliga Draw' };
 const stratColors = { S1: '#3b82f6', S2: '#eab308', S3: '#a855f7', S4: '#06b6d4' };
-const stratBacktest = { S1: '60.6%', S2: '55%', S3: '~50%', S4: '~40%' };
+const cryptoColors = { BTC: '#f7931a', ETH: '#627eea', SOL: '#00ffa3', XRP: '#00a2e0', DOGE: '#c4b040' };
 
 function getDate(ts) {
   if (!ts) return '';
   return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
-
 function pnlHtml(val) {
   if (val === null || val === undefined) return '-';
   const cls = val >= 0 ? 'pnl-pos' : 'pnl-neg';
   return `<span class="${cls}">${val >= 0 ? '+' : ''}$${val.toFixed(2)}</span>`;
 }
-
 function stratTag(s) {
   if (!s) return '-';
   return `<span class="tag ${s.toLowerCase()}">${s}</span>`;
+}
+function cryptoTag(c) {
+  if (!c) return '-';
+  return `<span class="crypto-tag ${c.toLowerCase()}">${c}</span>`;
+}
+
+// ═══ Mode switching ═══
+function switchMode(mode) {
+  document.getElementById('sectionSports').classList.toggle('active', mode === 'sports');
+  document.getElementById('sectionCrypto').classList.toggle('active', mode === 'crypto');
+  document.getElementById('tabSports').className = 'mode-tab' + (mode === 'sports' ? ' active-sports' : '');
+  document.getElementById('tabCrypto').className = 'mode-tab' + (mode === 'crypto' ? ' active-crypto' : '');
 }
 
 // ═══ Timestamps ═══
@@ -332,258 +423,152 @@ const ago = Math.round((Date.now() - refreshDate.getTime()) / 60000);
 const agoText = ago < 1 ? 'just now' : ago < 60 ? `${ago}m ago` : `${Math.round(ago/60)}h ago`;
 document.getElementById('lastUpdated').textContent = refreshDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) + ` (${agoText})`;
 
-if (BOT_STATUS && BOT_STATUS.last_run) {
-  const botDate = new Date(BOT_STATUS.last_run);
-  const botAgo = Math.round((Date.now() - botDate.getTime()) / 60000);
-  const botAgoText = botAgo < 1 ? 'just now' : botAgo < 60 ? `${botAgo}m ago` : `${Math.round(botAgo/60)}h ago`;
-  document.getElementById('botLastRun').textContent = botDate.toLocaleDateString('en-US', { hour: '2-digit', minute: '2-digit' }) + ` (${botAgoText}) — ${R.total_bets} bets placed`;
-} else {
-  document.getElementById('botLastRun').textContent = 'No data';
-  document.getElementById('botLastRun').style.color = 'var(--muted)';
-}
+// ═══════════════════════════════════════════════════════════════
+// SPORTS
+// ═══════════════════════════════════════════════════════════════
 
-// ═══ KPIs ═══
-const roi = R.total_wagered > 0 ? (R.total_pnl / R.total_wagered * 100).toFixed(1) : '0';
-const kpis = [
-  { label: 'Balance', value: R.balance > 0 ? `$${R.balance.toFixed(2)}` : '—', cls: 'cyan', sub: R.portfolio_value > 0 ? `$${R.portfolio_value.toFixed(2)} portfolio` : 'Connect API for balance' },
-  { label: 'Total P&L', value: `$${R.total_pnl >= 0 ? '+' : ''}${R.total_pnl.toFixed(2)}`, cls: R.total_pnl >= 0 ? 'green' : 'red', sub: `${R.total_bets} total bets` },
-  { label: 'ROI', value: `${roi}%`, cls: parseFloat(roi) >= 0 ? 'green' : 'red', sub: `$${R.total_wagered.toFixed(2)} wagered` },
-  { label: 'Win Rate', value: R.resolved > 0 ? `${R.win_rate}%` : '—', cls: R.win_rate >= 50 ? 'green' : 'red', sub: `${R.wins}W - ${R.losses}L (${R.resolved} resolved)` },
-  { label: 'Open Bets', value: R.open_count, cls: 'blue', sub: `$${R.open_cost.toFixed(2)} at risk` },
-  { label: 'Pending', value: R.pending_count, cls: 'purple', sub: 'awaiting settlement' },
+// Sports KPIs
+const sRoi = SR.total_wagered > 0 ? (SR.total_pnl / SR.total_wagered * 100).toFixed(1) : '0';
+const sportsKpis = [
+  { label: 'Balance', value: SR.balance > 0 ? `$${SR.balance.toFixed(2)}` : '--', cls: 'cyan', sub: SR.portfolio_value > 0 ? `$${SR.portfolio_value.toFixed(2)} portfolio` : '' },
+  { label: 'Sports P&L', value: `$${SR.total_pnl >= 0 ? '+' : ''}${SR.total_pnl.toFixed(2)}`, cls: SR.total_pnl >= 0 ? 'green' : 'red', sub: `${SR.total_bets} total bets` },
+  { label: 'ROI', value: `${sRoi}%`, cls: parseFloat(sRoi) >= 0 ? 'green' : 'red', sub: `$${SR.total_wagered.toFixed(2)} wagered` },
+  { label: 'Win Rate', value: SR.resolved > 0 ? `${SR.win_rate}%` : '--', cls: SR.win_rate >= 50 ? 'green' : 'red', sub: `${SR.wins}W - ${SR.losses}L` },
+  { label: 'Open', value: SR.open_count, cls: 'blue', sub: `$${SR.open_cost.toFixed(2)} at risk` },
+  { label: 'Pending', value: SR.pending_count, cls: 'purple', sub: 'awaiting settlement' },
 ];
-document.getElementById('kpis').innerHTML = kpis.map(k =>
+document.getElementById('sportsKpis').innerHTML = sportsKpis.map(k =>
   `<div class="kpi"><div class="label">${k.label}</div><div class="value ${k.cls}">${k.value}</div><div class="sub">${k.sub}</div></div>`
 ).join('');
 
-// ═══ Cumulative P&L Chart ═══
-const resolved = BETS.filter(b => b.result === 'win' || b.result === 'loss')
+// Sports cumulative P&L chart
+const sResolved = SPORTS_BETS.filter(b => b.result === 'win' || b.result === 'loss')
   .sort((a, b) => (a.timestamp || '').localeCompare(b.timestamp || ''));
 
-if (resolved.length > 0) {
+if (sResolved.length > 0) {
   let cumPnl = 0;
-  const cumData = resolved.map(b => {
+  const cumData = sResolved.map(b => {
     cumPnl += (b.pnl || 0);
-    return { x: getDate(b.timestamp), y: parseFloat(cumPnl.toFixed(2)), pnl: b.pnl || 0, title: b.title, strat: b.strategy };
+    return { x: getDate(b.timestamp), y: parseFloat(cumPnl.toFixed(2)), pnl: b.pnl || 0, strat: b.strategy };
   });
-
-  new Chart(document.getElementById('pnlChart'), {
+  new Chart(document.getElementById('sportsPnlChart'), {
     type: 'line',
-    data: {
-      labels: cumData.map(d => d.x),
-      datasets: [{
-        data: cumData.map(d => d.y),
-        borderColor: '#14b8a6',
-        backgroundColor: 'rgba(20,184,166,0.1)',
-        fill: true, tension: 0.3, pointRadius: 4, borderWidth: 2,
-        pointBackgroundColor: cumData.map(d => stratColors[d.strat] || '#14b8a6'),
-        pointBorderColor: cumData.map(d => stratColors[d.strat] || '#14b8a6'),
-      }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: { callbacks: { label: (ctx) => {
-          const d = cumData[ctx.dataIndex];
-          return [`Cum P&L: $${d.y.toFixed(2)}`, `This bet: ${d.pnl >= 0 ? '+' : ''}$${d.pnl.toFixed(2)}`, (d.title || '').substring(0, 40), stratNames[d.strat] || d.strat];
-        }}}
-      },
-      scales: {
-        x: { display: false },
-        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3', callback: v => '$' + v } }
-      }
-    }
+    data: { labels: cumData.map(d => d.x), datasets: [{ data: cumData.map(d => d.y), borderColor: '#14b8a6', backgroundColor: 'rgba(20,184,166,0.1)', fill: true, tension: 0.3, pointRadius: 4, borderWidth: 2 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3', callback: v => '$' + v } } } }
   });
 } else {
-  document.getElementById('pnlChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:300px;color:var(--muted)">No resolved bets yet</div>';
+  document.getElementById('sportsPnlChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:300px;color:var(--muted)">No resolved bets yet</div>';
 }
 
-// ═══ Win/Loss by League Chart ═══
-const leagueStats = {};
-BETS.forEach(b => {
+// Sports league stats
+const sLeagueStats = {};
+SPORTS_BETS.forEach(b => {
   const lg = b.league || 'Unknown';
-  if (!leagueStats[lg]) leagueStats[lg] = { wins: 0, losses: 0, pnl: 0, bets: 0, wagered: 0, open: 0 };
-  leagueStats[lg].bets++;
-  leagueStats[lg].wagered += b.bet_amount || 0;
-  if (b.result === 'win') { leagueStats[lg].wins++; leagueStats[lg].pnl += (b.pnl || 0); }
-  else if (b.result === 'loss') { leagueStats[lg].losses++; leagueStats[lg].pnl += (b.pnl || 0); }
-  else { leagueStats[lg].open++; }
+  if (!sLeagueStats[lg]) sLeagueStats[lg] = { wins: 0, losses: 0, pnl: 0, bets: 0, wagered: 0, open: 0 };
+  sLeagueStats[lg].bets++;
+  sLeagueStats[lg].wagered += b.bet_amount || 0;
+  if (b.result === 'win') { sLeagueStats[lg].wins++; sLeagueStats[lg].pnl += (b.pnl || 0); }
+  else if (b.result === 'loss') { sLeagueStats[lg].losses++; sLeagueStats[lg].pnl += (b.pnl || 0); }
+  else { sLeagueStats[lg].open++; }
 });
+const sLgNames = Object.keys(sLeagueStats).sort((a, b) => sLeagueStats[b].bets - sLeagueStats[a].bets);
 
-const lgNames = Object.keys(leagueStats).sort((a, b) => leagueStats[b].bets - leagueStats[a].bets);
-if (lgNames.length > 0 && resolved.length > 0) {
-  new Chart(document.getElementById('leagueChart'), {
+if (sLgNames.length > 0 && sResolved.length > 0) {
+  new Chart(document.getElementById('sportsLeagueChart'), {
     type: 'bar',
-    data: {
-      labels: lgNames,
-      datasets: [
-        { label: 'Wins', data: lgNames.map(s => leagueStats[s].wins), backgroundColor: 'rgba(34,197,94,0.7)', borderRadius: 4 },
-        { label: 'Losses', data: lgNames.map(s => leagueStats[s].losses), backgroundColor: 'rgba(239,68,68,0.7)', borderRadius: 4 },
-      ]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { labels: { color: '#8b8fa3' } } },
-      scales: {
-        x: { stacked: true, grid: { display: false }, ticks: { color: '#8b8fa3', font: { size: 10 } } },
-        y: { stacked: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3' } }
-      }
-    }
+    data: { labels: sLgNames, datasets: [
+      { label: 'Wins', data: sLgNames.map(s => sLeagueStats[s].wins), backgroundColor: 'rgba(34,197,94,0.7)', borderRadius: 4 },
+      { label: 'Losses', data: sLgNames.map(s => sLeagueStats[s].losses), backgroundColor: 'rgba(239,68,68,0.7)', borderRadius: 4 },
+    ] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#8b8fa3' } } }, scales: { x: { stacked: true, grid: { display: false }, ticks: { color: '#8b8fa3', font: { size: 10 } } }, y: { stacked: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3' } } } }
   });
 } else {
-  document.getElementById('leagueChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:300px;color:var(--muted)">No resolved bets yet</div>';
+  document.getElementById('sportsLeagueChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:300px;color:var(--muted)">No resolved bets yet</div>';
 }
 
-// ═══ Strategy Breakdown ═══
-const stratStats = {};
-BETS.forEach(b => {
+// Sports strategy breakdown
+const sStratStats = {};
+SPORTS_BETS.forEach(b => {
   const s = b.strategy || 'Unknown';
-  if (!stratStats[s]) stratStats[s] = { bets: 0, wins: 0, losses: 0, pnl: 0, open: 0, wagered: 0 };
-  stratStats[s].bets++;
-  stratStats[s].wagered += b.bet_amount || 0;
-  if (b.result === 'win') { stratStats[s].wins++; stratStats[s].pnl += (b.pnl || 0); }
-  else if (b.result === 'loss') { stratStats[s].losses++; stratStats[s].pnl += (b.pnl || 0); }
-  else { stratStats[s].open++; }
+  if (!sStratStats[s]) sStratStats[s] = { bets: 0, wins: 0, losses: 0, pnl: 0, open: 0, wagered: 0 };
+  sStratStats[s].bets++;
+  sStratStats[s].wagered += b.bet_amount || 0;
+  if (b.result === 'win') { sStratStats[s].wins++; sStratStats[s].pnl += (b.pnl || 0); }
+  else if (b.result === 'loss') { sStratStats[s].losses++; sStratStats[s].pnl += (b.pnl || 0); }
+  else { sStratStats[s].open++; }
 });
 
-const stratEl = document.getElementById('stratContent');
-if (R.total_bets === 0) {
-  stratEl.innerHTML = `
-    <div class="card">
-      <div class="empty-state">
-        <div class="icon">&#x1F4CA;</div>
-        <div class="msg">No bets placed yet</div>
-        <div class="sub">Run <code>python3 kalshi_bot.py --live</code> to start the automated strategy</div>
-      </div>
-    </div>`;
+const stratEl = document.getElementById('sportsStratContent');
+if (SR.total_bets === 0) {
+  stratEl.innerHTML = '<div class="card"><div class="empty-state"><div class="msg">No sports bets yet</div><div class="sub">Run <code>python3 kalshi_bot.py --live</code></div></div></div>';
 } else {
-  let html = '<div class="card" style="margin-bottom:20px"><div class="scroll-table"><table><thead><tr><th>Strategy</th><th>Description</th><th>Bets</th><th>W-L</th><th>Win Rate</th><th>P&L</th><th>Wagered</th><th>ROI</th><th>Open</th><th>Backtest WR</th></tr></thead><tbody>';
+  let html = '<div class="card" style="margin-bottom:20px"><div class="scroll-table"><table><thead><tr><th>Strategy</th><th>Description</th><th>Bets</th><th>W-L</th><th>Win Rate</th><th>P&L</th><th>Wagered</th><th>ROI</th><th>Open</th></tr></thead><tbody>';
   for (const s of ['S1', 'S2', 'S3', 'S4']) {
-    const st = stratStats[s] || { bets: 0, wins: 0, losses: 0, pnl: 0, open: 0, wagered: 0 };
+    const st = sStratStats[s] || { bets: 0, wins: 0, losses: 0, pnl: 0, open: 0, wagered: 0 };
     if (st.bets === 0) continue;
-    const wr = (st.wins + st.losses) > 0 ? (st.wins / (st.wins + st.losses) * 100).toFixed(1) + '%' : '—';
-    const sRoi = st.wagered > 0 ? (st.pnl / st.wagered * 100).toFixed(1) + '%' : '—';
-    const pnlColor = st.pnl >= 0 ? 'var(--green)' : 'var(--red)';
-    html += `<tr>
-      <td>${stratTag(s)}</td>
-      <td style="color:${stratColors[s]}">${stratNames[s]}</td>
-      <td>${st.bets}</td>
-      <td>${st.wins}W-${st.losses}L</td>
-      <td>${wr}</td>
-      <td style="color:${pnlColor}">$${st.pnl >= 0 ? '+' : ''}${st.pnl.toFixed(2)}</td>
-      <td>$${st.wagered.toFixed(2)}</td>
-      <td style="color:${pnlColor}">${sRoi}</td>
-      <td>${st.open}</td>
-      <td>${stratBacktest[s] || '—'}</td>
-    </tr>`;
+    const wr = (st.wins + st.losses) > 0 ? (st.wins / (st.wins + st.losses) * 100).toFixed(1) + '%' : '--';
+    const roi = st.wagered > 0 ? (st.pnl / st.wagered * 100).toFixed(1) + '%' : '--';
+    const pc = st.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    html += `<tr><td>${stratTag(s)}</td><td style="color:${stratColors[s]}">${stratNames[s]}</td><td>${st.bets}</td><td>${st.wins}W-${st.losses}L</td><td>${wr}</td><td style="color:${pc}">$${st.pnl >= 0 ? '+' : ''}${st.pnl.toFixed(2)}</td><td>$${st.wagered.toFixed(2)}</td><td style="color:${pc}">${roi}</td><td>${st.open}</td></tr>`;
   }
   html += '</tbody></table></div></div>';
   stratEl.innerHTML = html;
 }
 
-// ═══ League Breakdown Table ═══
-const leagueEl = document.getElementById('leagueContent');
-if (lgNames.length > 0) {
+// Sports league breakdown table
+const sLeagueEl = document.getElementById('sportsLeagueContent');
+if (sLgNames.length > 0) {
   let html = '<div class="card" style="margin-bottom:20px"><div class="scroll-table"><table><thead><tr><th>League</th><th>Bets</th><th>W-L</th><th>Win Rate</th><th>P&L</th><th>Wagered</th><th>ROI</th><th>Open</th></tr></thead><tbody>';
-  for (const lg of lgNames) {
-    const s = leagueStats[lg];
-    const wr = (s.wins + s.losses) > 0 ? (s.wins / (s.wins + s.losses) * 100).toFixed(1) + '%' : '—';
-    const lRoi = s.wagered > 0 ? (s.pnl / s.wagered * 100).toFixed(1) + '%' : '—';
-    const pnlColor = s.pnl >= 0 ? 'var(--green)' : 'var(--red)';
-    html += `<tr>
-      <td><span class="league-tag">${lg}</span></td>
-      <td>${s.bets}</td>
-      <td>${s.wins}W-${s.losses}L</td>
-      <td>${wr}</td>
-      <td style="color:${pnlColor}">$${s.pnl >= 0 ? '+' : ''}${s.pnl.toFixed(2)}</td>
-      <td>$${s.wagered.toFixed(2)}</td>
-      <td style="color:${pnlColor}">${lRoi}</td>
-      <td>${s.open}</td>
-    </tr>`;
+  for (const lg of sLgNames) {
+    const s = sLeagueStats[lg];
+    const wr = (s.wins + s.losses) > 0 ? (s.wins / (s.wins + s.losses) * 100).toFixed(1) + '%' : '--';
+    const roi = s.wagered > 0 ? (s.pnl / s.wagered * 100).toFixed(1) + '%' : '--';
+    const pc = s.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    html += `<tr><td><span class="league-tag">${lg}</span></td><td>${s.bets}</td><td>${s.wins}W-${s.losses}L</td><td>${wr}</td><td style="color:${pc}">$${s.pnl >= 0 ? '+' : ''}${s.pnl.toFixed(2)}</td><td>$${s.wagered.toFixed(2)}</td><td style="color:${pc}">${roi}</td><td>${s.open}</td></tr>`;
   }
   html += '</tbody></table></div></div>';
-  leagueEl.innerHTML = html;
-} else {
-  leagueEl.innerHTML = '';
+  sLeagueEl.innerHTML = html;
 }
 
-// ═══ P&L by League Bar Chart ═══
-if (lgNames.length > 0 && resolved.length > 0) {
-  new Chart(document.getElementById('leaguePnlChart'), {
+// Sports P&L by League chart
+if (sLgNames.length > 0 && sResolved.length > 0) {
+  new Chart(document.getElementById('sportsLeaguePnlChart'), {
     type: 'bar',
-    data: {
-      labels: lgNames,
-      datasets: [{
-        data: lgNames.map(s => parseFloat(leagueStats[s].pnl.toFixed(2))),
-        backgroundColor: lgNames.map(s => leagueStats[s].pnl >= 0 ? 'rgba(34,197,94,0.7)' : 'rgba(239,68,68,0.7)'),
-        borderRadius: 4,
-      }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { grid: { display: false }, ticks: { color: '#8b8fa3', font: { size: 10 } } },
-        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3', callback: v => '$' + v } }
-      }
-    }
+    data: { labels: sLgNames, datasets: [{ data: sLgNames.map(s => parseFloat(sLeagueStats[s].pnl.toFixed(2))), backgroundColor: sLgNames.map(s => sLeagueStats[s].pnl >= 0 ? 'rgba(34,197,94,0.7)' : 'rgba(239,68,68,0.7)'), borderRadius: 4 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { color: '#8b8fa3', font: { size: 10 } } }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3', callback: v => '$' + v } } } }
   });
 } else {
-  document.getElementById('leaguePnlChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:260px;color:var(--muted)">No data</div>';
+  document.getElementById('sportsLeaguePnlChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:260px;color:var(--muted)">No data</div>';
 }
 
-// ═══ P&L by Strategy Bar Chart ═══
-const stratKeys = ['S1', 'S2', 'S3', 'S4'].filter(s => stratStats[s] && stratStats[s].bets > 0);
-if (stratKeys.length > 0 && resolved.length > 0) {
-  new Chart(document.getElementById('stratPnlChart'), {
+// Sports P&L by Strategy chart
+const sStratKeys = ['S1', 'S2', 'S3', 'S4'].filter(s => sStratStats[s] && sStratStats[s].bets > 0);
+if (sStratKeys.length > 0 && sResolved.length > 0) {
+  new Chart(document.getElementById('sportsStratPnlChart'), {
     type: 'bar',
-    data: {
-      labels: stratKeys.map(s => `${s}: ${stratNames[s]}`),
-      datasets: [{
-        data: stratKeys.map(s => parseFloat((stratStats[s].pnl || 0).toFixed(2))),
-        backgroundColor: stratKeys.map(s => {
-          const p = (stratStats[s] || {}).pnl || 0;
-          return p >= 0 ? 'rgba(34,197,94,0.7)' : 'rgba(239,68,68,0.7)';
-        }),
-        borderRadius: 4,
-      }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { grid: { display: false }, ticks: { color: '#8b8fa3', font: { size: 10 } } },
-        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3', callback: v => '$' + v } }
-      }
-    }
+    data: { labels: sStratKeys.map(s => `${s}: ${stratNames[s]}`), datasets: [{ data: sStratKeys.map(s => parseFloat((sStratStats[s].pnl || 0).toFixed(2))), backgroundColor: sStratKeys.map(s => (sStratStats[s] || {}).pnl >= 0 ? 'rgba(34,197,94,0.7)' : 'rgba(239,68,68,0.7)'), borderRadius: 4 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { color: '#8b8fa3', font: { size: 10 } } }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3', callback: v => '$' + v } } } }
   });
 } else {
-  document.getElementById('stratPnlChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:260px;color:var(--muted)">No data</div>';
+  document.getElementById('sportsStratPnlChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:260px;color:var(--muted)">No data</div>';
 }
 
-// ═══ All Bets Table ═══
-const allRows = BETS.map(b => ({
-  date: b.timestamp,
-  title: b.title || b.ticker,
-  label: b.label || b.side,
-  strategy: b.strategy,
-  league: b.league || 'Unknown',
-  price: b.price || 0,
-  amount: b.bet_amount || 0,
-  pnl: b.pnl || null,
-  result: b.result || 'pending',
+// Sports bets table
+const sportsRows = SPORTS_BETS.map(b => ({
+  date: b.timestamp, title: b.title || b.ticker, label: b.label || b.side,
+  strategy: b.strategy, league: b.league || 'Unknown',
+  price: b.price || 0, amount: b.bet_amount || 0,
+  pnl: b.pnl || null, result: b.result || 'pending',
 })).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
-function renderTable(filter) {
-  let rows = allRows;
+function renderSportsTable(filter) {
+  let rows = sportsRows;
   if (filter === 'resolved') rows = rows.filter(r => r.result === 'win' || r.result === 'loss');
   if (filter === 'open') rows = rows.filter(r => r.result === 'open');
   if (filter === 'wins') rows = rows.filter(r => r.result === 'win');
   if (filter === 'losses') rows = rows.filter(r => r.result === 'loss');
   if (['S1', 'S2', 'S3', 'S4'].includes(filter)) rows = rows.filter(r => r.strategy === filter);
-
-  document.getElementById('betsBody').innerHTML = rows.map(r => `
+  document.getElementById('sportsBetsBody').innerHTML = rows.map(r => `
     <tr>
       <td>${r.date ? getDate(r.date) : '-'}</td>
       <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis">${r.title}</td>
@@ -597,13 +582,152 @@ function renderTable(filter) {
     </tr>
   `).join('');
 }
-
-function filterTable(f) {
-  document.querySelectorAll('#mainTabs .tab').forEach(t => t.classList.remove('active'));
-  event.target.classList.add('active');
-  renderTable(f);
+function filterSportsTable(f, el) {
+  document.querySelectorAll('#sportsTabs .tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  renderSportsTable(f);
 }
-renderTable('all');
+renderSportsTable('all');
+
+
+// ═══════════════════════════════════════════════════════════════
+// CRYPTO
+// ═══════════════════════════════════════════════════════════════
+
+// Crypto KPIs
+const cRoi = CR.total_wagered > 0 ? (CR.total_pnl / CR.total_wagered * 100).toFixed(1) : '0';
+const cryptoKpis = [
+  { label: 'Balance', value: CR.balance > 0 ? `$${CR.balance.toFixed(2)}` : '--', cls: 'orange', sub: 'Shared Kalshi balance' },
+  { label: 'Crypto P&L', value: `$${CR.total_pnl >= 0 ? '+' : ''}${CR.total_pnl.toFixed(2)}`, cls: CR.total_pnl >= 0 ? 'green' : 'red', sub: `${CR.total_bets} total trades` },
+  { label: 'ROI', value: `${cRoi}%`, cls: parseFloat(cRoi) >= 0 ? 'green' : 'red', sub: `$${CR.total_wagered.toFixed(2)} wagered` },
+  { label: 'Win Rate', value: CR.resolved > 0 ? `${CR.win_rate}%` : '--', cls: CR.win_rate >= 50 ? 'green' : 'red', sub: `${CR.wins}W - ${CR.losses}L` },
+  { label: 'Open', value: CR.open_count, cls: 'blue', sub: `$${CR.open_cost.toFixed(2)} at risk` },
+  { label: 'Strategy', value: '15m', cls: 'orange', sub: 'Late entry dominant side' },
+];
+document.getElementById('cryptoKpis').innerHTML = cryptoKpis.map(k =>
+  `<div class="kpi"><div class="label">${k.label}</div><div class="value ${k.cls}">${k.value}</div><div class="sub">${k.sub}</div></div>`
+).join('');
+
+// Crypto cumulative P&L chart
+const cResolved = CRYPTO_BETS.filter(b => b.result === 'win' || b.result === 'loss')
+  .sort((a, b) => (a.timestamp || '').localeCompare(b.timestamp || ''));
+
+if (cResolved.length > 0) {
+  let cumPnl = 0;
+  const cumData = cResolved.map(b => {
+    cumPnl += (b.pnl || 0);
+    return { x: getDate(b.timestamp), y: parseFloat(cumPnl.toFixed(2)), pnl: b.pnl || 0, crypto: b.crypto };
+  });
+  new Chart(document.getElementById('cryptoPnlChart'), {
+    type: 'line',
+    data: { labels: cumData.map(d => d.x), datasets: [{ data: cumData.map(d => d.y), borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.1)', fill: true, tension: 0.3, pointRadius: 4, borderWidth: 2, pointBackgroundColor: cumData.map(d => cryptoColors[d.crypto] || '#f59e0b') }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => { const d = cumData[ctx.dataIndex]; return [`Cum P&L: $${d.y.toFixed(2)}`, `This: ${d.pnl >= 0 ? '+' : ''}$${d.pnl.toFixed(4)}`, d.crypto]; } } } }, scales: { x: { display: false }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3', callback: v => '$' + v } } } }
+  });
+} else {
+  document.getElementById('cryptoPnlChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:300px;color:var(--muted)">No resolved crypto trades yet</div>';
+}
+
+// Crypto stats by asset
+const cAssetStats = {};
+CRYPTO_BETS.forEach(b => {
+  const c = b.crypto || 'Unknown';
+  if (!cAssetStats[c]) cAssetStats[c] = { wins: 0, losses: 0, pnl: 0, bets: 0, wagered: 0, open: 0, window: b.entry_window || 0 };
+  cAssetStats[c].bets++;
+  cAssetStats[c].wagered += b.bet_amount || 0;
+  if (b.result === 'win') { cAssetStats[c].wins++; cAssetStats[c].pnl += (b.pnl || 0); }
+  else if (b.result === 'loss') { cAssetStats[c].losses++; cAssetStats[c].pnl += (b.pnl || 0); }
+  else { cAssetStats[c].open++; }
+});
+const cAssetNames = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE'].filter(c => cAssetStats[c]);
+
+// Win/Loss by Crypto chart
+if (cAssetNames.length > 0 && cResolved.length > 0) {
+  new Chart(document.getElementById('cryptoByAssetChart'), {
+    type: 'bar',
+    data: { labels: cAssetNames, datasets: [
+      { label: 'Wins', data: cAssetNames.map(c => cAssetStats[c].wins), backgroundColor: 'rgba(34,197,94,0.7)', borderRadius: 4 },
+      { label: 'Losses', data: cAssetNames.map(c => cAssetStats[c].losses), backgroundColor: 'rgba(239,68,68,0.7)', borderRadius: 4 },
+    ] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#8b8fa3' } } }, scales: { x: { stacked: true, grid: { display: false }, ticks: { color: '#8b8fa3' } }, y: { stacked: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3' } } } }
+  });
+} else {
+  document.getElementById('cryptoByAssetChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:300px;color:var(--muted)">No resolved crypto trades yet</div>';
+}
+
+// Crypto asset performance table
+const cryptoAssetEl = document.getElementById('cryptoAssetContent');
+const entryWindows = { BTC: '10 min', ETH: '3 min', SOL: '2 min', XRP: '4 min', DOGE: '3 min' };
+if (CR.total_bets === 0) {
+  cryptoAssetEl.innerHTML = '<div class="card"><div class="empty-state"><div class="msg">No crypto trades yet</div><div class="sub">Bot runs every 15 minutes on Railway</div></div></div>';
+} else {
+  let html = '<div class="card" style="margin-bottom:20px"><div class="scroll-table"><table><thead><tr><th>Crypto</th><th>Entry Window</th><th>Bets</th><th>W-L</th><th>Win Rate</th><th>P&L</th><th>Wagered</th><th>ROI</th><th>Open</th></tr></thead><tbody>';
+  for (const c of cAssetNames) {
+    const s = cAssetStats[c];
+    const wr = (s.wins + s.losses) > 0 ? (s.wins / (s.wins + s.losses) * 100).toFixed(1) + '%' : '--';
+    const roi = s.wagered > 0 ? (s.pnl / s.wagered * 100).toFixed(1) + '%' : '--';
+    const pc = s.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    html += `<tr><td>${cryptoTag(c)}</td><td>${entryWindows[c] || '--'}</td><td>${s.bets}</td><td>${s.wins}W-${s.losses}L</td><td>${wr}</td><td style="color:${pc}">$${s.pnl >= 0 ? '+' : ''}${s.pnl.toFixed(2)}</td><td>$${s.wagered.toFixed(2)}</td><td style="color:${pc}">${roi}</td><td>${s.open}</td></tr>`;
+  }
+  html += '</tbody></table></div></div>';
+  cryptoAssetEl.innerHTML = html;
+}
+
+// P&L by Crypto chart
+if (cAssetNames.length > 0 && cResolved.length > 0) {
+  new Chart(document.getElementById('cryptoAssetPnlChart'), {
+    type: 'bar',
+    data: { labels: cAssetNames, datasets: [{ data: cAssetNames.map(c => parseFloat(cAssetStats[c].pnl.toFixed(2))), backgroundColor: cAssetNames.map(c => cryptoColors[c] || '#f59e0b'), borderRadius: 4 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { color: '#8b8fa3' } }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3', callback: v => '$' + v } } } }
+  });
+} else {
+  document.getElementById('cryptoAssetPnlChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:260px;color:var(--muted)">No data</div>';
+}
+
+// Entry window chart (bets per crypto with window label)
+if (cAssetNames.length > 0) {
+  new Chart(document.getElementById('cryptoWindowChart'), {
+    type: 'bar',
+    data: { labels: cAssetNames.map(c => `${c} (${entryWindows[c]})`), datasets: [{ label: 'Trades', data: cAssetNames.map(c => cAssetStats[c].bets), backgroundColor: cAssetNames.map(c => cryptoColors[c] || '#f59e0b'), borderRadius: 4 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { color: '#8b8fa3' } }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3' } } } }
+  });
+} else {
+  document.getElementById('cryptoWindowChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:260px;color:var(--muted)">No data</div>';
+}
+
+// Crypto bets table
+const cryptoRows = CRYPTO_BETS.map(b => ({
+  date: b.timestamp, crypto: b.crypto || '?', side: b.side || '?',
+  window: b.entry_window || 0, price: b.price || 0,
+  amount: b.bet_amount || 0, pnl: b.pnl || null,
+  result: b.result || 'pending',
+})).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+function renderCryptoTable(filter) {
+  let rows = cryptoRows;
+  if (filter === 'resolved') rows = rows.filter(r => r.result === 'win' || r.result === 'loss');
+  if (filter === 'open') rows = rows.filter(r => r.result === 'open');
+  if (filter === 'wins') rows = rows.filter(r => r.result === 'win');
+  if (filter === 'losses') rows = rows.filter(r => r.result === 'loss');
+  if (['BTC', 'ETH', 'SOL', 'XRP', 'DOGE'].includes(filter)) rows = rows.filter(r => r.crypto === filter);
+  document.getElementById('cryptoBetsBody').innerHTML = rows.map(r => `
+    <tr>
+      <td>${r.date ? getDate(r.date) : '-'}</td>
+      <td>${cryptoTag(r.crypto)}</td>
+      <td>${r.side.toUpperCase()}</td>
+      <td>${r.window} min</td>
+      <td>${(r.price * 100).toFixed(1)}c</td>
+      <td>$${r.amount.toFixed(2)}</td>
+      <td>${r.result === 'win' || r.result === 'loss' ? pnlHtml(r.pnl) : '-'}</td>
+      <td><span class="tag ${r.result}">${r.result.toUpperCase()}</span></td>
+    </tr>
+  `).join('');
+}
+function filterCryptoTable(f, el) {
+  document.querySelectorAll('#cryptoTabs .tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  renderCryptoTable(f);
+}
+renderCryptoTable('all');
 </script>
 </body>
 </html>
