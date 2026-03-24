@@ -1,0 +1,41 @@
+name: Kalshi Bot
+
+on:
+  schedule:
+    - cron: '5 * * * *'
+    - cron: '35 * * * *'
+  workflow_dispatch: # Manual trigger
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  scan-and-bet:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests cryptography
+
+      - name: Run Kalshi bot (live)
+        env:
+          KALSHI_KEY_ID: ${{ secrets.KALSHI_KEY_ID }}
+          KALSHI_PRIVATE_KEY: ${{ secrets.KALSHI_PRIVATE_KEY }}
+        run: python kalshi_bot.py --live
+
+      - name: Commit bot data
+        run: |
+          git config user.name "kalshi-bot"
+          git config user.email "bot@kalshi-bot.local"
+          git add kalshi_bets.json kalshi_bot.log kalshi_bot_status.json || true
+          git diff --staged --quiet || git commit -m "kalshi: update bets $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          git push || true

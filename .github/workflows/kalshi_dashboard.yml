@@ -1,0 +1,61 @@
+name: Kalshi Dashboard
+
+on:
+  # Run after Kalshi bot completes
+  workflow_run:
+    workflows: ["Kalshi Bot"]
+    types: [completed]
+  # Run at :20 and :50 (offset from bot at :05 and :35)
+  schedule:
+    - cron: '20 * * * *'
+    - cron: '50 * * * *'
+  workflow_dispatch: # Manual trigger
+
+permissions:
+  contents: write
+  pages: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests cryptography
+
+      - name: Build Kalshi dashboard
+        env:
+          KALSHI_KEY_ID: ${{ secrets.KALSHI_KEY_ID }}
+          KALSHI_PRIVATE_KEY: ${{ secrets.KALSHI_PRIVATE_KEY }}
+        run: python refresh_kalshi_dashboard.py
+
+      - name: Deploy to GitHub Pages
+        run: |
+          git config user.name "kalshi-dashboard-bot"
+          git config user.email "bot@kalshi-bot.local"
+
+          # Also build the Polymarket dashboard so both exist on gh-pages
+          if [ -f refresh_dashboard.py ]; then
+            python refresh_dashboard.py || true
+          fi
+
+          git checkout --orphan gh-pages 2>/dev/null || git checkout gh-pages
+
+          # Keep both dashboards
+          git rm -rf --cached . || true
+          if [ -f dashboard.html ]; then
+            cp dashboard.html index.html
+          fi
+          cp kalshi_dashboard.html kalshi.html
+
+          git add index.html kalshi.html 2>/dev/null || git add kalshi.html
+          git diff --staged --quiet || git commit -m "dashboard: refresh $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          git push origin gh-pages --force
