@@ -152,7 +152,9 @@ def auth_headers(method, path):
 
 def auth_get(path, params=None):
     url = f"{API_BASE}{path}"
-    headers = auth_headers("GET", path)
+    # Kalshi requires full path (including /trade-api/v2) in signature
+    full_path = f"/trade-api/v2{path}"
+    headers = auth_headers("GET", full_path)
     r = session.get(url, headers=headers, params=params, timeout=30)
     r.raise_for_status()
     return r.json()
@@ -160,7 +162,8 @@ def auth_get(path, params=None):
 
 def auth_post(path, data=None):
     url = f"{API_BASE}{path}"
-    headers = auth_headers("POST", path)
+    full_path = f"/trade-api/v2{path}"
+    headers = auth_headers("POST", full_path)
     r = session.post(url, headers=headers, json=data, timeout=30)
     r.raise_for_status()
     return r.json()
@@ -461,6 +464,7 @@ def scan_markets(live=False):
         P(f"  Scanning {league}...")
         events = get_open_events(series)
         P(f"    {len(events)} open events")
+        time.sleep(0.2)  # Rate limit between league scans
 
         for event in events:
             event_ticker = event.get("event_ticker", "")
