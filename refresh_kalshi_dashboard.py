@@ -132,6 +132,12 @@ if KALSHI_KEY_ID and KALSHI_PRIVATE_KEY:
 
         P(f"  Fetched {len(all_fills)} total fills from Kalshi")
 
+        # Debug: show first crypto fill to verify field format
+        for f in all_fills:
+            if any(f.get("ticker", "").startswith(p) for p in CRYPTO_SERIES):
+                P(f"  DEBUG first crypto fill: {json.dumps(f, default=str)}")
+                break
+
         # Filter to crypto 15m fills only and group by ticker
         crypto_fills_by_ticker = {}
         for fill in all_fills:
@@ -210,6 +216,10 @@ if KALSHI_KEY_ID and KALSHI_PRIVATE_KEY:
                 pass
 
             crypto_bets.append(bet)
+
+        # Debug: show first few computed bets
+        for b in crypto_bets[:3]:
+            P(f"  DEBUG bet: {b['ticker']} side={b['side']} price={b['price']} amount={b['bet_amount']} contracts={b['contracts']} result={b.get('result')} pnl={b.get('pnl')}")
 
         P(f"  Crypto: {len(crypto_bets)} bets fetched from API")
 
