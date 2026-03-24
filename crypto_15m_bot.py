@@ -170,9 +170,9 @@ def get_existing_positions():
                 fp = float(pos.get("position_fp", 0))
                 if fp != 0:
                     positions.add(pos["ticker"])
-                cursor = data.get("cursor")
-                if not cursor:
-                    break
+            cursor = data.get("cursor")
+            if not cursor:
+                break
         return positions
     except Exception as e:
         P(f"  WARNING: Could not fetch positions: {e}")
