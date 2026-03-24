@@ -33,7 +33,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 28px;
+    margin-bottom: 20px;
     flex-wrap: wrap;
     gap: 12px;
   }
@@ -45,8 +45,32 @@
     -webkit-text-fill-color: transparent;
   }
   .header .subtitle { color: var(--muted); font-size: 14px; }
-  .header .link { color: var(--blue); font-size: 12px; text-decoration: none; }
-  .header .link:hover { text-decoration: underline; }
+
+  /* Top-level mode tabs */
+  .mode-tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 24px;
+    border-bottom: 2px solid var(--border);
+    padding-bottom: 12px;
+  }
+  .mode-tab {
+    padding: 10px 24px;
+    border-radius: 10px 10px 0 0;
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 600;
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid transparent;
+    border-bottom: none;
+    transition: all 0.2s;
+  }
+  .mode-tab:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+  .mode-tab.active-sports { color: var(--teal); background: rgba(20,184,166,0.1); border-color: var(--teal); }
+  .mode-tab.active-crypto { color: var(--orange); background: rgba(245,158,11,0.1); border-color: var(--orange); }
+  .mode-section { display: none; }
+  .mode-section.active { display: block; }
 
   .kpi-row {
     display: grid;
@@ -68,6 +92,7 @@
   .kpi .value.blue { color: var(--blue); }
   .kpi .value.purple { color: var(--purple); }
   .kpi .value.cyan { color: var(--cyan); }
+  .kpi .value.orange { color: var(--orange); }
   .kpi .sub { color: var(--muted); font-size: 11px; margin-top: 4px; }
 
   .grid-2 {
@@ -120,6 +145,7 @@
   }
   .badge-auto { background: rgba(20,184,166,0.2); color: var(--teal); }
   .badge-strat { background: rgba(168,85,247,0.2); color: var(--purple); }
+  .badge-crypto { background: rgba(245,158,11,0.2); color: var(--orange); }
 
   table {
     width: 100%;
@@ -187,7 +213,6 @@
     padding: 48px 24px;
     color: var(--muted);
   }
-  .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
   .empty-state .msg { font-size: 16px; font-weight: 500; }
   .empty-state .sub { font-size: 13px; margin-top: 6px; }
 
@@ -200,130 +225,196 @@
     background: rgba(107,114,128,0.15);
     color: #9ca3af;
   }
+  .crypto-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .crypto-tag.btc { background: rgba(247,147,26,0.15); color: #f7931a; }
+  .crypto-tag.eth { background: rgba(98,126,234,0.15); color: #627eea; }
+  .crypto-tag.sol { background: rgba(0,255,163,0.15); color: #00ffa3; }
+  .crypto-tag.xrp { background: rgba(0,162,224,0.15); color: #00a2e0; }
+  .crypto-tag.doge { background: rgba(196,176,64,0.15); color: #c4b040; }
 </style>
 </head>
 <body>
 <div class="header">
   <div>
     <h1>Kalshi Dashboard</h1>
-    <div class="subtitle">Automated Multi-Sport Strategy &middot; 2% Sizing</div>
+    <div class="subtitle">Sports + Crypto Automated Trading</div>
   </div>
   <div style="text-align:right">
     <div style="color:var(--muted);font-size:12px">Data refreshed</div>
     <div style="font-size:14px;font-weight:600" id="lastUpdated"></div>
-    <div style="color:var(--muted);font-size:12px;margin-top:4px">Bot last run</div>
-    <div style="font-size:13px;font-weight:600" id="botLastRun"></div>
   </div>
 </div>
 
-<!-- KPIs -->
-<div class="kpi-row" id="kpis"></div>
-
-<!-- Charts -->
-<div class="grid-2">
-  <div class="card">
-    <h3>Cumulative P&L</h3>
-    <div class="chart-container tall"><canvas id="pnlChart"></canvas></div>
-  </div>
-  <div class="card">
-    <h3>Win / Loss by League</h3>
-    <div class="chart-container tall"><canvas id="leagueChart"></canvas></div>
-  </div>
+<!-- Mode Tabs -->
+<div class="mode-tabs">
+  <div class="mode-tab active-sports" id="tabSports" onclick="switchMode('sports')">Sports</div>
+  <div class="mode-tab" id="tabCrypto" onclick="switchMode('crypto')">Crypto 15m</div>
 </div>
 
-<!-- Strategy Breakdown -->
-<hr class="section-divider">
-<div class="section-header">
-  <h2>Strategy Performance</h2>
-  <span class="badge badge-strat">4 Strategies</span>
-</div>
+<!-- ═══════════════════ SPORTS SECTION ═══════════════════ -->
+<div class="mode-section active" id="sectionSports">
+  <div class="kpi-row" id="sportsKpis"></div>
 
-<div id="stratContent"></div>
-
-<!-- League Breakdown -->
-<hr class="section-divider">
-<div class="section-header">
-  <h2>Performance by League</h2>
-  <span class="badge badge-auto">20 Leagues</span>
-</div>
-
-<div id="leagueContent"></div>
-
-<div class="grid-2" style="margin-top:20px">
-  <div class="card">
-    <h3>P&L by League</h3>
-    <div class="chart-container med"><canvas id="leaguePnlChart"></canvas></div>
-  </div>
-  <div class="card">
-    <h3>P&L by Strategy</h3>
-    <div class="chart-container med"><canvas id="stratPnlChart"></canvas></div>
-  </div>
-</div>
-
-<!-- All Bets Table -->
-<hr class="section-divider">
-<div class="section-header">
-  <h2>All Bets</h2>
-</div>
-
-<div class="card" style="margin-bottom:24px">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
-    <div class="tabs" id="mainTabs">
-      <div class="tab active" onclick="filterTable('all')">All</div>
-      <div class="tab" onclick="filterTable('resolved')">Resolved</div>
-      <div class="tab" onclick="filterTable('open')">Open</div>
-      <div class="tab" onclick="filterTable('wins')">Wins</div>
-      <div class="tab" onclick="filterTable('losses')">Losses</div>
-      <div class="tab" onclick="filterTable('S1')">S1: Fav</div>
-      <div class="tab" onclick="filterTable('S2')">S2: Dog</div>
-      <div class="tab" onclick="filterTable('S3')">S3: UCL</div>
-      <div class="tab" onclick="filterTable('S4')">S4: Draw</div>
+  <div class="grid-2">
+    <div class="card">
+      <h3>Cumulative P&L</h3>
+      <div class="chart-container tall"><canvas id="sportsPnlChart"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Win / Loss by League</h3>
+      <div class="chart-container tall"><canvas id="sportsLeagueChart"></canvas></div>
     </div>
   </div>
-  <div class="scroll-table">
-    <table>
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Event</th>
-          <th>Bet On</th>
-          <th>Strategy</th>
-          <th>League</th>
-          <th>Price</th>
-          <th>Amount</th>
-          <th>P&L</th>
-          <th>Status</th>
-        </tr>
-      </thead>
-      <tbody id="betsBody"></tbody>
-    </table>
+
+  <hr class="section-divider">
+  <div class="section-header">
+    <h2>Strategy Performance</h2>
+    <span class="badge badge-strat">4 Strategies</span>
+  </div>
+  <div id="sportsStratContent"></div>
+
+  <hr class="section-divider">
+  <div class="section-header">
+    <h2>Performance by League</h2>
+    <span class="badge badge-auto">20 Leagues</span>
+  </div>
+  <div id="sportsLeagueContent"></div>
+
+  <div class="grid-2" style="margin-top:20px">
+    <div class="card">
+      <h3>P&L by League</h3>
+      <div class="chart-container med"><canvas id="sportsLeaguePnlChart"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>P&L by Strategy</h3>
+      <div class="chart-container med"><canvas id="sportsStratPnlChart"></canvas></div>
+    </div>
+  </div>
+
+  <hr class="section-divider">
+  <div class="section-header"><h2>All Sports Bets</h2></div>
+  <div class="card" style="margin-bottom:24px">
+    <div class="tabs" id="sportsTabs">
+      <div class="tab active" onclick="filterSportsTable('all',this)">All</div>
+      <div class="tab" onclick="filterSportsTable('resolved',this)">Resolved</div>
+      <div class="tab" onclick="filterSportsTable('open',this)">Open</div>
+      <div class="tab" onclick="filterSportsTable('wins',this)">Wins</div>
+      <div class="tab" onclick="filterSportsTable('losses',this)">Losses</div>
+      <div class="tab" onclick="filterSportsTable('S1',this)">S1</div>
+      <div class="tab" onclick="filterSportsTable('S2',this)">S2</div>
+      <div class="tab" onclick="filterSportsTable('S3',this)">S3</div>
+      <div class="tab" onclick="filterSportsTable('S4',this)">S4</div>
+    </div>
+    <div class="scroll-table">
+      <table>
+        <thead><tr><th>Date</th><th>Event</th><th>Bet On</th><th>Strategy</th><th>League</th><th>Price</th><th>Amount</th><th>P&L</th><th>Status</th></tr></thead>
+        <tbody id="sportsBetsBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ CRYPTO SECTION ═══════════════════ -->
+<div class="mode-section" id="sectionCrypto">
+  <div class="kpi-row" id="cryptoKpis"></div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3>Cumulative P&L</h3>
+      <div class="chart-container tall"><canvas id="cryptoPnlChart"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Win / Loss by Crypto</h3>
+      <div class="chart-container tall"><canvas id="cryptoByAssetChart"></canvas></div>
+    </div>
+  </div>
+
+  <hr class="section-divider">
+  <div class="section-header">
+    <h2>Performance by Crypto</h2>
+    <span class="badge badge-crypto">5 Assets</span>
+  </div>
+  <div id="cryptoAssetContent"></div>
+
+  <div class="grid-2" style="margin-top:20px">
+    <div class="card">
+      <h3>P&L by Crypto</h3>
+      <div class="chart-container med"><canvas id="cryptoAssetPnlChart"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Entry Window Stats</h3>
+      <div class="chart-container med"><canvas id="cryptoWindowChart"></canvas></div>
+    </div>
+  </div>
+
+  <hr class="section-divider">
+  <div class="section-header"><h2>All Crypto Bets</h2></div>
+  <div class="card" style="margin-bottom:24px">
+    <div class="tabs" id="cryptoTabs">
+      <div class="tab active" onclick="filterCryptoTable('all',this)">All</div>
+      <div class="tab" onclick="filterCryptoTable('resolved',this)">Resolved</div>
+      <div class="tab" onclick="filterCryptoTable('open',this)">Open</div>
+      <div class="tab" onclick="filterCryptoTable('wins',this)">Wins</div>
+      <div class="tab" onclick="filterCryptoTable('losses',this)">Losses</div>
+      <div class="tab" onclick="filterCryptoTable('BTC',this)">BTC</div>
+      <div class="tab" onclick="filterCryptoTable('ETH',this)">ETH</div>
+      <div class="tab" onclick="filterCryptoTable('SOL',this)">SOL</div>
+      <div class="tab" onclick="filterCryptoTable('XRP',this)">XRP</div>
+      <div class="tab" onclick="filterCryptoTable('DOGE',this)">DOGE</div>
+    </div>
+    <div class="scroll-table">
+      <table>
+        <thead><tr><th>Date</th><th>Crypto</th><th>Side</th><th>Entry Window</th><th>Price</th><th>Amount</th><th>P&L</th><th>Status</th></tr></thead>
+        <tbody id="cryptoBetsBody"></tbody>
+      </table>
+    </div>
   </div>
 </div>
 
 <script>
-const R = {"total_bets": 57, "resolved": 2, "wins": 1, "losses": 1, "win_rate": 50.0, "total_pnl": 1.37, "total_wagered": 115.65, "open_count": 13, "open_cost": 26.34, "pending_count": 42, "balance": 77.9, "portfolio_value": 22.94, "bets": [{"ticker": "KXNBAGAME-26MAR25TORLAC-LAC", "event": "KXNBAGAME-26MAR25TORLAC", "title": "Toronto at Los Angeles C", "label": "Los Angeles C", "league": "NBA", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.5, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:25.916748+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "84aa3740-a684-4151-a540-c1de075c698d", "created_time": "2026-03-24T00:26:25.899892Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:26:25.899892Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5000", "order_group_id": null, "order_id": "06bf4700-310f-4364-817a-0036d2d4295a", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXNBAGAME-26MAR25TORLAC-LAC", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5000"}}, "result": "pending"}, {"ticker": "KXNBAGAME-26MAR25HOUMIN-HOU", "event": "KXNBAGAME-26MAR25HOUMIN", "title": "Houston at Minnesota", "label": "Houston", "league": "NBA", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.49, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:26.346721+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "e88b2120-d699-45d0-944d-f009e0799d53", "created_time": "2026-03-24T00:26:26.330257Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:26:26.330257Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5100", "order_group_id": null, "order_id": "0f22acd2-9c3c-4a71-a8d2-164f8d3a8e43", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXNBAGAME-26MAR25HOUMIN-HOU", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4900"}}, "result": "pending"}, {"ticker": "KXNBAGAME-26MAR25ATLDET-DET", "event": "KXNBAGAME-26MAR25ATLDET", "title": "Atlanta at Detroit", "label": "Detroit", "league": "NBA", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.57, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:26.787118+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "9a53ace7-b9db-4411-9e68-084d3ef41228", "created_time": "2026-03-24T00:26:26.771481Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:26:26.771481Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4300", "order_group_id": null, "order_id": "f656e13a-1cd5-4a6d-bd94-9f348e67db77", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXNBAGAME-26MAR25ATLDET-DET", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5700"}}, "result": "pending"}, {"ticker": "KXNBAGAME-26MAR23GSWDAL-GSW", "event": "KXNBAGAME-26MAR23GSWDAL", "title": "Golden State at Dallas", "label": "Golden State", "league": "NBA", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.54, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:27.211667+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "237880b5-6051-4da4-ad3e-1bb1a8517b98", "created_time": "2026-03-24T00:26:27.193481Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:26:27.193481Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4600", "order_group_id": null, "order_id": "e2fa0749-ba04-4e1b-92f0-52e43a881b00", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXNBAGAME-26MAR23GSWDAL-GSW", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5400"}}, "result": "pending"}, {"ticker": "KXMLBGAME-26MAR262210CLESEA-SEA", "event": "KXMLBGAME-26MAR262210CLESEA", "title": "Cleveland vs Seattle", "label": "Seattle", "league": "MLB", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.6, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:27.654057+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "5de60c8f-9615-41f3-ae0c-070ddc47f3fb", "created_time": "2026-03-24T00:26:27.638486Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:26:27.638486Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4000", "order_group_id": null, "order_id": "a6459310-b6c7-419c-b3ce-5754a49a772e", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXMLBGAME-26MAR262210CLESEA-SEA", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.6000"}}, "result": "pending"}, {"ticker": "KXMLBGAME-26MAR261615TBSTL-TB", "event": "KXMLBGAME-26MAR261615TBSTL", "title": "Tampa Bay vs St. Louis", "label": "Tampa Bay", "league": "MLB", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.52, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:28.097027+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "8fe75fb6-6d96-44ce-90df-58dec01fda2b", "created_time": "2026-03-24T00:26:28.078338Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:26:28.078338Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4800", "order_group_id": null, "order_id": "0b90570e-1705-47e4-9006-d4cd6fb6b6b0", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXMLBGAME-26MAR261615TBSTL-TB", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5200"}}, "result": "pending"}, {"ticker": "KXMLBGAME-26MAR261610DETSD-DET", "event": "KXMLBGAME-26MAR261610DETSD", "title": "Detroit vs San Diego", "label": "Detroit", "league": "MLB", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.55, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:28.536376+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "021115bc-3729-4187-9d4c-197df0ec6b92", "created_time": "2026-03-24T00:26:28.520177Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:26:28.520177Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4500", "order_group_id": null, "order_id": "691f4e28-1056-4b31-82bb-680bbc3cd983", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXMLBGAME-26MAR261610DETSD-DET", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5500"}}, "result": "pending"}, {"ticker": "KXMLBGAME-26MAR261610BOSCIN-BOS", "event": "KXMLBGAME-26MAR261610BOSCIN", "title": "Boston vs Cincinnati", "label": "Boston", "league": "MLB", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.59, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:29.001734+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "04e20cb0-8966-4f16-95ab-29cec4be781a", "created_time": "2026-03-24T00:26:28.963163Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:26:28.963163Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4100", "order_group_id": null, "order_id": "e8ccaf37-9845-4861-86ff-ddc8dc2c0714", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXMLBGAME-26MAR261610BOSCIN-BOS", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5900"}}, "result": "pending"}, {"ticker": "KXMLBGAME-26MAR261315PITNYM-NYM", "event": "KXMLBGAME-26MAR261315PITNYM", "title": "Pittsburgh vs New York M", "label": "New York M", "league": "MLB", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.51, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:29.443736+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "77583ad8-f3ac-4601-b08d-38a07f1b0a7f", "created_time": "2026-03-24T00:26:29.428241Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:26:29.428241Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4900", "order_group_id": null, "order_id": "90b45f30-6103-4b15-bd98-f4f4e073329c", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXMLBGAME-26MAR261315PITNYM-NYM", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5100"}}, "result": "pending"}, {"ticker": "KXNHLGAME-26MAR25NYRTOR-TOR", "event": "KXNHLGAME-26MAR25NYRTOR", "title": "New York R at Toronto", "label": "TOR Maple Leafs", "league": "NHL", "strategy": "S2", "strategy_name": "Coin flip dog", "side": "yes", "price": 0.47, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:29.883872+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "1d84aa02-1aa1-4d57-ae8f-ed3b9ce10e79", "created_time": "2026-03-24T00:26:29.867071Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:26:29.867071Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5300", "order_group_id": null, "order_id": "025e8430-f800-4aea-a93c-594a6a3830d6", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXNHLGAME-26MAR25NYRTOR-TOR", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4700"}}, "result": "pending"}, {"ticker": "KXNHLGAME-26MAR24EDMUTA-EDM", "event": "KXNHLGAME-26MAR24EDMUTA", "title": "Edmonton at Utah", "label": "EDM Oilers", "league": "NHL", "strategy": "S2", "strategy_name": "Coin flip dog", "side": "yes", "price": 0.43, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:30.425344+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "242258f9-32d7-4659-a8bd-787da396813c", "created_time": "2026-03-24T00:26:30.40996Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:26:30.40996Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5700", "order_group_id": null, "order_id": "49bbfda5-794a-4f27-be7c-0dab7b2c602a", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXNHLGAME-26MAR24EDMUTA-EDM", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4300"}}, "result": "pending"}, {"ticker": "KXNHLGAME-26MAR24LACGY-CGY", "event": "KXNHLGAME-26MAR24LACGY", "title": "Los Angeles at Calgary", "label": "CGY Flames", "league": "NHL", "strategy": "S2", "strategy_name": "Coin flip dog", "side": "yes", "price": 0.43, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:30.866144+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "86acdc3c-3961-46b4-8a8f-452f3efe4d89", "created_time": "2026-03-24T00:26:30.848812Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:26:30.848812Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5700", "order_group_id": null, "order_id": "5a5c6e4d-2cea-4e46-a27f-a03c631090b2", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXNHLGAME-26MAR24LACGY-CGY", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4300"}}, "result": "pending"}, {"ticker": "KXNHLGAME-26MAR24VGKWPG-WPG", "event": "KXNHLGAME-26MAR24VGKWPG", "title": "Vegas at Winnipeg", "label": "WPG Jets", "league": "NHL", "strategy": "S2", "strategy_name": "Coin flip dog", "side": "yes", "price": 0.46, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:31.309313+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "4b81d7e4-4d9d-4287-ac56-c79e11339b47", "created_time": "2026-03-24T00:26:31.293797Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:26:31.293797Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5400", "order_group_id": null, "order_id": "31035aa8-cfd5-4e91-b94c-baf8466623b5", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXNHLGAME-26MAR24VGKWPG-WPG", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4600"}}, "result": "pending"}, {"ticker": "KXNHLGAME-26MAR24OTTDET-OTT", "event": "KXNHLGAME-26MAR24OTTDET", "title": "Ottawa at Detroit", "label": "OTT Senators", "league": "NHL", "strategy": "S2", "strategy_name": "Coin flip dog", "side": "yes", "price": 0.47, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:31.746705+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "aff50ccb-3717-40fc-b1f2-88a5ca0979d1", "created_time": "2026-03-24T00:26:31.73031Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:26:31.73031Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5300", "order_group_id": null, "order_id": "e0ca5d6f-7717-4d26-92f6-3120b705d78f", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXNHLGAME-26MAR24OTTDET-OTT", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4700"}}, "result": "pending"}, {"ticker": "KXNHLGAME-26MAR24CARMTL-MTL", "event": "KXNHLGAME-26MAR24CARMTL", "title": "Carolina at Montreal", "label": "MTL Canadiens", "league": "NHL", "strategy": "S2", "strategy_name": "Coin flip dog", "side": "yes", "price": 0.45, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:32.185818+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "114d9c84-5ce4-464e-aedf-a38c5fa0aec4", "created_time": "2026-03-24T00:26:32.170229Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:26:32.170229Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5500", "order_group_id": null, "order_id": "fd56990c-d27a-4993-810f-9358de77f538", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXNHLGAME-26MAR24CARMTL-MTL", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4500"}}, "result": "pending"}, {"ticker": "KXNCAAMBGAME-26MAR27MSUCONN-MSU", "event": "KXNCAAMBGAME-26MAR27MSUCONN", "title": "Michigan St. at UConn", "label": "Michigan St.", "league": "CBB", "strategy": "S2", "strategy_name": "Coin flip dog", "side": "yes", "price": 0.45, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:32.636531+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "350cb97d-60bd-4842-95bd-2ef629c61443", "created_time": "2026-03-24T00:26:32.620765Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:26:32.620765Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5500", "order_group_id": null, "order_id": "9c7404e0-1ba5-4ef5-b4a8-5d0ddc3b340d", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXNCAAMBGAME-26MAR27MSUCONN-MSU", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4500"}}, "result": "pending"}, {"ticker": "KXNCAAMBGAME-26MAR26ILLHOU-ILL", "event": "KXNCAAMBGAME-26MAR26ILLHOU", "title": "Illinois at Houston", "label": "Illinois", "league": "CBB", "strategy": "S2", "strategy_name": "Coin flip dog", "side": "yes", "price": 0.4, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:33.078684+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "a4de764c-392f-4a56-93c0-5ebb6ce282d7", "created_time": "2026-03-24T00:26:33.062583Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "5.00", "last_update_time": "2026-03-24T00:26:33.062583Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.6000", "order_group_id": null, "order_id": "b598acb8-dbeb-4809-8fac-ec66df3c1728", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXNCAAMBGAME-26MAR26ILLHOU-ILL", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4000"}}, "result": "pending"}, {"ticker": "KXNCAAWBGAME-26MAR22LCHIFGCU-LCHI", "event": "KXNCAAWBGAME-26MAR22LCHIFGCU", "title": "Loyola Chicago at Florida Gulf Coast", "label": "Loyola Chicago", "league": "WCBB", "strategy": "S2", "strategy_name": "Coin flip dog", "side": "yes", "price": 0.39, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:33.525562+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "3c2c241b-49ff-459b-8fbc-d97c180df1c3", "created_time": "2026-03-24T00:26:33.502231Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "5.00", "last_update_time": "2026-03-24T00:26:33.502231Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.6100", "order_group_id": null, "order_id": "5dda4192-4892-4790-905d-27694a1006a9", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXNCAAWBGAME-26MAR22LCHIFGCU-LCHI", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.3900"}}, "result": "win", "market_result": "yes", "pnl": 3.05}, {"ticker": "KXEPLGAME-26APR13MUNLEE-MUN", "event": "KXEPLGAME-26APR13MUNLEE", "title": "Manchester United vs Leeds United", "label": "Manchester United", "league": "EPL", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.58, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:33.966038+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "d265dfd4-7bf9-45d4-8f8e-a9ce6ac377e0", "created_time": "2026-03-24T00:26:33.948791Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:26:33.948791Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4200", "order_group_id": null, "order_id": "2f3b666b-02ae-4246-8e0e-03aff635bd01", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXEPLGAME-26APR13MUNLEE-MUN", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5800"}}, "result": "pending"}, {"ticker": "KXEPLGAME-26APR12CFCMCI-MCI", "event": "KXEPLGAME-26APR12CFCMCI", "title": "Chelsea vs Manchester City", "label": "Manchester City", "league": "EPL", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.41, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:34.414558+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "3212c017-6e64-4963-a984-d120e135588b", "created_time": "2026-03-24T00:26:34.395069Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "5.00", "last_update_time": "2026-03-24T00:26:34.395069Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5900", "order_group_id": null, "order_id": "920dc039-5c37-450f-9831-be1ec0bb5b0b", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXEPLGAME-26APR12CFCMCI-MCI", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4100"}}, "result": "pending"}, {"ticker": "KXEPLGAME-26APR11LFCFUL-LFC", "event": "KXEPLGAME-26APR11LFCFUL", "title": "Liverpool vs Fulham", "label": "Liverpool", "league": "EPL", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.6, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:34.956957+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "2e71f066-c603-4dd1-b12d-b167015b04e5", "created_time": "2026-03-24T00:26:34.941582Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:26:34.941582Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4000", "order_group_id": null, "order_id": "06077d7f-78d9-487f-a426-6f3623cd32ee", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXEPLGAME-26APR11LFCFUL-LFC", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.6000"}}, "result": "pending"}, {"ticker": "KXEPLGAME-26APR11BREEVE-BRE", "event": "KXEPLGAME-26APR11BREEVE", "title": "Brentford vs Everton", "label": "Brentford", "league": "EPL", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.41, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:35.496270+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "4726c3e7-a50b-4430-b787-6b58e25b64e8", "created_time": "2026-03-24T00:26:35.479993Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "5.00", "last_update_time": "2026-03-24T00:26:35.479993Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5900", "order_group_id": null, "order_id": "b8f25b40-27bc-4854-8e00-68ef19ac8f3a", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXEPLGAME-26APR11BREEVE-BRE", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4100"}}, "result": "pending"}, {"ticker": "KXEPLGAME-26APR10WHUWOL-WHU", "event": "KXEPLGAME-26APR10WHUWOL", "title": "West Ham vs Wolverhampton", "label": "West Ham", "league": "EPL", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.51, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:35.941190+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "d2b2480e-96a8-4cad-b9df-b5ef8d8b7382", "created_time": "2026-03-24T00:26:35.920781Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:26:35.920781Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4900", "order_group_id": null, "order_id": "1c50c583-edf4-446d-a96a-287e851b37e1", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXEPLGAME-26APR10WHUWOL-WHU", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5100"}}, "result": "pending"}, {"ticker": "KXUCLGAME-26APR08PSGLFC-LFC", "event": "KXUCLGAME-26APR08PSGLFC", "title": "PSG vs Liverpool", "label": "Liverpool", "league": "UCL", "strategy": "S3", "strategy_name": "UCL underdog", "side": "yes", "price": 0.24, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:36.379505+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "14326015-6f94-48c7-9156-8f59fa46938a", "created_time": "2026-03-24T00:26:36.363962Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "8.00", "last_update_time": "2026-03-24T00:26:36.363962Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.7600", "order_group_id": null, "order_id": "9ae000db-6fba-49de-8a73-f53693913c26", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXUCLGAME-26APR08PSGLFC-LFC", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.2400"}}, "result": "pending"}, {"ticker": "KXUCLGAME-26APR08PSGLFC-PSG", "event": "KXUCLGAME-26APR08PSGLFC", "title": "PSG vs Liverpool", "label": "PSG", "league": "UCL", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.54, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:36.916468+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "16222e38-f0bb-4ca9-a6d8-a20b5c78e0b9", "created_time": "2026-03-24T00:26:36.901103Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:26:36.901103Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4600", "order_group_id": null, "order_id": "7ea190c9-b0a4-47a8-93a8-92d72706347b", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXUCLGAME-26APR08PSGLFC-PSG", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5400"}}, "result": "pending"}, {"ticker": "KXUCLGAME-26APR08BARATM-ATM", "event": "KXUCLGAME-26APR08BARATM", "title": "Barcelona vs Atletico", "label": "Atletico", "league": "UCL", "strategy": "S3", "strategy_name": "UCL underdog", "side": "yes", "price": 0.18, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:37.358238+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "ef0940e8-93de-469b-b9cb-5e05b95fd019", "created_time": "2026-03-24T00:26:37.342646Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "11.00", "last_update_time": "2026-03-24T00:26:37.342646Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.8200", "order_group_id": null, "order_id": "aaf950b8-2780-4961-a678-59b0a78e2641", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXUCLGAME-26APR08BARATM-ATM", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.1800"}}, "result": "pending"}, {"ticker": "KXUCLGAME-26APR08BARATM-BAR", "event": "KXUCLGAME-26APR08BARATM", "title": "Barcelona vs Atletico", "label": "Barcelona", "league": "UCL", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.6, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:37.795867+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "00bdf92a-7b82-4a82-99c8-fc0caec9ad1f", "created_time": "2026-03-24T00:26:37.780096Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:26:37.780096Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4000", "order_group_id": null, "order_id": "c5c9597f-2d99-4d51-9999-7f89b8abe8a1", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXUCLGAME-26APR08BARATM-BAR", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.6000"}}, "result": "pending"}, {"ticker": "KXUCLGAME-26APR07SPOARS-SPO", "event": "KXUCLGAME-26APR07SPOARS", "title": "Sporting CP vs Arsenal", "label": "Sporting CP", "league": "UCL", "strategy": "S3", "strategy_name": "UCL underdog", "side": "yes", "price": 0.2, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:38.239176+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "4fa046b1-d74f-4560-acf2-2d0feb20cd7a", "created_time": "2026-03-24T00:26:38.219785Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "10.00", "last_update_time": "2026-03-24T00:26:38.219785Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.8000", "order_group_id": null, "order_id": "e51a968e-f025-430d-9a13-b3c2abf53c08", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXUCLGAME-26APR07SPOARS-SPO", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.2000"}}, "result": "pending"}, {"ticker": "KXUCLGAME-26APR07SPOARS-ARS", "event": "KXUCLGAME-26APR07SPOARS", "title": "Sporting CP vs Arsenal", "label": "Arsenal", "league": "UCL", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.57, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:38.680369+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "5388961a-5b02-4687-8cce-5b7abb3245e5", "created_time": "2026-03-24T00:26:38.662826Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:26:38.662826Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4300", "order_group_id": null, "order_id": "f88ec316-27bb-4eb0-baef-cdd85a38ab78", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXUCLGAME-26APR07SPOARS-ARS", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5700"}}, "result": "pending"}, {"ticker": "KXUCLGAME-26APR07RMABMU-RMA", "event": "KXUCLGAME-26APR07RMABMU", "title": "Real Madrid vs Bayern Munich", "label": "Real Madrid", "league": "UCL", "strategy": "S3", "strategy_name": "UCL underdog", "side": "yes", "price": 0.34, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:39.158921+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "691029eb-ac7f-47f2-83d8-9ef26514a7d1", "created_time": "2026-03-24T00:26:39.142472Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "6.00", "last_update_time": "2026-03-24T00:26:39.142472Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.6600", "order_group_id": null, "order_id": "bef952a3-dc0c-4108-9f1c-200bcfb136b7", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXUCLGAME-26APR07RMABMU-RMA", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.3400"}}, "result": "pending"}, {"ticker": "KXUCLGAME-26APR07RMABMU-BMU", "event": "KXUCLGAME-26APR07RMABMU", "title": "Real Madrid vs Bayern Munich", "label": "Bayern Munich", "league": "UCL", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.43, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:39.600080+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "81f5ccfb-fbbc-438e-9e45-ef60035feb2e", "created_time": "2026-03-24T00:26:39.584449Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:26:39.584449Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5700", "order_group_id": null, "order_id": "052e22ac-9c8c-4d39-b58e-cbe968a5dbf0", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXUCLGAME-26APR07RMABMU-BMU", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4300"}}, "result": "pending"}, {"ticker": "KXCS2GAME-26MAR24OGICE-OG", "event": "KXCS2GAME-26MAR24OGICE", "title": "OG vs. Inner Circle Esports", "label": "OG", "league": "CS2", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.57, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:40.040167+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "eb971110-a325-46e9-9ad4-460672fd3035", "created_time": "2026-03-24T00:26:40.02367Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:26:40.02367Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4300", "order_group_id": null, "order_id": "aab1b9ea-06ed-47ed-8a53-ce44c4117972", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXCS2GAME-26MAR24OGICE-OG", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5700"}}, "result": "pending"}, {"ticker": "KXCS2GAME-26MAR24TRIBST-BST", "event": "KXCS2GAME-26MAR24TRIBST", "title": "Tricked vs. BESTIA", "label": "BESTIA", "league": "CS2", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.52, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:40.479398+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "c34ce249-3e28-4b95-ad1c-767a547c70c8", "created_time": "2026-03-24T00:26:40.4631Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:26:40.4631Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4800", "order_group_id": null, "order_id": "6762e75a-cce9-4e33-8d01-69ec4e4a67e4", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXCS2GAME-26MAR24TRIBST-BST", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5200"}}, "result": "pending"}, {"ticker": "KXCS2GAME-26MAR23WGF5-WG", "event": "KXCS2GAME-26MAR23WGF5", "title": "Wanted Goons vs. F5 Esports", "label": "Wanted Goons", "league": "CS2", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.52, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:40.918364+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "e87a48d5-4c32-4339-83bb-0032c4c0ba07", "created_time": "2026-03-24T00:26:40.902972Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:26:40.902972Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4800", "order_group_id": null, "order_id": "cf73d5fd-7cb4-4328-9583-7748e495d8fd", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXCS2GAME-26MAR23WGF5-WG", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5200"}}, "result": "pending"}, {"ticker": "KXLOLGAME-26MAR24FFME-ME", "event": "KXLOLGAME-26MAR24FFME", "title": "French Flair vs. Misa Esports", "label": "Misa Esports", "league": "LoL", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.52, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:41.365995+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "0801e757-3950-4d85-9370-9419bc9727d4", "created_time": "2026-03-24T00:26:41.350162Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:26:41.350162Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4800", "order_group_id": null, "order_id": "7eb5b9da-342b-4a37-9f42-4974ba48d11c", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXLOLGAME-26MAR24FFME-ME", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5200"}}, "result": "pending"}, {"ticker": "KXEUROLEAGUEGAME-26MAR241530OPIVAL-OPI", "event": "KXEUROLEAGUEGAME-26MAR241530OPIVAL", "title": "BC Olympiakos Piraeus vs Valencia Basket", "label": "BC Olympiakos Piraeus", "league": "Euroleague", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.48, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:41.902321+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "3c47be29-1c06-4351-b8b2-457d9f900cce", "created_time": "2026-03-24T00:26:41.887154Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:26:41.887154Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5200", "order_group_id": null, "order_id": "f09f49be-b69d-4689-bb9c-6d6b4c70598b", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXEUROLEAGUEGAME-26MAR241530OPIVAL-OPI", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4800"}}, "result": "pending"}, {"ticker": "KXEUROLEAGUEGAME-26MAR241430PANDUB-PAN", "event": "KXEUROLEAGUEGAME-26MAR241430PANDUB", "title": "Panathinaikos BC vs Dubai Basketball", "label": "Panathinaikos BC", "league": "Euroleague", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.55, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:42.344231+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "9bf53b26-c812-4f3e-a5d1-cd9240173bee", "created_time": "2026-03-24T00:26:42.328093Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:26:42.328093Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4500", "order_group_id": null, "order_id": "777d74b9-44dc-4102-bf39-1fea3dbc6e17", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXEUROLEAGUEGAME-26MAR241430PANDUB-PAN", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5500"}}, "result": "pending"}, {"ticker": "KXNBAGAME-26MAR25OKCBOS-OKC", "event": "KXNBAGAME-26MAR25OKCBOS", "title": "Oklahoma City at Boston", "label": "Oklahoma City", "league": "NBA", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.55, "bet_amount": 2.063, "timestamp": "2026-03-24T00:29:29.348600+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "c432f2a6-cc19-45c2-9fbf-27f04eae186a", "created_time": "2026-03-24T00:29:29.332747Z", "expiration_time": null, "fill_count_fp": "3.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:29:29.332747Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4300", "order_group_id": null, "order_id": "dcb1ffd4-9873-42fa-9886-74532498fe5b", "remaining_count_fp": "0.00", "side": "yes", "status": "executed", "subaccount_number": 0, "taker_fees_dollars": "0.0600", "taker_fill_cost_dollars": "1.6800", "ticker": "KXNBAGAME-26MAR25OKCBOS-OKC", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5700"}}, "result": "open"}, {"ticker": "KXNBAGAME-26MAR25CHIPHI-PHI", "event": "KXNBAGAME-26MAR25CHIPHI", "title": "Chicago at Philadelphia", "label": "Philadelphia", "league": "NBA", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.6, "bet_amount": 2.063, "timestamp": "2026-03-24T00:29:29.796315+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "e642a13e-50f1-443d-9b15-993a49d8c747", "created_time": "2026-03-24T00:29:29.785578Z", "expiration_time": null, "fill_count_fp": "3.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:29:29.785578Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.3800", "order_group_id": null, "order_id": "ee2ddf7f-b620-4b17-928d-4b708a114f02", "remaining_count_fp": "0.00", "side": "yes", "status": "executed", "subaccount_number": 0, "taker_fees_dollars": "0.0500", "taker_fill_cost_dollars": "1.8300", "ticker": "KXNBAGAME-26MAR25CHIPHI-PHI", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.6200"}}, "result": "open"}, {"ticker": "KXNBAGAME-26MAR23HOUCHI-HOU", "event": "KXNBAGAME-26MAR23HOUCHI", "title": "Houston at Chicago", "label": "Houston", "league": "NBA", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.56, "bet_amount": 2.063, "timestamp": "2026-03-24T00:29:30.443974+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "6d7942ff-09d6-4e6f-84e6-7d7894ecc9e1", "created_time": "2026-03-24T00:29:30.419866Z", "expiration_time": null, "fill_count_fp": "3.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:29:30.419866Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4200", "order_group_id": null, "order_id": "3f5be4eb-c358-400a-8d60-424d9cffbf5d", "remaining_count_fp": "0.00", "side": "yes", "status": "executed", "subaccount_number": 0, "taker_fees_dollars": "0.0600", "taker_fill_cost_dollars": "1.7100", "ticker": "KXNBAGAME-26MAR23HOUCHI-HOU", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5800"}}, "result": "loss", "market_result": "no", "pnl": -1.68}, {"ticker": "KXMLBGAME-26MAR261615TEXPHI-PHI", "event": "KXMLBGAME-26MAR261615TEXPHI", "title": "Texas vs Philadelphia", "label": "Philadelphia", "league": "MLB", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.57, "bet_amount": 2.063, "timestamp": "2026-03-24T00:29:30.967733+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "f1274161-ab37-4533-ae39-8827546a0c34", "created_time": "2026-03-24T00:29:30.952069Z", "expiration_time": null, "fill_count_fp": "3.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:29:30.952069Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4100", "order_group_id": null, "order_id": "279e9d17-b5d4-4238-a5e3-6738219cdeec", "remaining_count_fp": "0.00", "side": "yes", "status": "executed", "subaccount_number": 0, "taker_fees_dollars": "0.0600", "taker_fill_cost_dollars": "1.7400", "ticker": "KXMLBGAME-26MAR261615TEXPHI-PHI", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5900"}}, "result": "open"}, {"ticker": "KXMLBGAME-26MAR261505MINBAL-BAL", "event": "KXMLBGAME-26MAR261505MINBAL", "title": "Minnesota vs Baltimore", "label": "Baltimore", "league": "MLB", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.56, "bet_amount": 2.063, "timestamp": "2026-03-24T00:29:31.468180+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "5e2d3005-9626-4f5d-8b96-bef9fb82e25e", "created_time": "2026-03-24T00:29:31.390685Z", "expiration_time": null, "fill_count_fp": "3.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:29:31.390685Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4200", "order_group_id": null, "order_id": "766c6a37-a625-47dd-ba75-79ad4fd9e61c", "remaining_count_fp": "0.00", "side": "yes", "status": "executed", "subaccount_number": 0, "taker_fees_dollars": "0.0600", "taker_fill_cost_dollars": "1.7400", "ticker": "KXMLBGAME-26MAR261505MINBAL-BAL", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5800"}}, "result": "open"}, {"ticker": "KXMLBGAME-26MAR252005NYYSF-NYY", "event": "KXMLBGAME-26MAR252005NYYSF", "title": "New York Y vs San Francisco", "label": "New York Y", "league": "MLB", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.52, "bet_amount": 2.063, "timestamp": "2026-03-24T00:29:31.873444+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "5d1e349c-449f-4825-8500-9b97c9a0fc2e", "created_time": "2026-03-24T00:29:31.847363Z", "expiration_time": null, "fill_count_fp": "3.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:29:31.847363Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4600", "order_group_id": null, "order_id": "7365380e-6d30-4ee4-a67d-e5d12979bfa2", "remaining_count_fp": "0.00", "side": "yes", "status": "executed", "subaccount_number": 0, "taker_fees_dollars": "0.0600", "taker_fill_cost_dollars": "1.5900", "ticker": "KXMLBGAME-26MAR252005NYYSF-NYY", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5400"}}, "result": "open"}, {"ticker": "KXNHLGAME-26MAR24WSHSTL-STL", "event": "KXNHLGAME-26MAR24WSHSTL", "title": "Washington at St. Louis", "label": "STL Blues", "league": "NHL", "strategy": "S2", "strategy_name": "Coin flip dog", "side": "yes", "price": 0.48, "bet_amount": 2.063, "timestamp": "2026-03-24T00:29:32.273152+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "94d677a1-795a-4467-ac3f-b0352ed38464", "created_time": "2026-03-24T00:29:32.26224Z", "expiration_time": null, "fill_count_fp": "4.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:29:32.26224Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5000", "order_group_id": null, "order_id": "00edb5fa-0710-4c54-bcd2-d644fd8c297c", "remaining_count_fp": "0.00", "side": "yes", "status": "executed", "subaccount_number": 0, "taker_fees_dollars": "0.0700", "taker_fill_cost_dollars": "1.9600", "ticker": "KXNHLGAME-26MAR24WSHSTL-STL", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5000"}}, "result": "open"}, {"ticker": "KXNHLGAME-26MAR24SJNSH-SJ", "event": "KXNHLGAME-26MAR24SJNSH", "title": "San Jose at Nashville", "label": "SJ Sharks", "league": "NHL", "strategy": "S2", "strategy_name": "Coin flip dog", "side": "yes", "price": 0.43, "bet_amount": 2.063, "timestamp": "2026-03-24T00:29:32.963749+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "6dab5858-b0ad-4a72-a65e-c7699591d08c", "created_time": "2026-03-24T00:29:32.945765Z", "expiration_time": null, "fill_count_fp": "4.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:29:32.945765Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5500", "order_group_id": null, "order_id": "13f3400d-7010-4883-b164-af08cd1cddab", "remaining_count_fp": "0.00", "side": "yes", "status": "executed", "subaccount_number": 0, "taker_fees_dollars": "0.0700", "taker_fill_cost_dollars": "1.7600", "ticker": "KXNHLGAME-26MAR24SJNSH-SJ", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4500"}}, "result": "open"}, {"ticker": "KXNHLGAME-26MAR24MINTB-MIN", "event": "KXNHLGAME-26MAR24MINTB", "title": "Minnesota at Tampa Bay", "label": "MIN Wild", "league": "NHL", "strategy": "S2", "strategy_name": "Coin flip dog", "side": "yes", "price": 0.39, "bet_amount": 2.063, "timestamp": "2026-03-24T00:29:33.351325+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "c9703890-5244-4063-a469-9c4f64821cd3", "created_time": "2026-03-24T00:29:33.34112Z", "expiration_time": null, "fill_count_fp": "5.00", "initial_count_fp": "5.00", "last_update_time": "2026-03-24T00:29:33.34112Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5900", "order_group_id": null, "order_id": "a211755c-e9c1-44ec-8d73-cd735bf25b67", "remaining_count_fp": "0.00", "side": "yes", "status": "executed", "subaccount_number": 0, "taker_fees_dollars": "0.0900", "taker_fill_cost_dollars": "2.0000", "ticker": "KXNHLGAME-26MAR24MINTB-MIN", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4100"}}, "result": "open"}, {"ticker": "KXNHLGAME-26MAR24SEAFLA-SEA", "event": "KXNHLGAME-26MAR24SEAFLA", "title": "Seattle at Florida", "label": "SEA Kraken", "league": "NHL", "strategy": "S2", "strategy_name": "Coin flip dog", "side": "yes", "price": 0.44, "bet_amount": 2.063, "timestamp": "2026-03-24T00:29:33.752435+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "44c34da5-4252-46d8-ac34-8682b75be868", "created_time": "2026-03-24T00:29:33.740635Z", "expiration_time": null, "fill_count_fp": "4.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:29:33.740635Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5400", "order_group_id": null, "order_id": "9f00938c-a3a4-4778-9dce-71ca2f2ec506", "remaining_count_fp": "0.00", "side": "yes", "status": "executed", "subaccount_number": 0, "taker_fees_dollars": "0.0700", "taker_fill_cost_dollars": "1.8400", "ticker": "KXNHLGAME-26MAR24SEAFLA-SEA", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4600"}}, "result": "open"}, {"ticker": "KXNHLGAME-26MAR24COLPIT-PIT", "event": "KXNHLGAME-26MAR24COLPIT", "title": "Colorado at Pittsburgh", "label": "PIT Penguins", "league": "NHL", "strategy": "S2", "strategy_name": "Coin flip dog", "side": "yes", "price": 0.39, "bet_amount": 2.063, "timestamp": "2026-03-24T00:29:34.109565+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "1a0cb7d6-3a20-4644-8d11-ab505b6716a9", "created_time": "2026-03-24T00:29:34.097467Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "5.00", "last_update_time": "2026-03-24T00:29:34.097467Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5900", "order_group_id": null, "order_id": "29464d48-42df-4ece-b3ec-532eabd4efad", "remaining_count_fp": "5.00", "side": "yes", "status": "resting", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXNHLGAME-26MAR24COLPIT-PIT", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4100"}}, "result": "pending"}, {"ticker": "KXNHLGAME-26MAR24CBJPHI-PHI", "event": "KXNHLGAME-26MAR24CBJPHI", "title": "Columbus at Philadelphia", "label": "PHI Flyers", "league": "NHL", "strategy": "S2", "strategy_name": "Coin flip dog", "side": "yes", "price": 0.45, "bet_amount": 2.063, "timestamp": "2026-03-24T00:29:34.527384+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "b8363f73-7e6d-4c2c-94d5-8b6f56eb0025", "created_time": "2026-03-24T00:29:34.51399Z", "expiration_time": null, "fill_count_fp": "4.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:29:34.51399Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5300", "order_group_id": null, "order_id": "df58d72e-61ab-436c-aab7-0f111be5382a", "remaining_count_fp": "0.00", "side": "yes", "status": "executed", "subaccount_number": 0, "taker_fees_dollars": "0.0700", "taker_fill_cost_dollars": "1.8400", "ticker": "KXNHLGAME-26MAR24CBJPHI-PHI", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4700"}}, "result": "open"}, {"ticker": "KXNCAAMBGAME-26MAR26IOWANEB-IOWA", "event": "KXNCAAMBGAME-26MAR26IOWANEB", "title": "Iowa at Nebraska", "label": "Iowa", "league": "CBB", "strategy": "S2", "strategy_name": "Coin flip dog", "side": "yes", "price": 0.45, "bet_amount": 2.063, "timestamp": "2026-03-24T00:29:34.904585+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "5dda52e3-c4d4-4481-90e5-cb944eb8d76d", "created_time": "2026-03-24T00:29:34.8926Z", "expiration_time": null, "fill_count_fp": "4.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:29:34.8926Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5300", "order_group_id": null, "order_id": "eba709a0-d087-4e7d-96f6-0a657b81364e", "remaining_count_fp": "0.00", "side": "yes", "status": "executed", "subaccount_number": 0, "taker_fees_dollars": "0.0700", "taker_fill_cost_dollars": "1.8400", "ticker": "KXNCAAMBGAME-26MAR26IOWANEB-IOWA", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4700"}}, "result": "open"}, {"ticker": "KXEPLGAME-26APR11BURBRI-BRI", "event": "KXEPLGAME-26APR11BURBRI", "title": "Burnley vs Brighton", "label": "Brighton", "league": "EPL", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.51, "bet_amount": 2.063, "timestamp": "2026-03-24T00:29:35.268604+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "8cfcdb32-4d5d-4085-9dec-2f61a719056a", "created_time": "2026-03-24T00:29:35.258472Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:29:35.258472Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4700", "order_group_id": null, "order_id": "fbeb1de9-3d4a-4e39-90bb-ed348bbfbdef", "remaining_count_fp": "3.00", "side": "yes", "status": "resting", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXEPLGAME-26APR11BURBRI-BRI", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5300"}}, "result": "pending"}, {"ticker": "KXEUROLEAGUEGAME-26MAR251530CZVBVG-BVG", "event": "KXEUROLEAGUEGAME-26MAR251530CZVBVG", "title": "KK Crvena zvezda Belgrade vs Baskonia Vitoria-Gasteiz", "label": "Baskonia Vitoria-Gasteiz", "league": "Euroleague", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.41, "bet_amount": 2.063, "timestamp": "2026-03-24T00:29:35.649387+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "db21374c-02b7-49b3-b6a0-302792065bbb", "created_time": "2026-03-24T00:29:35.638906Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:29:35.638906Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5700", "order_group_id": null, "order_id": "59ac17f6-996a-40c0-802c-b2a670bc9e73", "remaining_count_fp": "4.00", "side": "yes", "status": "resting", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXEUROLEAGUEGAME-26MAR251530CZVBVG-BVG", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4300"}}, "result": "pending"}, {"ticker": "KXEUROLEAGUEGAME-26MAR241400OLMMON-MON", "event": "KXEUROLEAGUEGAME-26MAR241400OLMMON", "title": "Olimpia Milano vs AS Monaco", "label": "AS Monaco", "league": "Euroleague", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.51, "bet_amount": 2.063, "timestamp": "2026-03-24T00:29:36.077983+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "da92e84f-3707-42ec-b695-a3a1f77cfa90", "created_time": "2026-03-24T00:29:36.063995Z", "expiration_time": null, "fill_count_fp": "3.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:29:36.063995Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4700", "order_group_id": null, "order_id": "c4b58e2b-2266-43b2-94ed-65d32a275c40", "remaining_count_fp": "0.00", "side": "yes", "status": "executed", "subaccount_number": 0, "taker_fees_dollars": "0.0600", "taker_fill_cost_dollars": "1.5900", "ticker": "KXEUROLEAGUEGAME-26MAR241400OLMMON-MON", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5300"}}, "result": "open"}, {"ticker": "KXNBAGAME-26MAR25WASUTA-UTA", "event": "KXNBAGAME-26MAR25WASUTA", "title": "Washington at Utah", "label": "Utah", "league": "NBA", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.6, "bet_amount": 1.5836000000000001, "timestamp": "2026-03-24T03:20:14.971125+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "75c7b2e7-dda3-4627-a7f2-d469e42a48a7", "created_time": "2026-03-24T03:20:14.960585Z", "expiration_time": null, "fill_count_fp": "2.00", "initial_count_fp": "2.00", "last_update_time": "2026-03-24T03:20:14.960585Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.3800", "order_group_id": null, "order_id": "bb2e486b-9a7f-42bc-b23e-664eb5d70f20", "remaining_count_fp": "0.00", "side": "yes", "status": "executed", "subaccount_number": 0, "taker_fees_dollars": "0.0400", "taker_fill_cost_dollars": "1.2400", "ticker": "KXNBAGAME-26MAR25WASUTA-UTA", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.6200"}}, "result": "open"}, {"ticker": "KXNHLGAME-26MAR26WSHUTA-WSH", "event": "KXNHLGAME-26MAR26WSHUTA", "title": "Washington at Utah", "label": "WSH Capitals", "league": "NHL", "strategy": "S2", "strategy_name": "Coin flip dog", "side": "yes", "price": 0.39, "bet_amount": 1.5836000000000001, "timestamp": "2026-03-24T03:20:15.319527+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "5d13c00b-b5ce-4ebe-bfc7-4c9804ac580a", "created_time": "2026-03-24T03:20:15.309888Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T03:20:15.309888Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5900", "order_group_id": null, "order_id": "bad2bafb-4538-4172-bc69-bd462a732171", "remaining_count_fp": "3.00", "side": "yes", "status": "resting", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXNHLGAME-26MAR26WSHUTA-WSH", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4100"}}, "result": "pending"}, {"ticker": "KXNHLGAME-26MAR26CHIPHI-CHI", "event": "KXNHLGAME-26MAR26CHIPHI", "title": "Chicago at Philadelphia", "label": "CHI Blackhawks", "league": "NHL", "strategy": "S2", "strategy_name": "Coin flip dog", "side": "yes", "price": 0.34, "bet_amount": 1.5836000000000001, "timestamp": "2026-03-24T03:20:15.667658+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "4dec1f30-45d6-4ce1-b304-1d5196713306", "created_time": "2026-03-24T03:20:15.65814Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T03:20:15.65814Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.6400", "order_group_id": null, "order_id": "76f7ccf5-58b8-4985-bce4-0e50df2a6044", "remaining_count_fp": "4.00", "side": "yes", "status": "resting", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXNHLGAME-26MAR26CHIPHI-CHI", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.3600"}}, "result": "pending"}, {"ticker": "KXCS2GAME-26MAR24CSDIILITRUN-CSDIILIT", "event": "KXCS2GAME-26MAR24CSDIILITRUN", "title": "CSDIILIT vs. Rune Eaters", "label": "CSDIILIT", "league": "CS2", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.45, "bet_amount": 1.558, "timestamp": "2026-03-24T03:37:49.348997+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "afa0c4d5-c872-4f03-b009-3b95f4ae551c", "created_time": "2026-03-24T03:37:49.329804Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T03:37:49.329804Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5300", "order_group_id": null, "order_id": "3fde207a-55e3-4328-88e4-2bd8683ffae2", "remaining_count_fp": "3.00", "side": "yes", "status": "resting", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXCS2GAME-26MAR24CSDIILITRUN-CSDIILIT", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4700"}}, "result": "pending"}]};
-const BOT_STATUS = {"last_run": "2026-03-24T03:37:49.693163+00:00", "mode": "LIVE", "bets_placed": 57};
-const DATA_REFRESHED_AT = "2026-03-24T03:38:08.538475+00:00";
-const BETS = R.bets || [];
+// ═══ Data ═══
+const SR = {"total_bets": 57, "resolved": 4, "wins": 2, "losses": 2, "win_rate": 50.0, "total_pnl": 1.19, "total_wagered": 115.65, "open_count": 13, "open_cost": 26.82, "pending_count": 40, "balance": 75.82, "portfolio_value": 24.86, "bets": [{"ticker": "KXNBAGAME-26MAR25TORLAC-LAC", "event": "KXNBAGAME-26MAR25TORLAC", "title": "Toronto at Los Angeles C", "label": "Los Angeles C", "league": "NBA", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.5, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:25.916748+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "84aa3740-a684-4151-a540-c1de075c698d", "created_time": "2026-03-24T00:26:25.899892Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:26:25.899892Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5000", "order_group_id": null, "order_id": "06bf4700-310f-4364-817a-0036d2d4295a", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXNBAGAME-26MAR25TORLAC-LAC", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5000"}}, "result": "pending"}, {"ticker": "KXNBAGAME-26MAR25HOUMIN-HOU", "event": "KXNBAGAME-26MAR25HOUMIN", "title": "Houston at Minnesota", "label": "Houston", "league": "NBA", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.49, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:26.346721+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "e88b2120-d699-45d0-944d-f009e0799d53", "created_time": "2026-03-24T00:26:26.330257Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:26:26.330257Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5100", "order_group_id": null, "order_id": "0f22acd2-9c3c-4a71-a8d2-164f8d3a8e43", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXNBAGAME-26MAR25HOUMIN-HOU", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4900"}}, "result": "pending"}, {"ticker": "KXNBAGAME-26MAR25ATLDET-DET", "event": "KXNBAGAME-26MAR25ATLDET", "title": "Atlanta at Detroit", "label": "Detroit", "league": "NBA", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.57, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:26.787118+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "9a53ace7-b9db-4411-9e68-084d3ef41228", "created_time": "2026-03-24T00:26:26.771481Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:26:26.771481Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4300", "order_group_id": null, "order_id": "f656e13a-1cd5-4a6d-bd94-9f348e67db77", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXNBAGAME-26MAR25ATLDET-DET", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5700"}}, "result": "pending"}, {"ticker": "KXNBAGAME-26MAR23GSWDAL-GSW", "event": "KXNBAGAME-26MAR23GSWDAL", "title": "Golden State at Dallas", "label": "Golden State", "league": "NBA", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.54, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:27.211667+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "237880b5-6051-4da4-ad3e-1bb1a8517b98", "created_time": "2026-03-24T00:26:27.193481Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:26:27.193481Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4600", "order_group_id": null, "order_id": "e2fa0749-ba04-4e1b-92f0-52e43a881b00", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXNBAGAME-26MAR23GSWDAL-GSW", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5400"}}, "result": "win", "market_result": "yes", "pnl": 1.38}, {"ticker": "KXMLBGAME-26MAR262210CLESEA-SEA", "event": "KXMLBGAME-26MAR262210CLESEA", "title": "Cleveland vs Seattle", "label": "Seattle", "league": "MLB", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.6, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:27.654057+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "5de60c8f-9615-41f3-ae0c-070ddc47f3fb", "created_time": "2026-03-24T00:26:27.638486Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:26:27.638486Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4000", "order_group_id": null, "order_id": "a6459310-b6c7-419c-b3ce-5754a49a772e", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXMLBGAME-26MAR262210CLESEA-SEA", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.6000"}}, "result": "pending"}, {"ticker": "KXMLBGAME-26MAR261615TBSTL-TB", "event": "KXMLBGAME-26MAR261615TBSTL", "title": "Tampa Bay vs St. Louis", "label": "Tampa Bay", "league": "MLB", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.52, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:28.097027+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "8fe75fb6-6d96-44ce-90df-58dec01fda2b", "created_time": "2026-03-24T00:26:28.078338Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:26:28.078338Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4800", "order_group_id": null, "order_id": "0b90570e-1705-47e4-9006-d4cd6fb6b6b0", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXMLBGAME-26MAR261615TBSTL-TB", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5200"}}, "result": "pending"}, {"ticker": "KXMLBGAME-26MAR261610DETSD-DET", "event": "KXMLBGAME-26MAR261610DETSD", "title": "Detroit vs San Diego", "label": "Detroit", "league": "MLB", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.55, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:28.536376+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "021115bc-3729-4187-9d4c-197df0ec6b92", "created_time": "2026-03-24T00:26:28.520177Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:26:28.520177Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4500", "order_group_id": null, "order_id": "691f4e28-1056-4b31-82bb-680bbc3cd983", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXMLBGAME-26MAR261610DETSD-DET", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5500"}}, "result": "pending"}, {"ticker": "KXMLBGAME-26MAR261610BOSCIN-BOS", "event": "KXMLBGAME-26MAR261610BOSCIN", "title": "Boston vs Cincinnati", "label": "Boston", "league": "MLB", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.59, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:29.001734+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "04e20cb0-8966-4f16-95ab-29cec4be781a", "created_time": "2026-03-24T00:26:28.963163Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:26:28.963163Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4100", "order_group_id": null, "order_id": "e8ccaf37-9845-4861-86ff-ddc8dc2c0714", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXMLBGAME-26MAR261610BOSCIN-BOS", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5900"}}, "result": "pending"}, {"ticker": "KXMLBGAME-26MAR261315PITNYM-NYM", "event": "KXMLBGAME-26MAR261315PITNYM", "title": "Pittsburgh vs New York M", "label": "New York M", "league": "MLB", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.51, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:29.443736+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "77583ad8-f3ac-4601-b08d-38a07f1b0a7f", "created_time": "2026-03-24T00:26:29.428241Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:26:29.428241Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4900", "order_group_id": null, "order_id": "90b45f30-6103-4b15-bd98-f4f4e073329c", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXMLBGAME-26MAR261315PITNYM-NYM", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5100"}}, "result": "pending"}, {"ticker": "KXNHLGAME-26MAR25NYRTOR-TOR", "event": "KXNHLGAME-26MAR25NYRTOR", "title": "New York R at Toronto", "label": "TOR Maple Leafs", "league": "NHL", "strategy": "S2", "strategy_name": "Coin flip dog", "side": "yes", "price": 0.47, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:29.883872+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "1d84aa02-1aa1-4d57-ae8f-ed3b9ce10e79", "created_time": "2026-03-24T00:26:29.867071Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:26:29.867071Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5300", "order_group_id": null, "order_id": "025e8430-f800-4aea-a93c-594a6a3830d6", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXNHLGAME-26MAR25NYRTOR-TOR", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4700"}}, "result": "pending"}, {"ticker": "KXNHLGAME-26MAR24EDMUTA-EDM", "event": "KXNHLGAME-26MAR24EDMUTA", "title": "Edmonton at Utah", "label": "EDM Oilers", "league": "NHL", "strategy": "S2", "strategy_name": "Coin flip dog", "side": "yes", "price": 0.43, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:30.425344+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "242258f9-32d7-4659-a8bd-787da396813c", "created_time": "2026-03-24T00:26:30.40996Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:26:30.40996Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5700", "order_group_id": null, "order_id": "49bbfda5-794a-4f27-be7c-0dab7b2c602a", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXNHLGAME-26MAR24EDMUTA-EDM", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4300"}}, "result": "pending"}, {"ticker": "KXNHLGAME-26MAR24LACGY-CGY", "event": "KXNHLGAME-26MAR24LACGY", "title": "Los Angeles at Calgary", "label": "CGY Flames", "league": "NHL", "strategy": "S2", "strategy_name": "Coin flip dog", "side": "yes", "price": 0.43, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:30.866144+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "86acdc3c-3961-46b4-8a8f-452f3efe4d89", "created_time": "2026-03-24T00:26:30.848812Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:26:30.848812Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5700", "order_group_id": null, "order_id": "5a5c6e4d-2cea-4e46-a27f-a03c631090b2", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXNHLGAME-26MAR24LACGY-CGY", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4300"}}, "result": "pending"}, {"ticker": "KXNHLGAME-26MAR24VGKWPG-WPG", "event": "KXNHLGAME-26MAR24VGKWPG", "title": "Vegas at Winnipeg", "label": "WPG Jets", "league": "NHL", "strategy": "S2", "strategy_name": "Coin flip dog", "side": "yes", "price": 0.46, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:31.309313+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "4b81d7e4-4d9d-4287-ac56-c79e11339b47", "created_time": "2026-03-24T00:26:31.293797Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:26:31.293797Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5400", "order_group_id": null, "order_id": "31035aa8-cfd5-4e91-b94c-baf8466623b5", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXNHLGAME-26MAR24VGKWPG-WPG", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4600"}}, "result": "pending"}, {"ticker": "KXNHLGAME-26MAR24OTTDET-OTT", "event": "KXNHLGAME-26MAR24OTTDET", "title": "Ottawa at Detroit", "label": "OTT Senators", "league": "NHL", "strategy": "S2", "strategy_name": "Coin flip dog", "side": "yes", "price": 0.47, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:31.746705+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "aff50ccb-3717-40fc-b1f2-88a5ca0979d1", "created_time": "2026-03-24T00:26:31.73031Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:26:31.73031Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5300", "order_group_id": null, "order_id": "e0ca5d6f-7717-4d26-92f6-3120b705d78f", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXNHLGAME-26MAR24OTTDET-OTT", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4700"}}, "result": "pending"}, {"ticker": "KXNHLGAME-26MAR24CARMTL-MTL", "event": "KXNHLGAME-26MAR24CARMTL", "title": "Carolina at Montreal", "label": "MTL Canadiens", "league": "NHL", "strategy": "S2", "strategy_name": "Coin flip dog", "side": "yes", "price": 0.45, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:32.185818+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "114d9c84-5ce4-464e-aedf-a38c5fa0aec4", "created_time": "2026-03-24T00:26:32.170229Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:26:32.170229Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5500", "order_group_id": null, "order_id": "fd56990c-d27a-4993-810f-9358de77f538", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXNHLGAME-26MAR24CARMTL-MTL", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4500"}}, "result": "pending"}, {"ticker": "KXNCAAMBGAME-26MAR27MSUCONN-MSU", "event": "KXNCAAMBGAME-26MAR27MSUCONN", "title": "Michigan St. at UConn", "label": "Michigan St.", "league": "CBB", "strategy": "S2", "strategy_name": "Coin flip dog", "side": "yes", "price": 0.45, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:32.636531+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "350cb97d-60bd-4842-95bd-2ef629c61443", "created_time": "2026-03-24T00:26:32.620765Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:26:32.620765Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5500", "order_group_id": null, "order_id": "9c7404e0-1ba5-4ef5-b4a8-5d0ddc3b340d", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXNCAAMBGAME-26MAR27MSUCONN-MSU", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4500"}}, "result": "pending"}, {"ticker": "KXNCAAMBGAME-26MAR26ILLHOU-ILL", "event": "KXNCAAMBGAME-26MAR26ILLHOU", "title": "Illinois at Houston", "label": "Illinois", "league": "CBB", "strategy": "S2", "strategy_name": "Coin flip dog", "side": "yes", "price": 0.4, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:33.078684+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "a4de764c-392f-4a56-93c0-5ebb6ce282d7", "created_time": "2026-03-24T00:26:33.062583Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "5.00", "last_update_time": "2026-03-24T00:26:33.062583Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.6000", "order_group_id": null, "order_id": "b598acb8-dbeb-4809-8fac-ec66df3c1728", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXNCAAMBGAME-26MAR26ILLHOU-ILL", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4000"}}, "result": "pending"}, {"ticker": "KXNCAAWBGAME-26MAR22LCHIFGCU-LCHI", "event": "KXNCAAWBGAME-26MAR22LCHIFGCU", "title": "Loyola Chicago at Florida Gulf Coast", "label": "Loyola Chicago", "league": "WCBB", "strategy": "S2", "strategy_name": "Coin flip dog", "side": "yes", "price": 0.39, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:33.525562+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "3c2c241b-49ff-459b-8fbc-d97c180df1c3", "created_time": "2026-03-24T00:26:33.502231Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "5.00", "last_update_time": "2026-03-24T00:26:33.502231Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.6100", "order_group_id": null, "order_id": "5dda4192-4892-4790-905d-27694a1006a9", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXNCAAWBGAME-26MAR22LCHIFGCU-LCHI", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.3900"}}, "result": "win", "market_result": "yes", "pnl": 3.05}, {"ticker": "KXEPLGAME-26APR13MUNLEE-MUN", "event": "KXEPLGAME-26APR13MUNLEE", "title": "Manchester United vs Leeds United", "label": "Manchester United", "league": "EPL", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.58, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:33.966038+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "d265dfd4-7bf9-45d4-8f8e-a9ce6ac377e0", "created_time": "2026-03-24T00:26:33.948791Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:26:33.948791Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4200", "order_group_id": null, "order_id": "2f3b666b-02ae-4246-8e0e-03aff635bd01", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXEPLGAME-26APR13MUNLEE-MUN", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5800"}}, "result": "pending"}, {"ticker": "KXEPLGAME-26APR12CFCMCI-MCI", "event": "KXEPLGAME-26APR12CFCMCI", "title": "Chelsea vs Manchester City", "label": "Manchester City", "league": "EPL", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.41, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:34.414558+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "3212c017-6e64-4963-a984-d120e135588b", "created_time": "2026-03-24T00:26:34.395069Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "5.00", "last_update_time": "2026-03-24T00:26:34.395069Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5900", "order_group_id": null, "order_id": "920dc039-5c37-450f-9831-be1ec0bb5b0b", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXEPLGAME-26APR12CFCMCI-MCI", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4100"}}, "result": "pending"}, {"ticker": "KXEPLGAME-26APR11LFCFUL-LFC", "event": "KXEPLGAME-26APR11LFCFUL", "title": "Liverpool vs Fulham", "label": "Liverpool", "league": "EPL", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.6, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:34.956957+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "2e71f066-c603-4dd1-b12d-b167015b04e5", "created_time": "2026-03-24T00:26:34.941582Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:26:34.941582Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4000", "order_group_id": null, "order_id": "06077d7f-78d9-487f-a426-6f3623cd32ee", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXEPLGAME-26APR11LFCFUL-LFC", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.6000"}}, "result": "pending"}, {"ticker": "KXEPLGAME-26APR11BREEVE-BRE", "event": "KXEPLGAME-26APR11BREEVE", "title": "Brentford vs Everton", "label": "Brentford", "league": "EPL", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.41, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:35.496270+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "4726c3e7-a50b-4430-b787-6b58e25b64e8", "created_time": "2026-03-24T00:26:35.479993Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "5.00", "last_update_time": "2026-03-24T00:26:35.479993Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5900", "order_group_id": null, "order_id": "b8f25b40-27bc-4854-8e00-68ef19ac8f3a", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXEPLGAME-26APR11BREEVE-BRE", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4100"}}, "result": "pending"}, {"ticker": "KXEPLGAME-26APR10WHUWOL-WHU", "event": "KXEPLGAME-26APR10WHUWOL", "title": "West Ham vs Wolverhampton", "label": "West Ham", "league": "EPL", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.51, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:35.941190+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "d2b2480e-96a8-4cad-b9df-b5ef8d8b7382", "created_time": "2026-03-24T00:26:35.920781Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:26:35.920781Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4900", "order_group_id": null, "order_id": "1c50c583-edf4-446d-a96a-287e851b37e1", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXEPLGAME-26APR10WHUWOL-WHU", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5100"}}, "result": "pending"}, {"ticker": "KXUCLGAME-26APR08PSGLFC-LFC", "event": "KXUCLGAME-26APR08PSGLFC", "title": "PSG vs Liverpool", "label": "Liverpool", "league": "UCL", "strategy": "S3", "strategy_name": "UCL underdog", "side": "yes", "price": 0.24, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:36.379505+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "14326015-6f94-48c7-9156-8f59fa46938a", "created_time": "2026-03-24T00:26:36.363962Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "8.00", "last_update_time": "2026-03-24T00:26:36.363962Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.7600", "order_group_id": null, "order_id": "9ae000db-6fba-49de-8a73-f53693913c26", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXUCLGAME-26APR08PSGLFC-LFC", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.2400"}}, "result": "pending"}, {"ticker": "KXUCLGAME-26APR08PSGLFC-PSG", "event": "KXUCLGAME-26APR08PSGLFC", "title": "PSG vs Liverpool", "label": "PSG", "league": "UCL", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.54, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:36.916468+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "16222e38-f0bb-4ca9-a6d8-a20b5c78e0b9", "created_time": "2026-03-24T00:26:36.901103Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:26:36.901103Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4600", "order_group_id": null, "order_id": "7ea190c9-b0a4-47a8-93a8-92d72706347b", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXUCLGAME-26APR08PSGLFC-PSG", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5400"}}, "result": "pending"}, {"ticker": "KXUCLGAME-26APR08BARATM-ATM", "event": "KXUCLGAME-26APR08BARATM", "title": "Barcelona vs Atletico", "label": "Atletico", "league": "UCL", "strategy": "S3", "strategy_name": "UCL underdog", "side": "yes", "price": 0.18, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:37.358238+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "ef0940e8-93de-469b-b9cb-5e05b95fd019", "created_time": "2026-03-24T00:26:37.342646Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "11.00", "last_update_time": "2026-03-24T00:26:37.342646Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.8200", "order_group_id": null, "order_id": "aaf950b8-2780-4961-a678-59b0a78e2641", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXUCLGAME-26APR08BARATM-ATM", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.1800"}}, "result": "pending"}, {"ticker": "KXUCLGAME-26APR08BARATM-BAR", "event": "KXUCLGAME-26APR08BARATM", "title": "Barcelona vs Atletico", "label": "Barcelona", "league": "UCL", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.6, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:37.795867+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "00bdf92a-7b82-4a82-99c8-fc0caec9ad1f", "created_time": "2026-03-24T00:26:37.780096Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:26:37.780096Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4000", "order_group_id": null, "order_id": "c5c9597f-2d99-4d51-9999-7f89b8abe8a1", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXUCLGAME-26APR08BARATM-BAR", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.6000"}}, "result": "pending"}, {"ticker": "KXUCLGAME-26APR07SPOARS-SPO", "event": "KXUCLGAME-26APR07SPOARS", "title": "Sporting CP vs Arsenal", "label": "Sporting CP", "league": "UCL", "strategy": "S3", "strategy_name": "UCL underdog", "side": "yes", "price": 0.2, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:38.239176+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "4fa046b1-d74f-4560-acf2-2d0feb20cd7a", "created_time": "2026-03-24T00:26:38.219785Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "10.00", "last_update_time": "2026-03-24T00:26:38.219785Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.8000", "order_group_id": null, "order_id": "e51a968e-f025-430d-9a13-b3c2abf53c08", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXUCLGAME-26APR07SPOARS-SPO", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.2000"}}, "result": "pending"}, {"ticker": "KXUCLGAME-26APR07SPOARS-ARS", "event": "KXUCLGAME-26APR07SPOARS", "title": "Sporting CP vs Arsenal", "label": "Arsenal", "league": "UCL", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.57, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:38.680369+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "5388961a-5b02-4687-8cce-5b7abb3245e5", "created_time": "2026-03-24T00:26:38.662826Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:26:38.662826Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4300", "order_group_id": null, "order_id": "f88ec316-27bb-4eb0-baef-cdd85a38ab78", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXUCLGAME-26APR07SPOARS-ARS", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5700"}}, "result": "pending"}, {"ticker": "KXUCLGAME-26APR07RMABMU-RMA", "event": "KXUCLGAME-26APR07RMABMU", "title": "Real Madrid vs Bayern Munich", "label": "Real Madrid", "league": "UCL", "strategy": "S3", "strategy_name": "UCL underdog", "side": "yes", "price": 0.34, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:39.158921+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "691029eb-ac7f-47f2-83d8-9ef26514a7d1", "created_time": "2026-03-24T00:26:39.142472Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "6.00", "last_update_time": "2026-03-24T00:26:39.142472Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.6600", "order_group_id": null, "order_id": "bef952a3-dc0c-4108-9f1c-200bcfb136b7", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXUCLGAME-26APR07RMABMU-RMA", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.3400"}}, "result": "pending"}, {"ticker": "KXUCLGAME-26APR07RMABMU-BMU", "event": "KXUCLGAME-26APR07RMABMU", "title": "Real Madrid vs Bayern Munich", "label": "Bayern Munich", "league": "UCL", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.43, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:39.600080+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "81f5ccfb-fbbc-438e-9e45-ef60035feb2e", "created_time": "2026-03-24T00:26:39.584449Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:26:39.584449Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5700", "order_group_id": null, "order_id": "052e22ac-9c8c-4d39-b58e-cbe968a5dbf0", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXUCLGAME-26APR07RMABMU-BMU", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4300"}}, "result": "pending"}, {"ticker": "KXCS2GAME-26MAR24OGICE-OG", "event": "KXCS2GAME-26MAR24OGICE", "title": "OG vs. Inner Circle Esports", "label": "OG", "league": "CS2", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.57, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:40.040167+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "eb971110-a325-46e9-9ad4-460672fd3035", "created_time": "2026-03-24T00:26:40.02367Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:26:40.02367Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4300", "order_group_id": null, "order_id": "aab1b9ea-06ed-47ed-8a53-ce44c4117972", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXCS2GAME-26MAR24OGICE-OG", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5700"}}, "result": "pending"}, {"ticker": "KXCS2GAME-26MAR24TRIBST-BST", "event": "KXCS2GAME-26MAR24TRIBST", "title": "Tricked vs. BESTIA", "label": "BESTIA", "league": "CS2", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.52, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:40.479398+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "c34ce249-3e28-4b95-ad1c-767a547c70c8", "created_time": "2026-03-24T00:26:40.4631Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:26:40.4631Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4800", "order_group_id": null, "order_id": "6762e75a-cce9-4e33-8d01-69ec4e4a67e4", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXCS2GAME-26MAR24TRIBST-BST", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5200"}}, "result": "pending"}, {"ticker": "KXCS2GAME-26MAR23WGF5-WG", "event": "KXCS2GAME-26MAR23WGF5", "title": "Wanted Goons vs. F5 Esports", "label": "Wanted Goons", "league": "CS2", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.52, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:40.918364+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "e87a48d5-4c32-4339-83bb-0032c4c0ba07", "created_time": "2026-03-24T00:26:40.902972Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:26:40.902972Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4800", "order_group_id": null, "order_id": "cf73d5fd-7cb4-4328-9583-7748e495d8fd", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXCS2GAME-26MAR23WGF5-WG", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5200"}}, "result": "loss", "market_result": "no", "pnl": -1.56}, {"ticker": "KXLOLGAME-26MAR24FFME-ME", "event": "KXLOLGAME-26MAR24FFME", "title": "French Flair vs. Misa Esports", "label": "Misa Esports", "league": "LoL", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.52, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:41.365995+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "0801e757-3950-4d85-9370-9419bc9727d4", "created_time": "2026-03-24T00:26:41.350162Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:26:41.350162Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4800", "order_group_id": null, "order_id": "7eb5b9da-342b-4a37-9f42-4974ba48d11c", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXLOLGAME-26MAR24FFME-ME", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5200"}}, "result": "pending"}, {"ticker": "KXEUROLEAGUEGAME-26MAR241530OPIVAL-OPI", "event": "KXEUROLEAGUEGAME-26MAR241530OPIVAL", "title": "BC Olympiakos Piraeus vs Valencia Basket", "label": "BC Olympiakos Piraeus", "league": "Euroleague", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.48, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:41.902321+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "3c47be29-1c06-4351-b8b2-457d9f900cce", "created_time": "2026-03-24T00:26:41.887154Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:26:41.887154Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5200", "order_group_id": null, "order_id": "f09f49be-b69d-4689-bb9c-6d6b4c70598b", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXEUROLEAGUEGAME-26MAR241530OPIVAL-OPI", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4800"}}, "result": "pending"}, {"ticker": "KXEUROLEAGUEGAME-26MAR241430PANDUB-PAN", "event": "KXEUROLEAGUEGAME-26MAR241430PANDUB", "title": "Panathinaikos BC vs Dubai Basketball", "label": "Panathinaikos BC", "league": "Euroleague", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.55, "bet_amount": 2.063, "timestamp": "2026-03-24T00:26:42.344231+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "9bf53b26-c812-4f3e-a5d1-cd9240173bee", "created_time": "2026-03-24T00:26:42.328093Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:26:42.328093Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4500", "order_group_id": null, "order_id": "777d74b9-44dc-4102-bf39-1fea3dbc6e17", "remaining_count_fp": "0.00", "side": "yes", "status": "canceled", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXEUROLEAGUEGAME-26MAR241430PANDUB-PAN", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5500"}}, "result": "pending"}, {"ticker": "KXNBAGAME-26MAR25OKCBOS-OKC", "event": "KXNBAGAME-26MAR25OKCBOS", "title": "Oklahoma City at Boston", "label": "Oklahoma City", "league": "NBA", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.55, "bet_amount": 2.063, "timestamp": "2026-03-24T00:29:29.348600+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "c432f2a6-cc19-45c2-9fbf-27f04eae186a", "created_time": "2026-03-24T00:29:29.332747Z", "expiration_time": null, "fill_count_fp": "3.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:29:29.332747Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4300", "order_group_id": null, "order_id": "dcb1ffd4-9873-42fa-9886-74532498fe5b", "remaining_count_fp": "0.00", "side": "yes", "status": "executed", "subaccount_number": 0, "taker_fees_dollars": "0.0600", "taker_fill_cost_dollars": "1.6800", "ticker": "KXNBAGAME-26MAR25OKCBOS-OKC", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5700"}}, "result": "open"}, {"ticker": "KXNBAGAME-26MAR25CHIPHI-PHI", "event": "KXNBAGAME-26MAR25CHIPHI", "title": "Chicago at Philadelphia", "label": "Philadelphia", "league": "NBA", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.6, "bet_amount": 2.063, "timestamp": "2026-03-24T00:29:29.796315+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "e642a13e-50f1-443d-9b15-993a49d8c747", "created_time": "2026-03-24T00:29:29.785578Z", "expiration_time": null, "fill_count_fp": "3.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:29:29.785578Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.3800", "order_group_id": null, "order_id": "ee2ddf7f-b620-4b17-928d-4b708a114f02", "remaining_count_fp": "0.00", "side": "yes", "status": "executed", "subaccount_number": 0, "taker_fees_dollars": "0.0500", "taker_fill_cost_dollars": "1.8300", "ticker": "KXNBAGAME-26MAR25CHIPHI-PHI", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.6200"}}, "result": "open"}, {"ticker": "KXNBAGAME-26MAR23HOUCHI-HOU", "event": "KXNBAGAME-26MAR23HOUCHI", "title": "Houston at Chicago", "label": "Houston", "league": "NBA", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.56, "bet_amount": 2.063, "timestamp": "2026-03-24T00:29:30.443974+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "6d7942ff-09d6-4e6f-84e6-7d7894ecc9e1", "created_time": "2026-03-24T00:29:30.419866Z", "expiration_time": null, "fill_count_fp": "3.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:29:30.419866Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4200", "order_group_id": null, "order_id": "3f5be4eb-c358-400a-8d60-424d9cffbf5d", "remaining_count_fp": "0.00", "side": "yes", "status": "executed", "subaccount_number": 0, "taker_fees_dollars": "0.0600", "taker_fill_cost_dollars": "1.7100", "ticker": "KXNBAGAME-26MAR23HOUCHI-HOU", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5800"}}, "result": "loss", "market_result": "no", "pnl": -1.68}, {"ticker": "KXMLBGAME-26MAR261615TEXPHI-PHI", "event": "KXMLBGAME-26MAR261615TEXPHI", "title": "Texas vs Philadelphia", "label": "Philadelphia", "league": "MLB", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.57, "bet_amount": 2.063, "timestamp": "2026-03-24T00:29:30.967733+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "f1274161-ab37-4533-ae39-8827546a0c34", "created_time": "2026-03-24T00:29:30.952069Z", "expiration_time": null, "fill_count_fp": "3.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:29:30.952069Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4100", "order_group_id": null, "order_id": "279e9d17-b5d4-4238-a5e3-6738219cdeec", "remaining_count_fp": "0.00", "side": "yes", "status": "executed", "subaccount_number": 0, "taker_fees_dollars": "0.0600", "taker_fill_cost_dollars": "1.7400", "ticker": "KXMLBGAME-26MAR261615TEXPHI-PHI", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5900"}}, "result": "open"}, {"ticker": "KXMLBGAME-26MAR261505MINBAL-BAL", "event": "KXMLBGAME-26MAR261505MINBAL", "title": "Minnesota vs Baltimore", "label": "Baltimore", "league": "MLB", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.56, "bet_amount": 2.063, "timestamp": "2026-03-24T00:29:31.468180+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "5e2d3005-9626-4f5d-8b96-bef9fb82e25e", "created_time": "2026-03-24T00:29:31.390685Z", "expiration_time": null, "fill_count_fp": "3.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:29:31.390685Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4200", "order_group_id": null, "order_id": "766c6a37-a625-47dd-ba75-79ad4fd9e61c", "remaining_count_fp": "0.00", "side": "yes", "status": "executed", "subaccount_number": 0, "taker_fees_dollars": "0.0600", "taker_fill_cost_dollars": "1.7400", "ticker": "KXMLBGAME-26MAR261505MINBAL-BAL", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5800"}}, "result": "open"}, {"ticker": "KXMLBGAME-26MAR252005NYYSF-NYY", "event": "KXMLBGAME-26MAR252005NYYSF", "title": "New York Y vs San Francisco", "label": "New York Y", "league": "MLB", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.52, "bet_amount": 2.063, "timestamp": "2026-03-24T00:29:31.873444+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "5d1e349c-449f-4825-8500-9b97c9a0fc2e", "created_time": "2026-03-24T00:29:31.847363Z", "expiration_time": null, "fill_count_fp": "3.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:29:31.847363Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4600", "order_group_id": null, "order_id": "7365380e-6d30-4ee4-a67d-e5d12979bfa2", "remaining_count_fp": "0.00", "side": "yes", "status": "executed", "subaccount_number": 0, "taker_fees_dollars": "0.0600", "taker_fill_cost_dollars": "1.5900", "ticker": "KXMLBGAME-26MAR252005NYYSF-NYY", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5400"}}, "result": "open"}, {"ticker": "KXNHLGAME-26MAR24WSHSTL-STL", "event": "KXNHLGAME-26MAR24WSHSTL", "title": "Washington at St. Louis", "label": "STL Blues", "league": "NHL", "strategy": "S2", "strategy_name": "Coin flip dog", "side": "yes", "price": 0.48, "bet_amount": 2.063, "timestamp": "2026-03-24T00:29:32.273152+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "94d677a1-795a-4467-ac3f-b0352ed38464", "created_time": "2026-03-24T00:29:32.26224Z", "expiration_time": null, "fill_count_fp": "4.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:29:32.26224Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5000", "order_group_id": null, "order_id": "00edb5fa-0710-4c54-bcd2-d644fd8c297c", "remaining_count_fp": "0.00", "side": "yes", "status": "executed", "subaccount_number": 0, "taker_fees_dollars": "0.0700", "taker_fill_cost_dollars": "1.9600", "ticker": "KXNHLGAME-26MAR24WSHSTL-STL", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5000"}}, "result": "open"}, {"ticker": "KXNHLGAME-26MAR24SJNSH-SJ", "event": "KXNHLGAME-26MAR24SJNSH", "title": "San Jose at Nashville", "label": "SJ Sharks", "league": "NHL", "strategy": "S2", "strategy_name": "Coin flip dog", "side": "yes", "price": 0.43, "bet_amount": 2.063, "timestamp": "2026-03-24T00:29:32.963749+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "6dab5858-b0ad-4a72-a65e-c7699591d08c", "created_time": "2026-03-24T00:29:32.945765Z", "expiration_time": null, "fill_count_fp": "4.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:29:32.945765Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5500", "order_group_id": null, "order_id": "13f3400d-7010-4883-b164-af08cd1cddab", "remaining_count_fp": "0.00", "side": "yes", "status": "executed", "subaccount_number": 0, "taker_fees_dollars": "0.0700", "taker_fill_cost_dollars": "1.7600", "ticker": "KXNHLGAME-26MAR24SJNSH-SJ", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4500"}}, "result": "open"}, {"ticker": "KXNHLGAME-26MAR24MINTB-MIN", "event": "KXNHLGAME-26MAR24MINTB", "title": "Minnesota at Tampa Bay", "label": "MIN Wild", "league": "NHL", "strategy": "S2", "strategy_name": "Coin flip dog", "side": "yes", "price": 0.39, "bet_amount": 2.063, "timestamp": "2026-03-24T00:29:33.351325+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "c9703890-5244-4063-a469-9c4f64821cd3", "created_time": "2026-03-24T00:29:33.34112Z", "expiration_time": null, "fill_count_fp": "5.00", "initial_count_fp": "5.00", "last_update_time": "2026-03-24T00:29:33.34112Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5900", "order_group_id": null, "order_id": "a211755c-e9c1-44ec-8d73-cd735bf25b67", "remaining_count_fp": "0.00", "side": "yes", "status": "executed", "subaccount_number": 0, "taker_fees_dollars": "0.0900", "taker_fill_cost_dollars": "2.0000", "ticker": "KXNHLGAME-26MAR24MINTB-MIN", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4100"}}, "result": "open"}, {"ticker": "KXNHLGAME-26MAR24SEAFLA-SEA", "event": "KXNHLGAME-26MAR24SEAFLA", "title": "Seattle at Florida", "label": "SEA Kraken", "league": "NHL", "strategy": "S2", "strategy_name": "Coin flip dog", "side": "yes", "price": 0.44, "bet_amount": 2.063, "timestamp": "2026-03-24T00:29:33.752435+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "44c34da5-4252-46d8-ac34-8682b75be868", "created_time": "2026-03-24T00:29:33.740635Z", "expiration_time": null, "fill_count_fp": "4.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:29:33.740635Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5400", "order_group_id": null, "order_id": "9f00938c-a3a4-4778-9dce-71ca2f2ec506", "remaining_count_fp": "0.00", "side": "yes", "status": "executed", "subaccount_number": 0, "taker_fees_dollars": "0.0700", "taker_fill_cost_dollars": "1.8400", "ticker": "KXNHLGAME-26MAR24SEAFLA-SEA", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4600"}}, "result": "open"}, {"ticker": "KXNHLGAME-26MAR24COLPIT-PIT", "event": "KXNHLGAME-26MAR24COLPIT", "title": "Colorado at Pittsburgh", "label": "PIT Penguins", "league": "NHL", "strategy": "S2", "strategy_name": "Coin flip dog", "side": "yes", "price": 0.39, "bet_amount": 2.063, "timestamp": "2026-03-24T00:29:34.109565+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "1a0cb7d6-3a20-4644-8d11-ab505b6716a9", "created_time": "2026-03-24T00:29:34.097467Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "5.00", "last_update_time": "2026-03-24T00:29:34.097467Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5900", "order_group_id": null, "order_id": "29464d48-42df-4ece-b3ec-532eabd4efad", "remaining_count_fp": "5.00", "side": "yes", "status": "resting", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXNHLGAME-26MAR24COLPIT-PIT", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4100"}}, "result": "open"}, {"ticker": "KXNHLGAME-26MAR24CBJPHI-PHI", "event": "KXNHLGAME-26MAR24CBJPHI", "title": "Columbus at Philadelphia", "label": "PHI Flyers", "league": "NHL", "strategy": "S2", "strategy_name": "Coin flip dog", "side": "yes", "price": 0.45, "bet_amount": 2.063, "timestamp": "2026-03-24T00:29:34.527384+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "b8363f73-7e6d-4c2c-94d5-8b6f56eb0025", "created_time": "2026-03-24T00:29:34.51399Z", "expiration_time": null, "fill_count_fp": "4.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:29:34.51399Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5300", "order_group_id": null, "order_id": "df58d72e-61ab-436c-aab7-0f111be5382a", "remaining_count_fp": "0.00", "side": "yes", "status": "executed", "subaccount_number": 0, "taker_fees_dollars": "0.0700", "taker_fill_cost_dollars": "1.8400", "ticker": "KXNHLGAME-26MAR24CBJPHI-PHI", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4700"}}, "result": "open"}, {"ticker": "KXNCAAMBGAME-26MAR26IOWANEB-IOWA", "event": "KXNCAAMBGAME-26MAR26IOWANEB", "title": "Iowa at Nebraska", "label": "Iowa", "league": "CBB", "strategy": "S2", "strategy_name": "Coin flip dog", "side": "yes", "price": 0.45, "bet_amount": 2.063, "timestamp": "2026-03-24T00:29:34.904585+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "5dda52e3-c4d4-4481-90e5-cb944eb8d76d", "created_time": "2026-03-24T00:29:34.8926Z", "expiration_time": null, "fill_count_fp": "4.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:29:34.8926Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5300", "order_group_id": null, "order_id": "eba709a0-d087-4e7d-96f6-0a657b81364e", "remaining_count_fp": "0.00", "side": "yes", "status": "executed", "subaccount_number": 0, "taker_fees_dollars": "0.0700", "taker_fill_cost_dollars": "1.8400", "ticker": "KXNCAAMBGAME-26MAR26IOWANEB-IOWA", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4700"}}, "result": "open"}, {"ticker": "KXEPLGAME-26APR11BURBRI-BRI", "event": "KXEPLGAME-26APR11BURBRI", "title": "Burnley vs Brighton", "label": "Brighton", "league": "EPL", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.51, "bet_amount": 2.063, "timestamp": "2026-03-24T00:29:35.268604+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "8cfcdb32-4d5d-4085-9dec-2f61a719056a", "created_time": "2026-03-24T00:29:35.258472Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:29:35.258472Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4700", "order_group_id": null, "order_id": "fbeb1de9-3d4a-4e39-90bb-ed348bbfbdef", "remaining_count_fp": "3.00", "side": "yes", "status": "resting", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXEPLGAME-26APR11BURBRI-BRI", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5300"}}}, {"ticker": "KXEUROLEAGUEGAME-26MAR251530CZVBVG-BVG", "event": "KXEUROLEAGUEGAME-26MAR251530CZVBVG", "title": "KK Crvena zvezda Belgrade vs Baskonia Vitoria-Gasteiz", "label": "Baskonia Vitoria-Gasteiz", "league": "Euroleague", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.41, "bet_amount": 2.063, "timestamp": "2026-03-24T00:29:35.649387+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "db21374c-02b7-49b3-b6a0-302792065bbb", "created_time": "2026-03-24T00:29:35.638906Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T00:29:35.638906Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5700", "order_group_id": null, "order_id": "59ac17f6-996a-40c0-802c-b2a670bc9e73", "remaining_count_fp": "4.00", "side": "yes", "status": "resting", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXEUROLEAGUEGAME-26MAR251530CZVBVG-BVG", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4300"}}}, {"ticker": "KXEUROLEAGUEGAME-26MAR241400OLMMON-MON", "event": "KXEUROLEAGUEGAME-26MAR241400OLMMON", "title": "Olimpia Milano vs AS Monaco", "label": "AS Monaco", "league": "Euroleague", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.51, "bet_amount": 2.063, "timestamp": "2026-03-24T00:29:36.077983+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "da92e84f-3707-42ec-b695-a3a1f77cfa90", "created_time": "2026-03-24T00:29:36.063995Z", "expiration_time": null, "fill_count_fp": "3.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T00:29:36.063995Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.4700", "order_group_id": null, "order_id": "c4b58e2b-2266-43b2-94ed-65d32a275c40", "remaining_count_fp": "0.00", "side": "yes", "status": "executed", "subaccount_number": 0, "taker_fees_dollars": "0.0600", "taker_fill_cost_dollars": "1.5900", "ticker": "KXEUROLEAGUEGAME-26MAR241400OLMMON-MON", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.5300"}}, "result": "open"}, {"ticker": "KXNBAGAME-26MAR25WASUTA-UTA", "event": "KXNBAGAME-26MAR25WASUTA", "title": "Washington at Utah", "label": "Utah", "league": "NBA", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.6, "bet_amount": 1.5836000000000001, "timestamp": "2026-03-24T03:20:14.971125+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "75c7b2e7-dda3-4627-a7f2-d469e42a48a7", "created_time": "2026-03-24T03:20:14.960585Z", "expiration_time": null, "fill_count_fp": "2.00", "initial_count_fp": "2.00", "last_update_time": "2026-03-24T03:20:14.960585Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.3800", "order_group_id": null, "order_id": "bb2e486b-9a7f-42bc-b23e-664eb5d70f20", "remaining_count_fp": "0.00", "side": "yes", "status": "executed", "subaccount_number": 0, "taker_fees_dollars": "0.0400", "taker_fill_cost_dollars": "1.2400", "ticker": "KXNBAGAME-26MAR25WASUTA-UTA", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.6200"}}}, {"ticker": "KXNHLGAME-26MAR26WSHUTA-WSH", "event": "KXNHLGAME-26MAR26WSHUTA", "title": "Washington at Utah", "label": "WSH Capitals", "league": "NHL", "strategy": "S2", "strategy_name": "Coin flip dog", "side": "yes", "price": 0.39, "bet_amount": 1.5836000000000001, "timestamp": "2026-03-24T03:20:15.319527+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "5d13c00b-b5ce-4ebe-bfc7-4c9804ac580a", "created_time": "2026-03-24T03:20:15.309888Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T03:20:15.309888Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5900", "order_group_id": null, "order_id": "bad2bafb-4538-4172-bc69-bd462a732171", "remaining_count_fp": "3.00", "side": "yes", "status": "resting", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXNHLGAME-26MAR26WSHUTA-WSH", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4100"}}, "result": "pending"}, {"ticker": "KXNHLGAME-26MAR26CHIPHI-CHI", "event": "KXNHLGAME-26MAR26CHIPHI", "title": "Chicago at Philadelphia", "label": "CHI Blackhawks", "league": "NHL", "strategy": "S2", "strategy_name": "Coin flip dog", "side": "yes", "price": 0.34, "bet_amount": 1.5836000000000001, "timestamp": "2026-03-24T03:20:15.667658+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "4dec1f30-45d6-4ce1-b304-1d5196713306", "created_time": "2026-03-24T03:20:15.65814Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "4.00", "last_update_time": "2026-03-24T03:20:15.65814Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.6400", "order_group_id": null, "order_id": "76f7ccf5-58b8-4985-bce4-0e50df2a6044", "remaining_count_fp": "4.00", "side": "yes", "status": "resting", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXNHLGAME-26MAR26CHIPHI-CHI", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.3600"}}}, {"ticker": "KXCS2GAME-26MAR24CSDIILITRUN-CSDIILIT", "event": "KXCS2GAME-26MAR24CSDIILITRUN", "title": "CSDIILIT vs. Rune Eaters", "label": "CSDIILIT", "league": "CS2", "strategy": "S1", "strategy_name": "Coin flip fav", "side": "yes", "price": 0.45, "bet_amount": 1.558, "timestamp": "2026-03-24T03:37:49.348997+00:00", "order_result": {"order": {"action": "buy", "client_order_id": "afa0c4d5-c872-4f03-b009-3b95f4ae551c", "created_time": "2026-03-24T03:37:49.329804Z", "expiration_time": null, "fill_count_fp": "0.00", "initial_count_fp": "3.00", "last_update_time": "2026-03-24T03:37:49.329804Z", "maker_fees_dollars": "0.0000", "maker_fill_cost_dollars": "0.0000", "no_price_dollars": "0.5300", "order_group_id": null, "order_id": "3fde207a-55e3-4328-88e4-2bd8683ffae2", "remaining_count_fp": "3.00", "side": "yes", "status": "resting", "subaccount_number": 0, "taker_fees_dollars": "0.0000", "taker_fill_cost_dollars": "0.0000", "ticker": "KXCS2GAME-26MAR24CSDIILITRUN-CSDIILIT", "type": "limit", "user_id": "7cf6e51a-1c72-47f6-a592-7ae029eecbd9", "yes_price_dollars": "0.4700"}}, "result": "pending"}]};
+const SPORTS_STATUS = {"last_run": "2026-03-24T03:37:49.693163+00:00", "mode": "LIVE", "bets_placed": 57};
+const CR = {"total_bets": 0, "resolved": 0, "wins": 0, "losses": 0, "win_rate": 0, "total_pnl": 0, "total_wagered": 0, "open_count": 0, "open_cost": 0, "pending_count": 0, "balance": 75.82, "portfolio_value": 24.86, "bets": []};
+const CRYPTO_STATUS = {};
+const DATA_REFRESHED_AT = "2026-03-24T04:44:44.382336+00:00";
+const SPORTS_BETS = SR.bets || [];
+const CRYPTO_BETS = CR.bets || [];
 
 const stratNames = { S1: 'Coin Flip Fav', S2: 'Coin Flip Dog', S3: 'UCL Underdog', S4: 'Bundesliga Draw' };
 const stratColors = { S1: '#3b82f6', S2: '#eab308', S3: '#a855f7', S4: '#06b6d4' };
-const stratBacktest = { S1: '60.6%', S2: '55%', S3: '~50%', S4: '~40%' };
+const cryptoColors = { BTC: '#f7931a', ETH: '#627eea', SOL: '#00ffa3', XRP: '#00a2e0', DOGE: '#c4b040' };
 
 function getDate(ts) {
   if (!ts) return '';
   return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
-
 function pnlHtml(val) {
   if (val === null || val === undefined) return '-';
   const cls = val >= 0 ? 'pnl-pos' : 'pnl-neg';
   return `<span class="${cls}">${val >= 0 ? '+' : ''}$${val.toFixed(2)}</span>`;
 }
-
 function stratTag(s) {
   if (!s) return '-';
   return `<span class="tag ${s.toLowerCase()}">${s}</span>`;
+}
+function cryptoTag(c) {
+  if (!c) return '-';
+  return `<span class="crypto-tag ${c.toLowerCase()}">${c}</span>`;
+}
+
+// ═══ Mode switching ═══
+function switchMode(mode) {
+  document.getElementById('sectionSports').classList.toggle('active', mode === 'sports');
+  document.getElementById('sectionCrypto').classList.toggle('active', mode === 'crypto');
+  document.getElementById('tabSports').className = 'mode-tab' + (mode === 'sports' ? ' active-sports' : '');
+  document.getElementById('tabCrypto').className = 'mode-tab' + (mode === 'crypto' ? ' active-crypto' : '');
 }
 
 // ═══ Timestamps ═══
@@ -332,258 +423,152 @@ const ago = Math.round((Date.now() - refreshDate.getTime()) / 60000);
 const agoText = ago < 1 ? 'just now' : ago < 60 ? `${ago}m ago` : `${Math.round(ago/60)}h ago`;
 document.getElementById('lastUpdated').textContent = refreshDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) + ` (${agoText})`;
 
-if (BOT_STATUS && BOT_STATUS.last_run) {
-  const botDate = new Date(BOT_STATUS.last_run);
-  const botAgo = Math.round((Date.now() - botDate.getTime()) / 60000);
-  const botAgoText = botAgo < 1 ? 'just now' : botAgo < 60 ? `${botAgo}m ago` : `${Math.round(botAgo/60)}h ago`;
-  document.getElementById('botLastRun').textContent = botDate.toLocaleDateString('en-US', { hour: '2-digit', minute: '2-digit' }) + ` (${botAgoText}) — ${R.total_bets} bets placed`;
-} else {
-  document.getElementById('botLastRun').textContent = 'No data';
-  document.getElementById('botLastRun').style.color = 'var(--muted)';
-}
+// ═══════════════════════════════════════════════════════════════
+// SPORTS
+// ═══════════════════════════════════════════════════════════════
 
-// ═══ KPIs ═══
-const roi = R.total_wagered > 0 ? (R.total_pnl / R.total_wagered * 100).toFixed(1) : '0';
-const kpis = [
-  { label: 'Balance', value: R.balance > 0 ? `$${R.balance.toFixed(2)}` : '—', cls: 'cyan', sub: R.portfolio_value > 0 ? `$${R.portfolio_value.toFixed(2)} portfolio` : 'Connect API for balance' },
-  { label: 'Total P&L', value: `$${R.total_pnl >= 0 ? '+' : ''}${R.total_pnl.toFixed(2)}`, cls: R.total_pnl >= 0 ? 'green' : 'red', sub: `${R.total_bets} total bets` },
-  { label: 'ROI', value: `${roi}%`, cls: parseFloat(roi) >= 0 ? 'green' : 'red', sub: `$${R.total_wagered.toFixed(2)} wagered` },
-  { label: 'Win Rate', value: R.resolved > 0 ? `${R.win_rate}%` : '—', cls: R.win_rate >= 50 ? 'green' : 'red', sub: `${R.wins}W - ${R.losses}L (${R.resolved} resolved)` },
-  { label: 'Open Bets', value: R.open_count, cls: 'blue', sub: `$${R.open_cost.toFixed(2)} at risk` },
-  { label: 'Pending', value: R.pending_count, cls: 'purple', sub: 'awaiting settlement' },
+// Sports KPIs
+const sRoi = SR.total_wagered > 0 ? (SR.total_pnl / SR.total_wagered * 100).toFixed(1) : '0';
+const sportsKpis = [
+  { label: 'Balance', value: SR.balance > 0 ? `$${SR.balance.toFixed(2)}` : '--', cls: 'cyan', sub: SR.portfolio_value > 0 ? `$${SR.portfolio_value.toFixed(2)} portfolio` : '' },
+  { label: 'Sports P&L', value: `$${SR.total_pnl >= 0 ? '+' : ''}${SR.total_pnl.toFixed(2)}`, cls: SR.total_pnl >= 0 ? 'green' : 'red', sub: `${SR.total_bets} total bets` },
+  { label: 'ROI', value: `${sRoi}%`, cls: parseFloat(sRoi) >= 0 ? 'green' : 'red', sub: `$${SR.total_wagered.toFixed(2)} wagered` },
+  { label: 'Win Rate', value: SR.resolved > 0 ? `${SR.win_rate}%` : '--', cls: SR.win_rate >= 50 ? 'green' : 'red', sub: `${SR.wins}W - ${SR.losses}L` },
+  { label: 'Open', value: SR.open_count, cls: 'blue', sub: `$${SR.open_cost.toFixed(2)} at risk` },
+  { label: 'Pending', value: SR.pending_count, cls: 'purple', sub: 'awaiting settlement' },
 ];
-document.getElementById('kpis').innerHTML = kpis.map(k =>
+document.getElementById('sportsKpis').innerHTML = sportsKpis.map(k =>
   `<div class="kpi"><div class="label">${k.label}</div><div class="value ${k.cls}">${k.value}</div><div class="sub">${k.sub}</div></div>`
 ).join('');
 
-// ═══ Cumulative P&L Chart ═══
-const resolved = BETS.filter(b => b.result === 'win' || b.result === 'loss')
+// Sports cumulative P&L chart
+const sResolved = SPORTS_BETS.filter(b => b.result === 'win' || b.result === 'loss')
   .sort((a, b) => (a.timestamp || '').localeCompare(b.timestamp || ''));
 
-if (resolved.length > 0) {
+if (sResolved.length > 0) {
   let cumPnl = 0;
-  const cumData = resolved.map(b => {
+  const cumData = sResolved.map(b => {
     cumPnl += (b.pnl || 0);
-    return { x: getDate(b.timestamp), y: parseFloat(cumPnl.toFixed(2)), pnl: b.pnl || 0, title: b.title, strat: b.strategy };
+    return { x: getDate(b.timestamp), y: parseFloat(cumPnl.toFixed(2)), pnl: b.pnl || 0, strat: b.strategy };
   });
-
-  new Chart(document.getElementById('pnlChart'), {
+  new Chart(document.getElementById('sportsPnlChart'), {
     type: 'line',
-    data: {
-      labels: cumData.map(d => d.x),
-      datasets: [{
-        data: cumData.map(d => d.y),
-        borderColor: '#14b8a6',
-        backgroundColor: 'rgba(20,184,166,0.1)',
-        fill: true, tension: 0.3, pointRadius: 4, borderWidth: 2,
-        pointBackgroundColor: cumData.map(d => stratColors[d.strat] || '#14b8a6'),
-        pointBorderColor: cumData.map(d => stratColors[d.strat] || '#14b8a6'),
-      }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: { callbacks: { label: (ctx) => {
-          const d = cumData[ctx.dataIndex];
-          return [`Cum P&L: $${d.y.toFixed(2)}`, `This bet: ${d.pnl >= 0 ? '+' : ''}$${d.pnl.toFixed(2)}`, (d.title || '').substring(0, 40), stratNames[d.strat] || d.strat];
-        }}}
-      },
-      scales: {
-        x: { display: false },
-        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3', callback: v => '$' + v } }
-      }
-    }
+    data: { labels: cumData.map(d => d.x), datasets: [{ data: cumData.map(d => d.y), borderColor: '#14b8a6', backgroundColor: 'rgba(20,184,166,0.1)', fill: true, tension: 0.3, pointRadius: 4, borderWidth: 2 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3', callback: v => '$' + v } } } }
   });
 } else {
-  document.getElementById('pnlChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:300px;color:var(--muted)">No resolved bets yet</div>';
+  document.getElementById('sportsPnlChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:300px;color:var(--muted)">No resolved bets yet</div>';
 }
 
-// ═══ Win/Loss by League Chart ═══
-const leagueStats = {};
-BETS.forEach(b => {
+// Sports league stats
+const sLeagueStats = {};
+SPORTS_BETS.forEach(b => {
   const lg = b.league || 'Unknown';
-  if (!leagueStats[lg]) leagueStats[lg] = { wins: 0, losses: 0, pnl: 0, bets: 0, wagered: 0, open: 0 };
-  leagueStats[lg].bets++;
-  leagueStats[lg].wagered += b.bet_amount || 0;
-  if (b.result === 'win') { leagueStats[lg].wins++; leagueStats[lg].pnl += (b.pnl || 0); }
-  else if (b.result === 'loss') { leagueStats[lg].losses++; leagueStats[lg].pnl += (b.pnl || 0); }
-  else { leagueStats[lg].open++; }
+  if (!sLeagueStats[lg]) sLeagueStats[lg] = { wins: 0, losses: 0, pnl: 0, bets: 0, wagered: 0, open: 0 };
+  sLeagueStats[lg].bets++;
+  sLeagueStats[lg].wagered += b.bet_amount || 0;
+  if (b.result === 'win') { sLeagueStats[lg].wins++; sLeagueStats[lg].pnl += (b.pnl || 0); }
+  else if (b.result === 'loss') { sLeagueStats[lg].losses++; sLeagueStats[lg].pnl += (b.pnl || 0); }
+  else { sLeagueStats[lg].open++; }
 });
+const sLgNames = Object.keys(sLeagueStats).sort((a, b) => sLeagueStats[b].bets - sLeagueStats[a].bets);
 
-const lgNames = Object.keys(leagueStats).sort((a, b) => leagueStats[b].bets - leagueStats[a].bets);
-if (lgNames.length > 0 && resolved.length > 0) {
-  new Chart(document.getElementById('leagueChart'), {
+if (sLgNames.length > 0 && sResolved.length > 0) {
+  new Chart(document.getElementById('sportsLeagueChart'), {
     type: 'bar',
-    data: {
-      labels: lgNames,
-      datasets: [
-        { label: 'Wins', data: lgNames.map(s => leagueStats[s].wins), backgroundColor: 'rgba(34,197,94,0.7)', borderRadius: 4 },
-        { label: 'Losses', data: lgNames.map(s => leagueStats[s].losses), backgroundColor: 'rgba(239,68,68,0.7)', borderRadius: 4 },
-      ]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { labels: { color: '#8b8fa3' } } },
-      scales: {
-        x: { stacked: true, grid: { display: false }, ticks: { color: '#8b8fa3', font: { size: 10 } } },
-        y: { stacked: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3' } }
-      }
-    }
+    data: { labels: sLgNames, datasets: [
+      { label: 'Wins', data: sLgNames.map(s => sLeagueStats[s].wins), backgroundColor: 'rgba(34,197,94,0.7)', borderRadius: 4 },
+      { label: 'Losses', data: sLgNames.map(s => sLeagueStats[s].losses), backgroundColor: 'rgba(239,68,68,0.7)', borderRadius: 4 },
+    ] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#8b8fa3' } } }, scales: { x: { stacked: true, grid: { display: false }, ticks: { color: '#8b8fa3', font: { size: 10 } } }, y: { stacked: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3' } } } }
   });
 } else {
-  document.getElementById('leagueChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:300px;color:var(--muted)">No resolved bets yet</div>';
+  document.getElementById('sportsLeagueChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:300px;color:var(--muted)">No resolved bets yet</div>';
 }
 
-// ═══ Strategy Breakdown ═══
-const stratStats = {};
-BETS.forEach(b => {
+// Sports strategy breakdown
+const sStratStats = {};
+SPORTS_BETS.forEach(b => {
   const s = b.strategy || 'Unknown';
-  if (!stratStats[s]) stratStats[s] = { bets: 0, wins: 0, losses: 0, pnl: 0, open: 0, wagered: 0 };
-  stratStats[s].bets++;
-  stratStats[s].wagered += b.bet_amount || 0;
-  if (b.result === 'win') { stratStats[s].wins++; stratStats[s].pnl += (b.pnl || 0); }
-  else if (b.result === 'loss') { stratStats[s].losses++; stratStats[s].pnl += (b.pnl || 0); }
-  else { stratStats[s].open++; }
+  if (!sStratStats[s]) sStratStats[s] = { bets: 0, wins: 0, losses: 0, pnl: 0, open: 0, wagered: 0 };
+  sStratStats[s].bets++;
+  sStratStats[s].wagered += b.bet_amount || 0;
+  if (b.result === 'win') { sStratStats[s].wins++; sStratStats[s].pnl += (b.pnl || 0); }
+  else if (b.result === 'loss') { sStratStats[s].losses++; sStratStats[s].pnl += (b.pnl || 0); }
+  else { sStratStats[s].open++; }
 });
 
-const stratEl = document.getElementById('stratContent');
-if (R.total_bets === 0) {
-  stratEl.innerHTML = `
-    <div class="card">
-      <div class="empty-state">
-        <div class="icon">&#x1F4CA;</div>
-        <div class="msg">No bets placed yet</div>
-        <div class="sub">Run <code>python3 kalshi_bot.py --live</code> to start the automated strategy</div>
-      </div>
-    </div>`;
+const stratEl = document.getElementById('sportsStratContent');
+if (SR.total_bets === 0) {
+  stratEl.innerHTML = '<div class="card"><div class="empty-state"><div class="msg">No sports bets yet</div><div class="sub">Run <code>python3 kalshi_bot.py --live</code></div></div></div>';
 } else {
-  let html = '<div class="card" style="margin-bottom:20px"><div class="scroll-table"><table><thead><tr><th>Strategy</th><th>Description</th><th>Bets</th><th>W-L</th><th>Win Rate</th><th>P&L</th><th>Wagered</th><th>ROI</th><th>Open</th><th>Backtest WR</th></tr></thead><tbody>';
+  let html = '<div class="card" style="margin-bottom:20px"><div class="scroll-table"><table><thead><tr><th>Strategy</th><th>Description</th><th>Bets</th><th>W-L</th><th>Win Rate</th><th>P&L</th><th>Wagered</th><th>ROI</th><th>Open</th></tr></thead><tbody>';
   for (const s of ['S1', 'S2', 'S3', 'S4']) {
-    const st = stratStats[s] || { bets: 0, wins: 0, losses: 0, pnl: 0, open: 0, wagered: 0 };
+    const st = sStratStats[s] || { bets: 0, wins: 0, losses: 0, pnl: 0, open: 0, wagered: 0 };
     if (st.bets === 0) continue;
-    const wr = (st.wins + st.losses) > 0 ? (st.wins / (st.wins + st.losses) * 100).toFixed(1) + '%' : '—';
-    const sRoi = st.wagered > 0 ? (st.pnl / st.wagered * 100).toFixed(1) + '%' : '—';
-    const pnlColor = st.pnl >= 0 ? 'var(--green)' : 'var(--red)';
-    html += `<tr>
-      <td>${stratTag(s)}</td>
-      <td style="color:${stratColors[s]}">${stratNames[s]}</td>
-      <td>${st.bets}</td>
-      <td>${st.wins}W-${st.losses}L</td>
-      <td>${wr}</td>
-      <td style="color:${pnlColor}">$${st.pnl >= 0 ? '+' : ''}${st.pnl.toFixed(2)}</td>
-      <td>$${st.wagered.toFixed(2)}</td>
-      <td style="color:${pnlColor}">${sRoi}</td>
-      <td>${st.open}</td>
-      <td>${stratBacktest[s] || '—'}</td>
-    </tr>`;
+    const wr = (st.wins + st.losses) > 0 ? (st.wins / (st.wins + st.losses) * 100).toFixed(1) + '%' : '--';
+    const roi = st.wagered > 0 ? (st.pnl / st.wagered * 100).toFixed(1) + '%' : '--';
+    const pc = st.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    html += `<tr><td>${stratTag(s)}</td><td style="color:${stratColors[s]}">${stratNames[s]}</td><td>${st.bets}</td><td>${st.wins}W-${st.losses}L</td><td>${wr}</td><td style="color:${pc}">$${st.pnl >= 0 ? '+' : ''}${st.pnl.toFixed(2)}</td><td>$${st.wagered.toFixed(2)}</td><td style="color:${pc}">${roi}</td><td>${st.open}</td></tr>`;
   }
   html += '</tbody></table></div></div>';
   stratEl.innerHTML = html;
 }
 
-// ═══ League Breakdown Table ═══
-const leagueEl = document.getElementById('leagueContent');
-if (lgNames.length > 0) {
+// Sports league breakdown table
+const sLeagueEl = document.getElementById('sportsLeagueContent');
+if (sLgNames.length > 0) {
   let html = '<div class="card" style="margin-bottom:20px"><div class="scroll-table"><table><thead><tr><th>League</th><th>Bets</th><th>W-L</th><th>Win Rate</th><th>P&L</th><th>Wagered</th><th>ROI</th><th>Open</th></tr></thead><tbody>';
-  for (const lg of lgNames) {
-    const s = leagueStats[lg];
-    const wr = (s.wins + s.losses) > 0 ? (s.wins / (s.wins + s.losses) * 100).toFixed(1) + '%' : '—';
-    const lRoi = s.wagered > 0 ? (s.pnl / s.wagered * 100).toFixed(1) + '%' : '—';
-    const pnlColor = s.pnl >= 0 ? 'var(--green)' : 'var(--red)';
-    html += `<tr>
-      <td><span class="league-tag">${lg}</span></td>
-      <td>${s.bets}</td>
-      <td>${s.wins}W-${s.losses}L</td>
-      <td>${wr}</td>
-      <td style="color:${pnlColor}">$${s.pnl >= 0 ? '+' : ''}${s.pnl.toFixed(2)}</td>
-      <td>$${s.wagered.toFixed(2)}</td>
-      <td style="color:${pnlColor}">${lRoi}</td>
-      <td>${s.open}</td>
-    </tr>`;
+  for (const lg of sLgNames) {
+    const s = sLeagueStats[lg];
+    const wr = (s.wins + s.losses) > 0 ? (s.wins / (s.wins + s.losses) * 100).toFixed(1) + '%' : '--';
+    const roi = s.wagered > 0 ? (s.pnl / s.wagered * 100).toFixed(1) + '%' : '--';
+    const pc = s.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    html += `<tr><td><span class="league-tag">${lg}</span></td><td>${s.bets}</td><td>${s.wins}W-${s.losses}L</td><td>${wr}</td><td style="color:${pc}">$${s.pnl >= 0 ? '+' : ''}${s.pnl.toFixed(2)}</td><td>$${s.wagered.toFixed(2)}</td><td style="color:${pc}">${roi}</td><td>${s.open}</td></tr>`;
   }
   html += '</tbody></table></div></div>';
-  leagueEl.innerHTML = html;
-} else {
-  leagueEl.innerHTML = '';
+  sLeagueEl.innerHTML = html;
 }
 
-// ═══ P&L by League Bar Chart ═══
-if (lgNames.length > 0 && resolved.length > 0) {
-  new Chart(document.getElementById('leaguePnlChart'), {
+// Sports P&L by League chart
+if (sLgNames.length > 0 && sResolved.length > 0) {
+  new Chart(document.getElementById('sportsLeaguePnlChart'), {
     type: 'bar',
-    data: {
-      labels: lgNames,
-      datasets: [{
-        data: lgNames.map(s => parseFloat(leagueStats[s].pnl.toFixed(2))),
-        backgroundColor: lgNames.map(s => leagueStats[s].pnl >= 0 ? 'rgba(34,197,94,0.7)' : 'rgba(239,68,68,0.7)'),
-        borderRadius: 4,
-      }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { grid: { display: false }, ticks: { color: '#8b8fa3', font: { size: 10 } } },
-        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3', callback: v => '$' + v } }
-      }
-    }
+    data: { labels: sLgNames, datasets: [{ data: sLgNames.map(s => parseFloat(sLeagueStats[s].pnl.toFixed(2))), backgroundColor: sLgNames.map(s => sLeagueStats[s].pnl >= 0 ? 'rgba(34,197,94,0.7)' : 'rgba(239,68,68,0.7)'), borderRadius: 4 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { color: '#8b8fa3', font: { size: 10 } } }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3', callback: v => '$' + v } } } }
   });
 } else {
-  document.getElementById('leaguePnlChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:260px;color:var(--muted)">No data</div>';
+  document.getElementById('sportsLeaguePnlChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:260px;color:var(--muted)">No data</div>';
 }
 
-// ═══ P&L by Strategy Bar Chart ═══
-const stratKeys = ['S1', 'S2', 'S3', 'S4'].filter(s => stratStats[s] && stratStats[s].bets > 0);
-if (stratKeys.length > 0 && resolved.length > 0) {
-  new Chart(document.getElementById('stratPnlChart'), {
+// Sports P&L by Strategy chart
+const sStratKeys = ['S1', 'S2', 'S3', 'S4'].filter(s => sStratStats[s] && sStratStats[s].bets > 0);
+if (sStratKeys.length > 0 && sResolved.length > 0) {
+  new Chart(document.getElementById('sportsStratPnlChart'), {
     type: 'bar',
-    data: {
-      labels: stratKeys.map(s => `${s}: ${stratNames[s]}`),
-      datasets: [{
-        data: stratKeys.map(s => parseFloat((stratStats[s].pnl || 0).toFixed(2))),
-        backgroundColor: stratKeys.map(s => {
-          const p = (stratStats[s] || {}).pnl || 0;
-          return p >= 0 ? 'rgba(34,197,94,0.7)' : 'rgba(239,68,68,0.7)';
-        }),
-        borderRadius: 4,
-      }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { grid: { display: false }, ticks: { color: '#8b8fa3', font: { size: 10 } } },
-        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3', callback: v => '$' + v } }
-      }
-    }
+    data: { labels: sStratKeys.map(s => `${s}: ${stratNames[s]}`), datasets: [{ data: sStratKeys.map(s => parseFloat((sStratStats[s].pnl || 0).toFixed(2))), backgroundColor: sStratKeys.map(s => (sStratStats[s] || {}).pnl >= 0 ? 'rgba(34,197,94,0.7)' : 'rgba(239,68,68,0.7)'), borderRadius: 4 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { color: '#8b8fa3', font: { size: 10 } } }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3', callback: v => '$' + v } } } }
   });
 } else {
-  document.getElementById('stratPnlChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:260px;color:var(--muted)">No data</div>';
+  document.getElementById('sportsStratPnlChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:260px;color:var(--muted)">No data</div>';
 }
 
-// ═══ All Bets Table ═══
-const allRows = BETS.map(b => ({
-  date: b.timestamp,
-  title: b.title || b.ticker,
-  label: b.label || b.side,
-  strategy: b.strategy,
-  league: b.league || 'Unknown',
-  price: b.price || 0,
-  amount: b.bet_amount || 0,
-  pnl: b.pnl || null,
-  result: b.result || 'pending',
+// Sports bets table
+const sportsRows = SPORTS_BETS.map(b => ({
+  date: b.timestamp, title: b.title || b.ticker, label: b.label || b.side,
+  strategy: b.strategy, league: b.league || 'Unknown',
+  price: b.price || 0, amount: b.bet_amount || 0,
+  pnl: b.pnl || null, result: b.result || 'pending',
 })).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
-function renderTable(filter) {
-  let rows = allRows;
+function renderSportsTable(filter) {
+  let rows = sportsRows;
   if (filter === 'resolved') rows = rows.filter(r => r.result === 'win' || r.result === 'loss');
   if (filter === 'open') rows = rows.filter(r => r.result === 'open');
   if (filter === 'wins') rows = rows.filter(r => r.result === 'win');
   if (filter === 'losses') rows = rows.filter(r => r.result === 'loss');
   if (['S1', 'S2', 'S3', 'S4'].includes(filter)) rows = rows.filter(r => r.strategy === filter);
-
-  document.getElementById('betsBody').innerHTML = rows.map(r => `
+  document.getElementById('sportsBetsBody').innerHTML = rows.map(r => `
     <tr>
       <td>${r.date ? getDate(r.date) : '-'}</td>
       <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis">${r.title}</td>
@@ -597,13 +582,152 @@ function renderTable(filter) {
     </tr>
   `).join('');
 }
-
-function filterTable(f) {
-  document.querySelectorAll('#mainTabs .tab').forEach(t => t.classList.remove('active'));
-  event.target.classList.add('active');
-  renderTable(f);
+function filterSportsTable(f, el) {
+  document.querySelectorAll('#sportsTabs .tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  renderSportsTable(f);
 }
-renderTable('all');
+renderSportsTable('all');
+
+
+// ═══════════════════════════════════════════════════════════════
+// CRYPTO
+// ═══════════════════════════════════════════════════════════════
+
+// Crypto KPIs
+const cRoi = CR.total_wagered > 0 ? (CR.total_pnl / CR.total_wagered * 100).toFixed(1) : '0';
+const cryptoKpis = [
+  { label: 'Balance', value: CR.balance > 0 ? `$${CR.balance.toFixed(2)}` : '--', cls: 'orange', sub: 'Shared Kalshi balance' },
+  { label: 'Crypto P&L', value: `$${CR.total_pnl >= 0 ? '+' : ''}${CR.total_pnl.toFixed(2)}`, cls: CR.total_pnl >= 0 ? 'green' : 'red', sub: `${CR.total_bets} total trades` },
+  { label: 'ROI', value: `${cRoi}%`, cls: parseFloat(cRoi) >= 0 ? 'green' : 'red', sub: `$${CR.total_wagered.toFixed(2)} wagered` },
+  { label: 'Win Rate', value: CR.resolved > 0 ? `${CR.win_rate}%` : '--', cls: CR.win_rate >= 50 ? 'green' : 'red', sub: `${CR.wins}W - ${CR.losses}L` },
+  { label: 'Open', value: CR.open_count, cls: 'blue', sub: `$${CR.open_cost.toFixed(2)} at risk` },
+  { label: 'Strategy', value: '15m', cls: 'orange', sub: 'Late entry dominant side' },
+];
+document.getElementById('cryptoKpis').innerHTML = cryptoKpis.map(k =>
+  `<div class="kpi"><div class="label">${k.label}</div><div class="value ${k.cls}">${k.value}</div><div class="sub">${k.sub}</div></div>`
+).join('');
+
+// Crypto cumulative P&L chart
+const cResolved = CRYPTO_BETS.filter(b => b.result === 'win' || b.result === 'loss')
+  .sort((a, b) => (a.timestamp || '').localeCompare(b.timestamp || ''));
+
+if (cResolved.length > 0) {
+  let cumPnl = 0;
+  const cumData = cResolved.map(b => {
+    cumPnl += (b.pnl || 0);
+    return { x: getDate(b.timestamp), y: parseFloat(cumPnl.toFixed(2)), pnl: b.pnl || 0, crypto: b.crypto };
+  });
+  new Chart(document.getElementById('cryptoPnlChart'), {
+    type: 'line',
+    data: { labels: cumData.map(d => d.x), datasets: [{ data: cumData.map(d => d.y), borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.1)', fill: true, tension: 0.3, pointRadius: 4, borderWidth: 2, pointBackgroundColor: cumData.map(d => cryptoColors[d.crypto] || '#f59e0b') }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => { const d = cumData[ctx.dataIndex]; return [`Cum P&L: $${d.y.toFixed(2)}`, `This: ${d.pnl >= 0 ? '+' : ''}$${d.pnl.toFixed(4)}`, d.crypto]; } } } }, scales: { x: { display: false }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3', callback: v => '$' + v } } } }
+  });
+} else {
+  document.getElementById('cryptoPnlChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:300px;color:var(--muted)">No resolved crypto trades yet</div>';
+}
+
+// Crypto stats by asset
+const cAssetStats = {};
+CRYPTO_BETS.forEach(b => {
+  const c = b.crypto || 'Unknown';
+  if (!cAssetStats[c]) cAssetStats[c] = { wins: 0, losses: 0, pnl: 0, bets: 0, wagered: 0, open: 0, window: b.entry_window || 0 };
+  cAssetStats[c].bets++;
+  cAssetStats[c].wagered += b.bet_amount || 0;
+  if (b.result === 'win') { cAssetStats[c].wins++; cAssetStats[c].pnl += (b.pnl || 0); }
+  else if (b.result === 'loss') { cAssetStats[c].losses++; cAssetStats[c].pnl += (b.pnl || 0); }
+  else { cAssetStats[c].open++; }
+});
+const cAssetNames = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE'].filter(c => cAssetStats[c]);
+
+// Win/Loss by Crypto chart
+if (cAssetNames.length > 0 && cResolved.length > 0) {
+  new Chart(document.getElementById('cryptoByAssetChart'), {
+    type: 'bar',
+    data: { labels: cAssetNames, datasets: [
+      { label: 'Wins', data: cAssetNames.map(c => cAssetStats[c].wins), backgroundColor: 'rgba(34,197,94,0.7)', borderRadius: 4 },
+      { label: 'Losses', data: cAssetNames.map(c => cAssetStats[c].losses), backgroundColor: 'rgba(239,68,68,0.7)', borderRadius: 4 },
+    ] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#8b8fa3' } } }, scales: { x: { stacked: true, grid: { display: false }, ticks: { color: '#8b8fa3' } }, y: { stacked: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3' } } } }
+  });
+} else {
+  document.getElementById('cryptoByAssetChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:300px;color:var(--muted)">No resolved crypto trades yet</div>';
+}
+
+// Crypto asset performance table
+const cryptoAssetEl = document.getElementById('cryptoAssetContent');
+const entryWindows = { BTC: '10 min', ETH: '3 min', SOL: '2 min', XRP: '4 min', DOGE: '3 min' };
+if (CR.total_bets === 0) {
+  cryptoAssetEl.innerHTML = '<div class="card"><div class="empty-state"><div class="msg">No crypto trades yet</div><div class="sub">Bot runs every 15 minutes on Railway</div></div></div>';
+} else {
+  let html = '<div class="card" style="margin-bottom:20px"><div class="scroll-table"><table><thead><tr><th>Crypto</th><th>Entry Window</th><th>Bets</th><th>W-L</th><th>Win Rate</th><th>P&L</th><th>Wagered</th><th>ROI</th><th>Open</th></tr></thead><tbody>';
+  for (const c of cAssetNames) {
+    const s = cAssetStats[c];
+    const wr = (s.wins + s.losses) > 0 ? (s.wins / (s.wins + s.losses) * 100).toFixed(1) + '%' : '--';
+    const roi = s.wagered > 0 ? (s.pnl / s.wagered * 100).toFixed(1) + '%' : '--';
+    const pc = s.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    html += `<tr><td>${cryptoTag(c)}</td><td>${entryWindows[c] || '--'}</td><td>${s.bets}</td><td>${s.wins}W-${s.losses}L</td><td>${wr}</td><td style="color:${pc}">$${s.pnl >= 0 ? '+' : ''}${s.pnl.toFixed(2)}</td><td>$${s.wagered.toFixed(2)}</td><td style="color:${pc}">${roi}</td><td>${s.open}</td></tr>`;
+  }
+  html += '</tbody></table></div></div>';
+  cryptoAssetEl.innerHTML = html;
+}
+
+// P&L by Crypto chart
+if (cAssetNames.length > 0 && cResolved.length > 0) {
+  new Chart(document.getElementById('cryptoAssetPnlChart'), {
+    type: 'bar',
+    data: { labels: cAssetNames, datasets: [{ data: cAssetNames.map(c => parseFloat(cAssetStats[c].pnl.toFixed(2))), backgroundColor: cAssetNames.map(c => cryptoColors[c] || '#f59e0b'), borderRadius: 4 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { color: '#8b8fa3' } }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3', callback: v => '$' + v } } } }
+  });
+} else {
+  document.getElementById('cryptoAssetPnlChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:260px;color:var(--muted)">No data</div>';
+}
+
+// Entry window chart (bets per crypto with window label)
+if (cAssetNames.length > 0) {
+  new Chart(document.getElementById('cryptoWindowChart'), {
+    type: 'bar',
+    data: { labels: cAssetNames.map(c => `${c} (${entryWindows[c]})`), datasets: [{ label: 'Trades', data: cAssetNames.map(c => cAssetStats[c].bets), backgroundColor: cAssetNames.map(c => cryptoColors[c] || '#f59e0b'), borderRadius: 4 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { color: '#8b8fa3' } }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3' } } } }
+  });
+} else {
+  document.getElementById('cryptoWindowChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:260px;color:var(--muted)">No data</div>';
+}
+
+// Crypto bets table
+const cryptoRows = CRYPTO_BETS.map(b => ({
+  date: b.timestamp, crypto: b.crypto || '?', side: b.side || '?',
+  window: b.entry_window || 0, price: b.price || 0,
+  amount: b.bet_amount || 0, pnl: b.pnl || null,
+  result: b.result || 'pending',
+})).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+function renderCryptoTable(filter) {
+  let rows = cryptoRows;
+  if (filter === 'resolved') rows = rows.filter(r => r.result === 'win' || r.result === 'loss');
+  if (filter === 'open') rows = rows.filter(r => r.result === 'open');
+  if (filter === 'wins') rows = rows.filter(r => r.result === 'win');
+  if (filter === 'losses') rows = rows.filter(r => r.result === 'loss');
+  if (['BTC', 'ETH', 'SOL', 'XRP', 'DOGE'].includes(filter)) rows = rows.filter(r => r.crypto === filter);
+  document.getElementById('cryptoBetsBody').innerHTML = rows.map(r => `
+    <tr>
+      <td>${r.date ? getDate(r.date) : '-'}</td>
+      <td>${cryptoTag(r.crypto)}</td>
+      <td>${r.side.toUpperCase()}</td>
+      <td>${r.window} min</td>
+      <td>${(r.price * 100).toFixed(1)}c</td>
+      <td>$${r.amount.toFixed(2)}</td>
+      <td>${r.result === 'win' || r.result === 'loss' ? pnlHtml(r.pnl) : '-'}</td>
+      <td><span class="tag ${r.result}">${r.result.toUpperCase()}</span></td>
+    </tr>
+  `).join('');
+}
+function filterCryptoTable(f, el) {
+  document.querySelectorAll('#cryptoTabs .tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  renderCryptoTable(f);
+}
+renderCryptoTable('all');
 </script>
 </body>
 </html>
