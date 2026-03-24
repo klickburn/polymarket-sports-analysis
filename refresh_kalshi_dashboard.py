@@ -2,6 +2,7 @@
 Kalshi Dashboard Refresh
 ========================
 Fetches Kalshi bot data and rebuilds the Kalshi dashboard HTML.
+Crypto bets are fetched directly from the Kalshi API (orders + market status).
 
 Usage:
     python3 refresh_kalshi_dashboard.py
@@ -10,6 +11,7 @@ Usage:
 import json
 import os
 import sys
+import time
 from datetime import datetime, timezone
 
 
@@ -17,7 +19,17 @@ def P(msg=""):
     print(msg, flush=True)
 
 
-P("  [1/3] Loading Kalshi bot data...")
+# Crypto series prefixes — used to identify crypto 15m bot orders
+CRYPTO_SERIES = {
+    "KXBTC15M": "BTC",
+    "KXETH15M": "ETH",
+    "KXSOL15M": "SOL",
+    "KXXRP15M": "XRP",
+    "KXDOGE15M": "DOGE",
+}
+
+
+P("  [1/4] Loading Kalshi bot data...")
 
 # Load bot bets
 bets_file = "kalshi_bets.json"
@@ -40,13 +52,13 @@ KALSHI_PRIVATE_KEY = os.environ.get("KALSHI_PRIVATE_KEY", "")
 
 if KALSHI_KEY_ID and KALSHI_PRIVATE_KEY:
     try:
-        from kalshi_bot import get_balance, get_existing_positions, auth_get
+        from kalshi_bot import get_balance, get_existing_positions, auth_get, public_get
         bal = get_balance()
         if bal:
             balance_info = bal
 
         # Try to get settlement info for placed bets
-        P("  Checking bet outcomes...")
+        P("  Checking sports bet outcomes...")
         positions = get_existing_positions()
         for bet in bot_bets:
             ticker = bet.get("ticker", "")
@@ -55,7 +67,6 @@ if KALSHI_KEY_ID and KALSHI_PRIVATE_KEY:
             # Check if market has settled
             if "result" not in bet or bet.get("result") == "pending":
                 try:
-                    from kalshi_bot import public_get
                     mkt = public_get(f"/markets/{ticker}")
                     market = mkt.get("market", {})
                     status = market.get("status", "")
@@ -90,61 +101,127 @@ if KALSHI_KEY_ID and KALSHI_PRIVATE_KEY:
 
 P(f"  Loaded {len(bot_bets)} sports bets")
 
-# Load crypto bets
-crypto_bets_file = "crypto_15m_bets.json"
+# ── Fetch crypto bets directly from Kalshi API ──────────────────────────
 crypto_bets = []
-if os.path.exists(crypto_bets_file):
-    with open(crypto_bets_file) as f:
-        crypto_bets = json.load(f)
+crypto_status = {}
 
 crypto_status_file = "crypto_15m_status.json"
-crypto_status = {}
 if os.path.exists(crypto_status_file):
     with open(crypto_status_file) as f:
         crypto_status = json.load(f)
 
-P(f"  Loaded {len(crypto_bets)} crypto bets")
-
-# Check crypto bet outcomes if API available
 if KALSHI_KEY_ID and KALSHI_PRIVATE_KEY:
     try:
-        from kalshi_bot import public_get
-        P("  Checking crypto bet outcomes...")
-        for bet in crypto_bets:
-            ticker = bet.get("ticker", "")
-            if not ticker:
-                continue
-            if bet.get("result") not in ("win", "loss"):
-                try:
-                    mkt = public_get(f"/markets/{ticker}")
-                    market = mkt.get("market", {})
-                    status = market.get("status", "")
-                    result_val = market.get("result", "")
-                    if status in ("settled", "finalized") and result_val:
-                        won = (result_val == "yes" and bet.get("side") == "yes") or \
-                              (result_val == "no" and bet.get("side") == "no")
-                        bet["result"] = "win" if won else "loss"
-                        bet["market_result"] = result_val
-                        price = bet.get("price", 0)
-                        amount = bet.get("bet_amount", 0)
-                        contracts = int(amount / price) if price > 0 else 0
-                        if won:
-                            bet["pnl"] = round(contracts * (1.0 - price), 2)
-                        else:
-                            bet["pnl"] = round(-contracts * price, 2)
-                    elif status == "open":
-                        bet["result"] = "open"
-                    else:
-                        bet["result"] = "pending"
-                except Exception:
-                    pass
-        with open(crypto_bets_file, "w") as f:
-            json.dump(crypto_bets, f, indent=2, default=str)
-    except Exception as e:
-        P(f"  WARNING: Could not check crypto outcomes: {e}")
+        from kalshi_bot import auth_get, public_get
+        P("  [2/4] Fetching crypto orders from Kalshi API...")
 
-# Step 2: Build reports
-P("  [2/3] Building reports...")
+        # Fetch all filled orders, paginating through results
+        all_fills = []
+        cursor = None
+        while True:
+            params = {"limit": 200}
+            if cursor:
+                params["cursor"] = cursor
+            time.sleep(0.3)
+            data = auth_get("/portfolio/fills", params=params)
+            fills = data.get("fills", [])
+            all_fills.extend(fills)
+            cursor = data.get("cursor")
+            if not cursor or not fills:
+                break
+
+        P(f"  Fetched {len(all_fills)} total fills from Kalshi")
+
+        # Filter to crypto 15m fills only and group by ticker
+        crypto_fills_by_ticker = {}
+        for fill in all_fills:
+            ticker = fill.get("ticker", "")
+            # Match any crypto 15m series prefix
+            matched_crypto = None
+            for prefix, crypto_name in CRYPTO_SERIES.items():
+                if ticker.startswith(prefix):
+                    matched_crypto = crypto_name
+                    break
+            if not matched_crypto:
+                continue
+
+            if ticker not in crypto_fills_by_ticker:
+                crypto_fills_by_ticker[ticker] = {
+                    "ticker": ticker,
+                    "crypto": matched_crypto,
+                    "side": fill.get("side", ""),
+                    "fills": [],
+                    "total_count": 0,
+                    "total_cost": 0,
+                    "timestamp": fill.get("created_time", ""),
+                }
+            entry = crypto_fills_by_ticker[ticker]
+            entry["fills"].append(fill)
+            count = fill.get("count", 0)
+            # yes_price and no_price are in cents
+            if entry["side"] == "yes":
+                price_cents = fill.get("yes_price", 0)
+            else:
+                price_cents = fill.get("no_price", 0)
+            entry["total_count"] += count
+            entry["total_cost"] += count * price_cents
+            # Use earliest fill time as timestamp
+            fill_time = fill.get("created_time", "")
+            if fill_time and (not entry["timestamp"] or fill_time < entry["timestamp"]):
+                entry["timestamp"] = fill_time
+
+        P(f"  Found {len(crypto_fills_by_ticker)} crypto 15m positions")
+
+        # Build crypto bets list and check market outcomes
+        for ticker, entry in sorted(crypto_fills_by_ticker.items(), key=lambda x: x[1]["timestamp"]):
+            avg_price = entry["total_cost"] / entry["total_count"] / 100 if entry["total_count"] else 0
+            bet = {
+                "ticker": ticker,
+                "crypto": entry["crypto"],
+                "side": entry["side"],
+                "price": round(avg_price, 4),
+                "bet_amount": round(entry["total_cost"] / 100, 2),
+                "contracts": entry["total_count"],
+                "timestamp": entry["timestamp"],
+                "result": "open",
+            }
+
+            # Check market outcome
+            try:
+                time.sleep(0.2)
+                mkt = public_get(f"/markets/{ticker}")
+                market = mkt.get("market", {})
+                status = market.get("status", "")
+                result_val = market.get("result", "")
+                if status in ("settled", "finalized") and result_val:
+                    won = (result_val == "yes" and bet["side"] == "yes") or \
+                          (result_val == "no" and bet["side"] == "no")
+                    bet["result"] = "win" if won else "loss"
+                    bet["market_result"] = result_val
+                    if won:
+                        bet["pnl"] = round(entry["total_count"] * (1.0 - avg_price), 2)
+                    else:
+                        bet["pnl"] = round(-entry["total_count"] * avg_price, 2)
+                elif status == "open":
+                    bet["result"] = "open"
+                else:
+                    bet["result"] = "pending"
+            except Exception:
+                pass
+
+            crypto_bets.append(bet)
+
+        P(f"  Crypto: {len(crypto_bets)} bets fetched from API")
+
+    except Exception as e:
+        P(f"  WARNING: Could not fetch crypto data from API: {e}")
+        import traceback
+        traceback.print_exc()
+else:
+    P("  [2/4] No Kalshi API keys — skipping crypto fetch")
+
+# Step 3: Build reports
+P("  [3/4] Building reports...")
 
 
 def build_report(bets):
@@ -176,8 +253,8 @@ def build_report(bets):
 report = build_report(bot_bets)
 crypto_report = build_report(crypto_bets)
 
-# Step 3: Build dashboard
-P("  [3/3] Building Kalshi dashboard...")
+# Step 4: Build dashboard
+P("  [4/4] Building Kalshi dashboard...")
 
 template_file = "kalshi_dashboard_template.html"
 if not os.path.exists(template_file):
