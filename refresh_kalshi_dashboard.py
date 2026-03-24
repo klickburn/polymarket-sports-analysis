@@ -132,12 +132,6 @@ if KALSHI_KEY_ID and KALSHI_PRIVATE_KEY:
 
         P(f"  Fetched {len(all_fills)} total fills from Kalshi")
 
-        # Debug: show first crypto fill to verify field format
-        for f in all_fills:
-            if any(f.get("ticker", "").startswith(p) for p in CRYPTO_SERIES):
-                P(f"  DEBUG first crypto fill: {json.dumps(f, default=str)}")
-                break
-
         # Filter to crypto 15m fills only and group by ticker
         crypto_fills_by_ticker = {}
         for fill in all_fills:
@@ -158,19 +152,19 @@ if KALSHI_KEY_ID and KALSHI_PRIVATE_KEY:
                     "side": fill.get("side", ""),
                     "fills": [],
                     "total_count": 0,
-                    "total_cost": 0,
+                    "total_cost_dollars": 0,
                     "timestamp": fill.get("created_time", ""),
                 }
             entry = crypto_fills_by_ticker[ticker]
             entry["fills"].append(fill)
-            count = fill.get("count", 0)
-            # yes_price and no_price are in cents
+            count = int(float(fill.get("count_fp", fill.get("count", 0))))
+            # Prices are dollar strings like "0.8900"
             if entry["side"] == "yes":
-                price_cents = fill.get("yes_price", 0)
+                price = float(fill.get("yes_price_dollars", fill.get("yes_price_fixed", 0)))
             else:
-                price_cents = fill.get("no_price", 0)
+                price = float(fill.get("no_price_dollars", fill.get("no_price_fixed", 0)))
             entry["total_count"] += count
-            entry["total_cost"] += count * price_cents
+            entry["total_cost_dollars"] += count * price
             # Use earliest fill time as timestamp
             fill_time = fill.get("created_time", "")
             if fill_time and (not entry["timestamp"] or fill_time < entry["timestamp"]):
@@ -180,13 +174,13 @@ if KALSHI_KEY_ID and KALSHI_PRIVATE_KEY:
 
         # Build crypto bets list and check market outcomes
         for ticker, entry in sorted(crypto_fills_by_ticker.items(), key=lambda x: x[1]["timestamp"]):
-            avg_price = entry["total_cost"] / entry["total_count"] / 100 if entry["total_count"] else 0
+            avg_price = entry["total_cost_dollars"] / entry["total_count"] if entry["total_count"] else 0
             bet = {
                 "ticker": ticker,
                 "crypto": entry["crypto"],
                 "side": entry["side"],
                 "price": round(avg_price, 4),
-                "bet_amount": round(entry["total_cost"] / 100, 2),
+                "bet_amount": round(entry["total_cost_dollars"], 2),
                 "contracts": entry["total_count"],
                 "timestamp": entry["timestamp"],
                 "result": "open",
@@ -216,10 +210,6 @@ if KALSHI_KEY_ID and KALSHI_PRIVATE_KEY:
                 pass
 
             crypto_bets.append(bet)
-
-        # Debug: show first few computed bets
-        for b in crypto_bets[:3]:
-            P(f"  DEBUG bet: {b['ticker']} side={b['side']} price={b['price']} amount={b['bet_amount']} contracts={b['contracts']} result={b.get('result')} pnl={b.get('pnl')}")
 
         P(f"  Crypto: {len(crypto_bets)} bets fetched from API")
 
