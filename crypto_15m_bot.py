@@ -37,7 +37,7 @@ KALSHI_KEY_ID = os.environ.get("KALSHI_KEY_ID", "")
 KALSHI_PRIVATE_KEY = os.environ.get("KALSHI_PRIVATE_KEY", "")
 
 BET_AMOUNT = 0.10            # $0.10 per bet (testing)
-MIN_PRICE = 0.65             # Dominant side at 65c+ (backtested 100% WR)
+MIN_PRICE = 0.80             # Dominant side at 80c+ (91% WR, best net P&L bucket)
 PRICE_BUMP_CENTS = 2         # Buy 2c above to fill at ask
 
 LOG_FILE = "crypto_15m_bot.log"
