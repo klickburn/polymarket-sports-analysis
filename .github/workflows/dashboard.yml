@@ -39,19 +39,24 @@ jobs:
 
       - name: Deploy to GitHub Pages
         run: |
+          # Save built file to tmp
+          cp dashboard.html /tmp/index.html
+
+          # Clone gh-pages into a separate directory
+          git clone --branch gh-pages --single-branch --depth 1 \
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git" \
+            /tmp/gh-pages 2>/dev/null || mkdir -p /tmp/gh-pages
+
+          cd /tmp/gh-pages
           git config user.name "dashboard-bot"
           git config user.email "bot@polymarket-bot.local"
 
-          # Save built files
-          cp dashboard.html /tmp/index.html
-
-          # Switch to gh-pages, preserving existing files
-          git fetch origin gh-pages:gh-pages 2>/dev/null || true
-          git checkout gh-pages 2>/dev/null || git checkout --orphan gh-pages
-
-          # Update Polymarket dashboard, keep Kalshi if it exists
+          # Update Polymarket dashboard, keep Kalshi kalshi.html if it exists
           cp /tmp/index.html index.html
+          git init 2>/dev/null || true
           git add index.html
           git add kalshi.html 2>/dev/null || true
           git diff --staged --quiet || git commit -m "dashboard: refresh $(date -u +%Y-%m-%dT%H:%M:%SZ)"
           git push origin gh-pages --force
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
