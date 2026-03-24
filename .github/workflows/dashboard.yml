@@ -42,13 +42,16 @@ jobs:
           git config user.name "dashboard-bot"
           git config user.email "bot@polymarket-bot.local"
 
-          # Create gh-pages branch if it doesn't exist
-          git checkout --orphan gh-pages 2>/dev/null || git checkout gh-pages
+          # Save built files
+          cp dashboard.html /tmp/index.html
 
-          # Keep only the dashboard file
-          git rm -rf --cached . || true
-          cp dashboard.html index.html
+          # Switch to gh-pages, preserving existing files
+          git fetch origin gh-pages:gh-pages 2>/dev/null || true
+          git checkout gh-pages 2>/dev/null || git checkout --orphan gh-pages
 
+          # Update Polymarket dashboard, keep Kalshi if it exists
+          cp /tmp/index.html index.html
           git add index.html
+          git add kalshi.html 2>/dev/null || true
           git diff --staged --quiet || git commit -m "dashboard: refresh $(date -u +%Y-%m-%dT%H:%M:%SZ)"
           git push origin gh-pages --force
