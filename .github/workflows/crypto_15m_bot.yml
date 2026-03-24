@@ -1,0 +1,43 @@
+name: Crypto 15m Bot
+
+on:
+  # Run at :05, :20, :35, :50 — gives 10 min before each strike
+  # BTC needs 10 min window so we enter early
+  # Other cryptos (2-4 min window) will wait until closer to strike
+  schedule:
+    - cron: '5,20,35,50 * * * *'
+  workflow_dispatch: # Manual trigger
+
+permissions:
+  contents: write
+
+jobs:
+  trade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests cryptography
+
+      - name: Run crypto bot
+        env:
+          KALSHI_KEY_ID: ${{ secrets.KALSHI_KEY_ID }}
+          KALSHI_PRIVATE_KEY: ${{ secrets.KALSHI_PRIVATE_KEY }}
+        run: python crypto_15m_bot.py --live
+
+      - name: Commit results
+        run: |
+          git config user.name "crypto-15m-bot"
+          git config user.email "bot@crypto-15m-bot.local"
+          git add crypto_15m_bets.json crypto_15m_bot.log crypto_15m_status.json 2>/dev/null || true
+          git diff --staged --quiet || git commit -m "crypto: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          git pull --rebase 2>/dev/null || true
+          git push || true
