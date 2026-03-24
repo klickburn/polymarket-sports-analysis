@@ -402,10 +402,28 @@ def run(live=False):
     # Track our Kalshi positions for exit signals
     our_positions = {}  # {kalshi_ticker: {side, count, poly_event_id}}
 
+    # Track which Kalshi tickers we've already bet on (one bet per market)
+    bet_tickers = set()
+
     # Fetch initial events
     active_events = fetch_active_poly_events()
     P(f"  Active Polymarket events: {len(active_events)}")
     last_event_refresh = time.time()
+
+    # ── WARMUP: mark all existing trades as seen (don't act on history) ──
+    warmup = len(seen_ids) == 0
+    if warmup:
+        P("  WARMUP: Scanning existing trades to avoid replaying history...")
+        for ev in active_events:
+            event_id = ev.get("id")
+            if not event_id:
+                continue
+            trades = fetch_event_trades(event_id)
+            for t in trades:
+                trade_id = t.get("transactionHash", f"{t.get('timestamp')}_{t.get('size')}_{t.get('price')}")
+                seen_ids.add(trade_id)
+        save_json(SEEN_FILE, list(seen_ids))
+        P(f"  WARMUP complete: marked {len(seen_ids)} existing trades as seen")
 
     total_mirrored = 0
     total_exits = 0
@@ -420,6 +438,7 @@ def run(live=False):
                 active_events = fetch_active_poly_events()
                 P(f"  Refreshed events: {len(active_events)} active")
                 last_event_refresh = time.time()
+                bet_tickers.clear()  # New windows = new bets allowed
 
             new_whale_trades = []
 
@@ -442,8 +461,47 @@ def run(live=False):
                     t["_event_id"] = event_id
                     new_whale_trades.append(t)
 
-            # Process new whale trades
+            # Aggregate whale trades by event to determine NET direction
+            # The whale often buys both sides — we follow the heavier side
+            event_agg = {}  # {event_id: {Up_vol, Down_vol, crypto, series, trades}}
             for t in new_whale_trades:
+                eid = t["_event_id"]
+                if eid not in event_agg:
+                    event_agg[eid] = {"Up": 0, "Down": 0, "crypto": t["_crypto"],
+                                      "series": t["_series"], "buys": [], "sells": []}
+                action = t.get("side", "")
+                outcome = t.get("outcome", "")
+                size = float(t.get("size", 0))
+                if action == "BUY" and outcome in ("Up", "Down"):
+                    event_agg[eid][outcome] += size
+                    event_agg[eid]["buys"].append(t)
+                elif action == "SELL":
+                    event_agg[eid]["sells"].append(t)
+
+            # Build one trade signal per event based on net direction
+            aggregated_trades = []
+            for eid, agg in event_agg.items():
+                # Handle sells
+                for t in agg["sells"]:
+                    aggregated_trades.append(t)
+                # Determine net buy direction
+                if agg["Up"] > 0 or agg["Down"] > 0:
+                    if agg["Up"] > agg["Down"]:
+                        net_side = "Up"
+                        net_vol = agg["Up"]
+                    else:
+                        net_side = "Down"
+                        net_vol = agg["Down"]
+                    # Use the largest trade on the winning side as representative
+                    best = max([t for t in agg["buys"] if t.get("outcome") == net_side],
+                               key=lambda x: float(x.get("size", 0)), default=None)
+                    if best:
+                        best["_net_side"] = net_side
+                        best["_net_vol"] = net_vol
+                        aggregated_trades.append(best)
+
+            # Process aggregated trades
+            for t in aggregated_trades:
                 crypto = t["_crypto"]
                 series = t["_series"]
                 action = t.get("side", "")  # BUY or SELL
@@ -452,16 +510,20 @@ def run(live=False):
                 size = float(t.get("size", 0))
                 ts = t.get("timestamp", 0)
 
+                # Use net direction if available (aggregated), else raw outcome
+                net_side = t.get("_net_side", outcome)
+                net_vol = t.get("_net_vol", size)
+
                 # Map Polymarket outcome to Kalshi side
-                if outcome == "Up":
+                if net_side == "Up":
                     kalshi_side = "yes"
-                elif outcome == "Down":
+                elif net_side == "Down":
                     kalshi_side = "no"
                 else:
-                    P(f"  ?? Unknown outcome: {outcome} for {crypto}")
+                    P(f"  ?? Unknown outcome: {net_side} for {crypto}")
                     continue
 
-                P(f"\n  WHALE TRADE: {action} {crypto} {outcome} @ {price:.2f} (${size:.2f})")
+                P(f"\n  WHALE SIGNAL: {action} {crypto} {net_side} — net ${net_vol:.2f} volume")
 
                 trade_record = {
                     "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -485,6 +547,7 @@ def run(live=False):
                         P(f"    No Kalshi series for {crypto}")
                         trade_record["kalshi_status"] = "no_series"
                     else:
+                        time.sleep(0.5)  # Rate limit
                         market = find_kalshi_market(series)
                         if not market:
                             P(f"    No open Kalshi market for {series}")
@@ -494,30 +557,37 @@ def run(live=False):
                             trade_record["kalshi_ticker"] = ticker
                             trade_record["kalshi_action"] = "buy"
 
-                            # Get current Kalshi price
-                            kalshi_price = get_kalshi_price(ticker, kalshi_side)
-                            if kalshi_price:
-                                trade_record["kalshi_price"] = kalshi_price
-                                P(f"    Kalshi: {ticker} {kalshi_side.upper()} @ {kalshi_price:.2f}")
-
-                                if live:
-                                    result = place_buy(ticker, kalshi_side, kalshi_price, BET_AMOUNT)
-                                    if result:
-                                        trade_record["kalshi_status"] = "filled"
-                                        our_positions[ticker] = {
-                                            "side": kalshi_side,
-                                            "count": max(1, int(BET_AMOUNT / (kalshi_price + 0.02))),
-                                            "poly_event_id": t["_event_id"],
-                                        }
-                                        total_mirrored += 1
-                                    else:
-                                        trade_record["kalshi_status"] = "failed"
-                                else:
-                                    trade_record["kalshi_status"] = "dry_run"
-                                    P(f"    [DRY RUN] Would buy {kalshi_side} on {ticker}")
+                            # Only one bet per Kalshi market per window
+                            if ticker in bet_tickers:
+                                P(f"    Already bet on {ticker} — skipping")
+                                trade_record["kalshi_status"] = "duplicate"
                             else:
-                                P(f"    No price available for {ticker}")
-                                trade_record["kalshi_status"] = "no_price"
+                                time.sleep(0.3)  # Rate limit
+                                kalshi_price = get_kalshi_price(ticker, kalshi_side)
+                                if kalshi_price:
+                                    trade_record["kalshi_price"] = kalshi_price
+                                    P(f"    Kalshi: {ticker} {kalshi_side.upper()} @ {kalshi_price:.2f}")
+
+                                    if live:
+                                        time.sleep(0.3)  # Rate limit
+                                        result = place_buy(ticker, kalshi_side, kalshi_price, BET_AMOUNT)
+                                        if result:
+                                            trade_record["kalshi_status"] = "filled"
+                                            bet_tickers.add(ticker)
+                                            our_positions[ticker] = {
+                                                "side": kalshi_side,
+                                                "count": max(1, int(BET_AMOUNT / (kalshi_price + 0.02))),
+                                                "poly_event_id": t["_event_id"],
+                                            }
+                                            total_mirrored += 1
+                                        else:
+                                            trade_record["kalshi_status"] = "failed"
+                                    else:
+                                        trade_record["kalshi_status"] = "dry_run"
+                                        P(f"    [DRY RUN] Would buy {kalshi_side} on {ticker}")
+                                else:
+                                    P(f"    No price available for {ticker}")
+                                    trade_record["kalshi_status"] = "no_price"
 
                 elif action == "SELL":
                     # Exit: sell our Kalshi position
@@ -525,6 +595,7 @@ def run(live=False):
 
                     # Find our position on the matching Kalshi market
                     if series:
+                        time.sleep(0.5)  # Rate limit
                         market = find_kalshi_market(series)
                         if market:
                             ticker = market["ticker"]
