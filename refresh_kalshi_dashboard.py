@@ -250,8 +250,64 @@ def build_report(bets):
     }
 
 
+# Load whale follow data
+whale_bets_file = "whale_trades.json"
+whale_bets = []
+if os.path.exists(whale_bets_file):
+    with open(whale_bets_file) as f:
+        whale_bets = json.load(f)
+P(f"  Loaded {len(whale_bets)} whale follow trades")
+
+whale_status_file = "whale_status.json"
+whale_status = {}
+if os.path.exists(whale_status_file):
+    with open(whale_status_file) as f:
+        whale_status = json.load(f)
+
+# Check whale bet outcomes via Kalshi API
+if KALSHI_KEY_ID and KALSHI_PRIVATE_KEY and whale_bets:
+    try:
+        from kalshi_bot import public_get
+        P("  Checking whale bet outcomes...")
+        for bet in whale_bets:
+            ticker = bet.get("kalshi_ticker", "")
+            if not ticker or bet.get("kalshi_action") != "buy":
+                continue
+            if bet.get("result") in ("win", "loss"):
+                continue
+            try:
+                time.sleep(0.15)
+                mkt = public_get(f"/markets/{ticker}")
+                market = mkt.get("market", {})
+                status = market.get("status", "")
+                result_val = market.get("result", "")
+                kalshi_side = bet.get("kalshi_side", "")
+                kalshi_price = bet.get("kalshi_price", 0)
+                if status in ("settled", "finalized") and result_val:
+                    won = (result_val == "yes" and kalshi_side == "yes") or \
+                          (result_val == "no" and kalshi_side == "no")
+                    bet["result"] = "win" if won else "loss"
+                    bet["market_result"] = result_val
+                    contracts = max(1, int(0.50 / (kalshi_price + 0.02))) if kalshi_price else 1
+                    if won:
+                        bet["pnl"] = round(contracts * (1.0 - kalshi_price), 2)
+                    else:
+                        bet["pnl"] = round(-contracts * kalshi_price, 2)
+                    bet["bet_amount"] = round(contracts * kalshi_price, 2)
+                elif status == "open":
+                    bet["result"] = "open"
+                else:
+                    bet["result"] = "pending"
+            except Exception:
+                pass
+        with open(whale_bets_file, "w") as f:
+            json.dump(whale_bets, f, indent=2, default=str)
+    except Exception as e:
+        P(f"  WARNING: Could not check whale outcomes: {e}")
+
 report = build_report(bot_bets)
 crypto_report = build_report(crypto_bets)
+whale_report = build_report(whale_bets)
 
 # Step 4: Build dashboard
 P("  [4/4] Building Kalshi dashboard...")
@@ -270,6 +326,8 @@ html = html.replace("KALSHI_REPORT_PLACEHOLDER", json.dumps(report, default=str)
 html = html.replace("KALSHI_STATUS_PLACEHOLDER", json.dumps(bot_status, default=str))
 html = html.replace("CRYPTO_REPORT_PLACEHOLDER", json.dumps(crypto_report, default=str))
 html = html.replace("CRYPTO_STATUS_PLACEHOLDER", json.dumps(crypto_status, default=str))
+html = html.replace("WHALE_REPORT_PLACEHOLDER", json.dumps(whale_report, default=str))
+html = html.replace("WHALE_STATUS_PLACEHOLDER", json.dumps(whale_status, default=str))
 html = html.replace("DATA_REFRESHED_PLACEHOLDER", refresh_time)
 
 with open("kalshi_dashboard.html", "w") as f:
@@ -277,9 +335,11 @@ with open("kalshi_dashboard.html", "w") as f:
 
 s_resolved = [b for b in bot_bets if b.get("result") in ("win", "loss")]
 c_resolved = [b for b in crypto_bets if b.get("result") in ("win", "loss")]
+w_resolved = [b for b in whale_bets if b.get("result") in ("win", "loss")]
 
 P()
 P(f"  Kalshi Dashboard refreshed!")
 P(f"  Sports: {len(bot_bets)} bets, {len(s_resolved)} resolved, P&L: ${sum(b.get('pnl',0) for b in s_resolved):+.2f}")
 P(f"  Crypto: {len(crypto_bets)} bets, {len(c_resolved)} resolved, P&L: ${sum(b.get('pnl',0) for b in c_resolved):+.2f}")
+P(f"  Whale:  {len(whale_bets)} bets, {len(w_resolved)} resolved, P&L: ${sum(b.get('pnl',0) for b in w_resolved):+.2f}")
 P(f"  -> Open kalshi_dashboard.html to view")
