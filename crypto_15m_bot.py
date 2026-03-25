@@ -45,6 +45,8 @@ CRYPTOS = {
     "SOL":  {"series": "KXSOL15M"},
     "XRP":  {"series": "KXXRP15M"},
     "DOGE": {"series": "KXDOGE15M"},
+    "HYPE": {"series": "KXHYPE15M"},
+    "BNB":  {"series": "KXBNB15M"},
 }
 
 POLL_INTERVAL = 30       # Seconds between retries

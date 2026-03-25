@@ -238,6 +238,8 @@
   .crypto-tag.sol { background: rgba(0,255,163,0.15); color: #00ffa3; }
   .crypto-tag.xrp { background: rgba(0,162,224,0.15); color: #00a2e0; }
   .crypto-tag.doge { background: rgba(196,176,64,0.15); color: #c4b040; }
+  .crypto-tag.hype { background: rgba(0,206,209,0.15); color: #00ced1; }
+  .crypto-tag.bnb { background: rgba(243,186,47,0.15); color: #f3ba2f; }
 </style>
 </head>
 <body>
@@ -340,7 +342,7 @@
   <hr class="section-divider">
   <div class="section-header">
     <h2>Performance by Crypto</h2>
-    <span class="badge badge-crypto">5 Assets</span>
+    <span class="badge badge-crypto">7 Assets</span>
   </div>
   <div id="cryptoAssetContent"></div>
 
@@ -376,6 +378,8 @@
       <div class="tab" onclick="filterCryptoTable('SOL',this)">SOL</div>
       <div class="tab" onclick="filterCryptoTable('XRP',this)">XRP</div>
       <div class="tab" onclick="filterCryptoTable('DOGE',this)">DOGE</div>
+      <div class="tab" onclick="filterCryptoTable('HYPE',this)">HYPE</div>
+      <div class="tab" onclick="filterCryptoTable('BNB',this)">BNB</div>
     </div>
     <div class="scroll-table">
       <table>
@@ -438,7 +442,7 @@ const WHALE_BETS = WR.bets || [];
 
 const stratNames = { S1: 'Coin Flip Fav', S2: 'Coin Flip Dog', S3: 'UCL Underdog', S4: 'Bundesliga Draw' };
 const stratColors = { S1: '#3b82f6', S2: '#eab308', S3: '#a855f7', S4: '#06b6d4' };
-const cryptoColors = { BTC: '#f7931a', ETH: '#627eea', SOL: '#00ffa3', XRP: '#00a2e0', DOGE: '#c4b040' };
+const cryptoColors = { BTC: '#f7931a', ETH: '#627eea', SOL: '#00ffa3', XRP: '#00a2e0', DOGE: '#c4b040', HYPE: '#00ced1', BNB: '#f3ba2f' };
 
 function getDate(ts) {
   if (!ts) return '';
@@ -689,7 +693,7 @@ CRYPTO_BETS.forEach(b => {
   else if (b.result === 'loss') { cAssetStats[c].losses++; cAssetStats[c].pnl += (b.pnl || 0); }
   else { cAssetStats[c].open++; }
 });
-const cAssetNames = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE'].filter(c => cAssetStats[c]);
+const cAssetNames = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'HYPE', 'BNB'].filter(c => cAssetStats[c]);
 
 // Win/Loss by Crypto chart
 if (cAssetNames.length > 0 && cResolved.length > 0) {
@@ -840,7 +844,7 @@ function renderCryptoTable(filter) {
   if (filter === 'open') rows = rows.filter(r => r.result === 'open');
   if (filter === 'wins') rows = rows.filter(r => r.result === 'win');
   if (filter === 'losses') rows = rows.filter(r => r.result === 'loss');
-  if (['BTC', 'ETH', 'SOL', 'XRP', 'DOGE'].includes(filter)) rows = rows.filter(r => r.crypto === filter);
+  if (['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'HYPE', 'BNB'].includes(filter)) rows = rows.filter(r => r.crypto === filter);
   document.getElementById('cryptoBetsBody').innerHTML = rows.map(r => `
     <tr>
       <td>${r.date ? getDate(r.date) : '-'}</td>
