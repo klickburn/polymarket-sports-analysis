@@ -255,7 +255,7 @@ def place_sell(ticker, side, count):
 
 
 # ── Kalshi Market Finder ────────────────────────────────────────────────
-# Cache: {series_ticker: market_dict} — one open market per crypto series
+# Cache: {series_ticker: {market, strike_hhmm}} — one open market per crypto
 _kalshi_market_cache = {}
 _kalshi_cache_time = 0
 KALSHI_CACHE_TTL = 120  # Refresh Kalshi markets every 2 minutes
@@ -278,13 +278,26 @@ def refresh_kalshi_markets():
             })
             events = data.get("events", [])
             if events:
-                event_ticker = events[0]["event_ticker"]
+                ev = events[0]
+                event_ticker = ev["event_ticker"]
+                strike_str = ev.get("strike_date", "")
+                # Extract HH:MM from strike_date for window matching
+                strike_hhmm = ""
+                if strike_str:
+                    try:
+                        strike_dt = datetime.fromisoformat(strike_str.replace("Z", "+00:00"))
+                        strike_hhmm = strike_dt.strftime("%H:%M")
+                    except Exception:
+                        pass
                 time.sleep(0.2)
                 resp = kalshi_public(f"/events/{event_ticker}")
                 markets = resp.get("markets", [])
                 if markets:
-                    _kalshi_market_cache[series] = markets[0]
-                    P(f"    {series}: {markets[0]['ticker']}")
+                    _kalshi_market_cache[series] = {
+                        "market": markets[0],
+                        "strike_hhmm": strike_hhmm,
+                    }
+                    P(f"    {series}: {markets[0]['ticker']} (window ends {strike_hhmm} UTC)")
         except Exception as e:
             P(f"    Error fetching Kalshi market for {series}: {e}")
         time.sleep(0.3)
@@ -292,10 +305,25 @@ def refresh_kalshi_markets():
     P(f"  Kalshi market cache: {len(_kalshi_market_cache)} open markets")
 
 
-def find_current_kalshi_market(series_ticker):
-    """Get the currently open Kalshi market for a crypto series."""
+def get_kalshi_for_series(series_ticker):
+    """Get the currently open Kalshi market + its window end time (HH:MM)."""
     refresh_kalshi_markets()
-    return _kalshi_market_cache.get(series_ticker)
+    entry = _kalshi_market_cache.get(series_ticker)
+    if entry:
+        return entry["market"], entry["strike_hhmm"]
+    return None, None
+
+
+def poly_event_matches_kalshi_window(poly_end_date, kalshi_hhmm):
+    """Check if a Polymarket event's endDate matches the Kalshi window by HH:MM."""
+    if not poly_end_date or not kalshi_hhmm:
+        return False
+    try:
+        end_dt = datetime.fromisoformat(poly_end_date.replace("Z", "+00:00"))
+        poly_hhmm = end_dt.strftime("%H:%M")
+        return poly_hhmm == kalshi_hhmm
+    except Exception:
+        return False
 
 
 def get_kalshi_price(ticker, side):
@@ -503,21 +531,17 @@ def run(live=False):
 
             new_whale_trades = []
 
-            # Only poll events with windows ending in the next 15 minutes
-            now_utc = datetime.now(timezone.utc)
-            cutoff = now_utc + timedelta(minutes=15)
+            # Only poll Poly events whose window matches the current Kalshi window
+            # This ensures we only mirror trades for the active 15-min window
+            refresh_kalshi_markets()
             relevant_events = []
             for ev in active_events:
+                series = ev.get("_series", "")
                 end_str = ev.get("_end_date", "")
-                if end_str:
-                    try:
-                        end_dt = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
-                        if now_utc <= end_dt <= cutoff:
-                            relevant_events.append(ev)
-                    except Exception:
-                        relevant_events.append(ev)  # include if can't parse
-                else:
-                    relevant_events.append(ev)
+                if series and end_str:
+                    _, kalshi_hhmm = get_kalshi_for_series(series)
+                    if poly_event_matches_kalshi_window(end_str, kalshi_hhmm):
+                        relevant_events.append(ev)
 
             for ev in relevant_events:
                 event_id = ev.get("id")
@@ -633,14 +657,14 @@ def run(live=False):
                 }
 
                 if action == "BUY":
-                    # Mirror: buy on Kalshi — use the currently open market
+                    # Mirror: buy on Kalshi — use the current window's market
                     if not series:
                         P(f"    No Kalshi series for {crypto}")
                         trade_record["kalshi_status"] = "no_series"
                     else:
-                        market = find_current_kalshi_market(series)
+                        market, _ = get_kalshi_for_series(series)
                         if not market:
-                            P(f"  └─ No matching Kalshi market for {series} (window: {poly_end_date[:19]})")
+                            P(f"  └─ No open Kalshi market for {series}")
                             trade_record["kalshi_status"] = "no_market"
                         else:
                             ticker = market["ticker"]
@@ -695,7 +719,7 @@ def run(live=False):
 
                     # Find our position on the currently open Kalshi market
                     if series:
-                        market = find_current_kalshi_market(series)
+                        market, _ = get_kalshi_for_series(series)
                         if market:
                             ticker = market["ticker"]
                             trade_record["kalshi_ticker"] = ticker
