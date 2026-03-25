@@ -4,17 +4,9 @@ Kalshi 15-Minute Crypto Bot
 Trades 5 cryptos (BTC, ETH, SOL, XRP, DOGE) on Kalshi's 15-min prediction markets.
 
 Strategy: "Late Entry Dominant Side"
-  - Enter in the last N minutes of each 15-min window
-  - Buy the dominant side (whichever is trading at 96c+)
-  - Earlier entry = cheaper price = more profit per win
-  - Backtested at 99.5%+ win rate across 2,000+ events
-
-Optimal entry windows (from backtest):
-  BTC:  10 min — 100% WR, $1.33/day at $0.10/bet
-  ETH:   3 min — 99.4% WR, $0.40/day
-  SOL:   2 min — 99.4% WR, $0.36/day
-  XRP:   4 min — 100% WR, $0.60/day
-  DOGE:  3 min — 100% WR, $0.72/day
+  - Wait until 5 minutes into each 15-min window (10 min before strike)
+  - Buy the dominant side (whichever is trading at 80c+)
+  - Runs continuously, looping across windows
 
 Usage:
     python3 crypto_15m_bot.py              # Dry run
@@ -36,8 +28,8 @@ API_BASE = "https://api.elections.kalshi.com/trade-api/v2"
 KALSHI_KEY_ID = os.environ.get("KALSHI_KEY_ID", "")
 KALSHI_PRIVATE_KEY = os.environ.get("KALSHI_PRIVATE_KEY", "")
 
-BET_AMOUNT = 0.10            # $0.10 per bet (testing)
-MIN_PRICE = 0.80             # Dominant side at 80c+ (91% WR, best net P&L bucket)
+BET_AMOUNT = 0.10            # $0.10 per bet
+MIN_PRICE = 0.80             # Dominant side at 80c+
 PRICE_BUMP_CENTS = 2         # Buy 2c above to fill at ask
 
 LOG_FILE = "crypto_15m_bot.log"
@@ -56,13 +48,16 @@ CRYPTOS = {
 }
 
 POLL_INTERVAL = 30       # Seconds between retries
-MIN_TIME_BEFORE_STRIKE = 30  # Don't enter within 30s of strike
+ENTRY_AFTER_MINUTES = 10     # Wait 10 min into window (= 5 min before strike)
 
 # ── Logging ─────────────────────────────────────────────────────────────
-_log = open(LOG_FILE, "a")
+_log = None
 
 
 def P(msg=""):
+    global _log
+    if _log is None:
+        _log = open(LOG_FILE, "a")
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"[{ts}] {msg}"
     print(line, flush=True)
@@ -216,7 +211,6 @@ def place_order(ticker, side, price_dollars, amount_dollars):
 def get_current_window():
     """Return the current 15-min window's start and end (strike) time."""
     now = datetime.now(timezone.utc)
-    # Windows are at :00, :15, :30, :45
     minute_slot = (now.minute // 15) * 15
     window_start = now.replace(minute=minute_slot, second=0, microsecond=0)
     window_end = window_start + timedelta(minutes=15)
@@ -245,8 +239,6 @@ def find_current_market(series_ticker):
             return None, None
 
         now = datetime.now(timezone.utc)
-
-        # Find the event whose strike is soonest (the current window)
         best_event = None
         best_delta = timedelta(days=999)
 
@@ -256,7 +248,6 @@ def find_current_market(series_ticker):
                 continue
             strike = datetime.fromisoformat(strike_str.replace("Z", "+00:00"))
             delta = strike - now
-            # Must be in the future (not yet settled) and within ~16 min
             if timedelta(0) < delta < timedelta(minutes=16) and delta < best_delta:
                 best_delta = delta
                 best_event = ev
@@ -264,7 +255,6 @@ def find_current_market(series_ticker):
         if not best_event:
             return None, None
 
-        # Get the market ticker
         event_ticker = best_event["event_ticker"]
         resp = public_get(f"/events/{event_ticker}")
         markets = resp.get("markets", [])
@@ -290,7 +280,6 @@ def get_dominant_side(ticker):
         trades = trades_resp.get("trades", [])
 
         if not trades:
-            # Fall back to orderbook
             data = public_get(f"/markets/{ticker}/orderbook", params={"depth": 1})
             book = data.get("orderbook_fp", {})
             yes_bids = book.get("yes_dollars", [])
@@ -309,7 +298,6 @@ def get_dominant_side(ticker):
                     return "yes", 1.0 - no_price
             return None, None
 
-        # Use most recent trade
         last_trade = trades[0]
         yes_price = float(last_trade.get("yes_price_dollars", "0.50"))
 
@@ -341,80 +329,64 @@ def run(live=False):
     P("=" * 65)
     P("  CRYPTO 15-MIN BOT — Late Entry Dominant Side")
     P(f"  Mode: {'LIVE' if live else 'DRY RUN'} | Bet: ${BET_AMOUNT:.2f}/trade")
+    P(f"  Min price: {MIN_PRICE*100:.0f}c | Entry after: {ENTRY_AFTER_MINUTES} min into window")
     P(f"  Cryptos: {', '.join(CRYPTOS.keys())}")
     P("=" * 65)
 
-    window_start, window_end = get_current_window()
-    P(f"  Current window: {window_start.strftime('%H:%M')} - {window_end.strftime('%H:%M')} UTC")
-    P(f"  Minutes until strike: {minutes_until_strike():.1f}")
-
-    # Check balance
-    bal = get_balance()
-    if bal:
-        P(f"  Balance: ${bal['balance']:.2f} | Portfolio: ${bal['portfolio_value']:.2f}")
-    else:
-        P("  WARNING: Could not fetch balance")
-
-    time.sleep(0.5)  # Rate limit buffer
-
-    # Get existing positions to avoid duplicates
-    existing = get_existing_positions()
-    P(f"  Existing positions: {len(existing)}")
+    if live:
+        bal = get_balance()
+        if bal:
+            P(f"  Balance: ${bal['balance']:.2f} | Portfolio: ${bal['portfolio_value']:.2f}")
 
     bets = load_bets()
-    new_bets = 0
+    total_new = 0
+    last_window_end = None
+    placed_this_window = set()
 
-    # Resolve markets and tickers for all cryptos upfront
-    targets = {}
-    for crypto, cfg in CRYPTOS.items():
-        time.sleep(0.3)  # Rate limit
-        market, event = find_current_market(cfg["series"])
-        if not market:
-            P(f"  {crypto}: No open market found")
-            continue
-        ticker = market["ticker"]
-        if ticker in existing:
-            P(f"  {crypto}: Already have position on {ticker}")
-            continue
-        if any(b.get("ticker") == ticker for b in bets):
-            P(f"  {crypto}: Already bet {ticker}")
-            continue
-        targets[crypto] = {"ticker": ticker, "event": event, "placed": False}
-        P(f"  {crypto}: Targeting {ticker} — {event.get('title', '')}")
+    P(f"\n  Running continuously — polling every {POLL_INTERVAL}s...")
 
-    if not targets:
-        P("\n  No targets — nothing to trade")
-    else:
-        # Poll loop: check prices every 30s, place bets when price >= 96c
-        P(f"\n  Polling {len(targets)} cryptos every {POLL_INTERVAL}s until prices hit {MIN_PRICE*100:.0f}c+...")
-
-        while True:
+    while True:
+        try:
+            window_start, window_end = get_current_window()
             mins_left = minutes_until_strike()
-            if mins_left < MIN_TIME_BEFORE_STRIKE / 60:
-                P(f"\n  {mins_left*60:.0f}s to strike — stopping")
-                break
+            mins_in = 15 - mins_left
 
-            # Check if all placed
-            remaining = {c: t for c, t in targets.items() if not t["placed"]}
-            if not remaining:
-                P(f"\n  All bets placed!")
-                break
+            # New window? Reset targets
+            if window_end != last_window_end:
+                last_window_end = window_end
+                placed_this_window = set()
+                P(f"\n  ── Window {window_start.strftime('%H:%M')}-{window_end.strftime('%H:%M')} UTC ──")
 
-            for crypto, target in remaining.items():
-                ticker = target["ticker"]
-                event = target["event"]
-                time.sleep(0.3)  # Rate limit between API calls
+            # Too early — wait until 5 min into window
+            if mins_in < ENTRY_AFTER_MINUTES:
+                time.sleep(POLL_INTERVAL)
+                continue
 
+            # Check each crypto
+            for crypto, cfg in CRYPTOS.items():
+                if crypto in placed_this_window:
+                    continue
+
+                time.sleep(0.3)
+                market, event = find_current_market(cfg["series"])
+                if not market:
+                    continue
+                ticker = market["ticker"]
+
+                # Skip if already have position or bet on this ticker
+                if any(b.get("ticker") == ticker for b in bets):
+                    placed_this_window.add(crypto)
+                    continue
+
+                time.sleep(0.3)
                 side, price = get_dominant_side(ticker)
                 if not side or not price:
-                    P(f"    {crypto}: No price data")
                     continue
 
                 if price < MIN_PRICE:
-                    P(f"    {crypto}: {side.upper()} @ {price:.4f} (waiting for {MIN_PRICE*100:.0f}c+)")
                     continue
 
-                P(f"    {crypto}: {side.upper()} @ {price:.4f} — READY")
+                P(f"    {crypto}: {side.upper()} @ {price:.4f} ({mins_in:.1f}m in, {mins_left:.1f}m left)")
 
                 bet_record = {
                     "crypto": crypto,
@@ -437,43 +409,33 @@ def run(live=False):
                         bet_record["status"] = order.get("status", "")
                         bet_record["fill_price"] = order.get("avg_price", price)
                         bets.append(bet_record)
-                        new_bets += 1
-                        target["placed"] = True
-                        P(f"    {crypto}: BET PLACED {side.upper()} @ {price:.4f}")
+                        save_bets(bets)
+                        total_new += 1
+                        placed_this_window.add(crypto)
+                        P(f"    {crypto}: BET PLACED ✓ {side.upper()} @ {price:.4f}")
                     else:
                         P(f"    {crypto}: Order failed")
                 else:
-                    P(f"    {crypto}: [DRY RUN] Would bet {side.upper()} @ {price:.4f}")
+                    P(f"    {crypto}: [DRY RUN] {side.upper()} @ {price:.4f}")
                     bet_record["status"] = "dry_run"
                     bets.append(bet_record)
-                    new_bets += 1
-                    target["placed"] = True
+                    save_bets(bets)
+                    total_new += 1
+                    placed_this_window.add(crypto)
 
-            # Sleep before next poll
-            remaining_after = {c: t for c, t in targets.items() if not t["placed"]}
-            if remaining_after:
-                P(f"    --- {len(remaining_after)} remaining, {mins_left:.1f} min left, next poll in {POLL_INTERVAL}s ---")
-                time.sleep(POLL_INTERVAL)
+            time.sleep(POLL_INTERVAL)
 
-    # Save bets
+        except KeyboardInterrupt:
+            P("\n  Stopped by user")
+            break
+        except Exception as e:
+            P(f"  ERROR: {e}")
+            import traceback
+            traceback.print_exc()
+            time.sleep(30)
+
     save_bets(bets)
-
-    # Save status
-    status = {
-        "last_run": datetime.now(timezone.utc).isoformat(),
-        "mode": "live" if live else "dry_run",
-        "window": f"{window_start.strftime('%H:%M')}-{window_end.strftime('%H:%M')} UTC",
-        "new_bets": new_bets,
-        "total_bets": len(bets),
-        "balance": bal["balance"] if bal else None,
-    }
-    with open(STATUS_FILE, "w") as f:
-        json.dump(status, f, indent=2, default=str)
-
-    P(f"\n  {'='*40}")
-    P(f"  Done! New bets: {new_bets}")
-    P(f"  Total bets on file: {len(bets)}")
-    P(f"  {'='*40}")
+    P(f"\n  Bot stopped. Total new bets this session: {total_new}")
 
 
 if __name__ == "__main__":
