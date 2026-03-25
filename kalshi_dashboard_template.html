@@ -69,7 +69,7 @@
   .mode-tab:hover { color: var(--text); background: rgba(255,255,255,0.05); }
   .mode-tab.active-sports { color: var(--teal); background: rgba(20,184,166,0.1); border-color: var(--teal); }
   .mode-tab.active-crypto { color: var(--orange); background: rgba(245,158,11,0.1); border-color: var(--orange); }
-  .mode-tab.active-whale { color: #8b5cf6; background: rgba(139,92,246,0.1); border-color: #8b5cf6; }
+  .mode-tab.active-overview { color: var(--cyan); background: rgba(6,182,212,0.1); border-color: var(--cyan); }
   .mode-section { display: none; }
   .mode-section.active { display: block; }
 
@@ -256,13 +256,48 @@
 
 <!-- Mode Tabs -->
 <div class="mode-tabs">
-  <div class="mode-tab active-sports" id="tabSports" onclick="switchMode('sports')">Sports</div>
+  <div class="mode-tab active-overview" id="tabOverview" onclick="switchMode('overview')">Overview</div>
   <div class="mode-tab" id="tabCrypto" onclick="switchMode('crypto')">Crypto 15m</div>
-  <div class="mode-tab" id="tabWhale" onclick="switchMode('whale')">Whale Follow</div>
+  <div class="mode-tab" id="tabSports" onclick="switchMode('sports')">Sports</div>
+</div>
+
+<!-- ═══════════════════ OVERVIEW SECTION ═══════════════════ -->
+<div class="mode-section active" id="sectionOverview">
+  <div class="kpi-row" id="overviewKpis"></div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3>Combined Cumulative P&L</h3>
+      <div class="chart-container tall"><canvas id="overviewPnlChart"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>P&L by Strategy</h3>
+      <div class="chart-container tall"><canvas id="overviewStratChart"></canvas></div>
+    </div>
+  </div>
+
+  <hr class="section-divider">
+  <div class="section-header">
+    <h2>Strategy Breakdown</h2>
+  </div>
+  <div id="overviewStratContent"></div>
+
+  <hr class="section-divider">
+  <div class="section-header">
+    <h2>Recent Activity</h2>
+  </div>
+  <div class="card" style="margin-bottom:24px">
+    <div class="scroll-table">
+      <table>
+        <thead><tr><th>Date</th><th>Type</th><th>Asset/Event</th><th>Side</th><th>Price</th><th>Amount</th><th>P&L</th><th>Status</th></tr></thead>
+        <tbody id="overviewRecentBody"></tbody>
+      </table>
+    </div>
+  </div>
 </div>
 
 <!-- ═══════════════════ SPORTS SECTION ═══════════════════ -->
-<div class="mode-section active" id="sectionSports">
+<div class="mode-section" id="sectionSports">
   <div class="kpi-row" id="sportsKpis"></div>
 
   <div class="grid-2">
@@ -390,42 +425,6 @@
   </div>
 </div>
 
-<!-- ═══ WHALE FOLLOW SECTION ═══ -->
-<div class="mode-section" id="sectionWhale">
-  <div class="kpi-row" id="whaleKpis"></div>
-
-  <div class="grid-2">
-    <div class="card">
-      <h3>Cumulative P&L</h3>
-      <div class="chart-container tall"><canvas id="whalePnlChart"></canvas></div>
-    </div>
-    <div class="card">
-      <h3>Win / Loss by Crypto</h3>
-      <div class="chart-container tall"><canvas id="whaleByAssetChart"></canvas></div>
-    </div>
-  </div>
-
-  <hr class="section-divider">
-  <div class="section-header"><h2>Whale Follow Trades</h2></div>
-  <div class="card" style="margin-bottom:24px">
-    <div class="tabs" id="whaleTabs">
-      <div class="tab active" onclick="filterWhaleTable('all',this)">All</div>
-      <div class="tab" onclick="filterWhaleTable('resolved',this)">Resolved</div>
-      <div class="tab" onclick="filterWhaleTable('open',this)">Open</div>
-      <div class="tab" onclick="filterWhaleTable('wins',this)">Wins</div>
-      <div class="tab" onclick="filterWhaleTable('losses',this)">Losses</div>
-      <div class="tab" onclick="filterWhaleTable('BTC',this)">BTC</div>
-      <div class="tab" onclick="filterWhaleTable('SOL',this)">SOL</div>
-      <div class="tab" onclick="filterWhaleTable('XRP',this)">XRP</div>
-    </div>
-    <div class="scroll-table">
-      <table>
-        <thead><tr><th>Date</th><th>Crypto</th><th>Whale Action</th><th>Whale Side</th><th>Whale Price</th><th>Kalshi Side</th><th>Our Price</th><th>P&L</th><th>Status</th></tr></thead>
-        <tbody id="whaleBetsBody"></tbody>
-      </table>
-    </div>
-  </div>
-</div>
 
 <script>
 // ═══ Data ═══
@@ -464,12 +463,12 @@ function cryptoTag(c) {
 
 // ═══ Mode switching ═══
 function switchMode(mode) {
+  document.getElementById('sectionOverview').classList.toggle('active', mode === 'overview');
   document.getElementById('sectionSports').classList.toggle('active', mode === 'sports');
   document.getElementById('sectionCrypto').classList.toggle('active', mode === 'crypto');
-  document.getElementById('sectionWhale').classList.toggle('active', mode === 'whale');
+  document.getElementById('tabOverview').className = 'mode-tab' + (mode === 'overview' ? ' active-overview' : '');
   document.getElementById('tabSports').className = 'mode-tab' + (mode === 'sports' ? ' active-sports' : '');
   document.getElementById('tabCrypto').className = 'mode-tab' + (mode === 'crypto' ? ' active-crypto' : '');
-  document.getElementById('tabWhale').className = 'mode-tab' + (mode === 'whale' ? ' active-whale' : '');
 }
 
 // ═══ Timestamps ═══
@@ -866,97 +865,125 @@ function filterCryptoTable(f, el) {
 renderCryptoTable('all');
 
 // ═══════════════════════════════════════════════════════════════
-// WHALE FOLLOW
+// OVERVIEW — Combined P&L & Insights
 // ═══════════════════════════════════════════════════════════════
 
+const allBets = [
+  ...SPORTS_BETS.map(b => ({ ...b, _type: 'Sports', _asset: b.league || b.title || 'Sports' })),
+  ...CRYPTO_BETS.map(b => ({ ...b, _type: 'Crypto', _asset: b.crypto || '?' })),
+];
+const allResolved = allBets.filter(b => b.result === 'win' || b.result === 'loss');
+const allWins = allResolved.filter(b => b.result === 'win');
+const allLosses = allResolved.filter(b => b.result === 'loss');
+const totalPnl = allResolved.reduce((s, b) => s + (b.pnl || 0), 0);
+const totalWagered = allBets.reduce((s, b) => s + (b.bet_amount || 0), 0);
+const allOpen = allBets.filter(b => b.result === 'open');
+const totalRoi = totalWagered > 0 ? (totalPnl / totalWagered * 100).toFixed(1) : '0';
+const totalWinRate = allResolved.length > 0 ? (allWins.length / allResolved.length * 100).toFixed(1) : '0';
+
 // KPIs
-document.getElementById('whaleKpis').innerHTML = `
-  <div class="kpi"><div class="kpi-val">${WR.total_bets}</div><div class="kpi-label">Trades Mirrored</div></div>
-  <div class="kpi"><div class="kpi-val">${WR.win_rate}%</div><div class="kpi-label">Win Rate</div></div>
-  <div class="kpi"><div class="kpi-val ${WR.total_pnl >= 0 ? 'pnl-pos' : 'pnl-neg'}">${WR.total_pnl >= 0 ? '+' : ''}$${WR.total_pnl.toFixed(2)}</div><div class="kpi-label">P&L</div></div>
-  <div class="kpi"><div class="kpi-val">${WR.open_count}</div><div class="kpi-label">Open</div></div>
-  <div class="kpi"><div class="kpi-val">$${WR.total_wagered.toFixed(2)}</div><div class="kpi-label">Wagered</div></div>
-`;
+const overviewKpis = [
+  { label: 'Account Balance', value: SR.balance > 0 ? `$${SR.balance.toFixed(2)}` : '--', cls: 'cyan', sub: SR.portfolio_value > 0 ? `$${SR.portfolio_value.toFixed(2)} portfolio` : '' },
+  { label: 'Total P&L', value: `$${totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}`, cls: totalPnl >= 0 ? 'green' : 'red', sub: `${allResolved.length} resolved trades` },
+  { label: 'Win Rate', value: `${totalWinRate}%`, cls: parseFloat(totalWinRate) >= 50 ? 'green' : 'red', sub: `${allWins.length}W - ${allLosses.length}L` },
+  { label: 'ROI', value: `${totalRoi}%`, cls: parseFloat(totalRoi) >= 0 ? 'green' : 'red', sub: `$${totalWagered.toFixed(2)} wagered` },
+  { label: 'Total Trades', value: allBets.length, cls: 'blue', sub: `${SPORTS_BETS.length} sports + ${CRYPTO_BETS.length} crypto` },
+  { label: 'Open Positions', value: allOpen.length, cls: 'orange', sub: `$${allOpen.reduce((s,b) => s + (b.bet_amount||0), 0).toFixed(2)} at risk` },
+];
+document.getElementById('overviewKpis').innerHTML = overviewKpis.map(k =>
+  `<div class="kpi"><div class="label">${k.label}</div><div class="value ${k.cls}">${k.value}</div><div class="sub">${k.sub}</div></div>`
+).join('');
 
-// Cumulative P&L chart
-const wResolved = WHALE_BETS.filter(b => b.result === 'win' || b.result === 'loss')
-  .sort((a, b) => (a.timestamp || '').localeCompare(b.timestamp || ''));
-let wCum = 0;
-const wPnlData = wResolved.map(b => {
-  wCum += (b.pnl || 0);
-  return { x: getDate(b.timestamp), y: parseFloat(wCum.toFixed(2)), pnl: b.pnl || 0, crypto: b.crypto };
-});
-if (document.getElementById('whalePnlChart')) {
-  new Chart(document.getElementById('whalePnlChart'), {
+// Combined cumulative P&L chart
+if (allResolved.length > 0) {
+  const sorted = allResolved.sort((a, b) => (a.timestamp || '').localeCompare(b.timestamp || ''));
+  let cum = 0;
+  const cumData = sorted.map(b => {
+    cum += (b.pnl || 0);
+    return { x: getDate(b.timestamp), y: parseFloat(cum.toFixed(2)), type: b._type };
+  });
+  new Chart(document.getElementById('overviewPnlChart'), {
     type: 'line',
-    data: { datasets: [{ data: wPnlData, borderColor: '#8b5cf6', backgroundColor: 'rgba(139,92,246,0.1)', fill: true, tension: 0.3, pointRadius: 3 }] },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
-      scales: { x: { display: true, ticks: { color: '#94a3b8', maxTicksLimit: 8 } }, y: { ticks: { color: '#94a3b8', callback: v => '$' + v.toFixed(2) } } }
-    }
+    data: { labels: cumData.map(d => d.x), datasets: [{ data: cumData.map(d => d.y), borderColor: '#06b6d4', backgroundColor: 'rgba(6,182,212,0.1)', fill: true, tension: 0.3, pointRadius: 3, borderWidth: 2, pointBackgroundColor: cumData.map(d => d.type === 'Crypto' ? '#f59e0b' : '#14b8a6') }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => { const d = cumData[ctx.dataIndex]; return [`P&L: $${d.y.toFixed(2)}`, d.type]; } } } }, scales: { x: { display: false }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3', callback: v => '$' + v } } } }
   });
+} else {
+  document.getElementById('overviewPnlChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:300px;color:var(--muted)">No resolved trades yet</div>';
 }
 
-// Win/Loss by crypto chart
-const wAssetStats = {};
-WHALE_BETS.forEach(b => {
-  const c = b.crypto || 'Unknown';
-  if (!wAssetStats[c]) wAssetStats[c] = { wins: 0, losses: 0, pnl: 0, count: 0 };
-  wAssetStats[c].count++;
-  if (b.result === 'win') { wAssetStats[c].wins++; wAssetStats[c].pnl += (b.pnl || 0); }
-  else if (b.result === 'loss') { wAssetStats[c].losses++; wAssetStats[c].pnl += (b.pnl || 0); }
+// Strategy P&L chart (Sports strategies + Crypto as one)
+const oStratStats = { 'Crypto 15m': { pnl: 0, wins: 0, losses: 0, bets: 0 } };
+CRYPTO_BETS.forEach(b => {
+  oStratStats['Crypto 15m'].bets++;
+  if (b.result === 'win') { oStratStats['Crypto 15m'].wins++; oStratStats['Crypto 15m'].pnl += (b.pnl || 0); }
+  else if (b.result === 'loss') { oStratStats['Crypto 15m'].losses++; oStratStats['Crypto 15m'].pnl += (b.pnl || 0); }
 });
-const wAssetLabels = Object.keys(wAssetStats).sort();
-if (document.getElementById('whaleByAssetChart')) {
-  new Chart(document.getElementById('whaleByAssetChart'), {
+SPORTS_BETS.forEach(b => {
+  const s = b.strategy || 'Sports Other';
+  const name = stratNames[s] || s;
+  if (!oStratStats[name]) oStratStats[name] = { pnl: 0, wins: 0, losses: 0, bets: 0 };
+  oStratStats[name].bets++;
+  if (b.result === 'win') { oStratStats[name].wins++; oStratStats[name].pnl += (b.pnl || 0); }
+  else if (b.result === 'loss') { oStratStats[name].losses++; oStratStats[name].pnl += (b.pnl || 0); }
+});
+const oStratNames = Object.keys(oStratStats).filter(s => oStratStats[s].bets > 0);
+if (oStratNames.length > 0 && allResolved.length > 0) {
+  new Chart(document.getElementById('overviewStratChart'), {
     type: 'bar',
-    data: {
-      labels: wAssetLabels,
-      datasets: [
-        { label: 'Wins', data: wAssetLabels.map(c => wAssetStats[c].wins), backgroundColor: '#10b981' },
-        { label: 'Losses', data: wAssetLabels.map(c => wAssetStats[c].losses), backgroundColor: '#ef4444' }
-      ]
-    },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#94a3b8' } } },
-      scales: { x: { ticks: { color: '#94a3b8' } }, y: { ticks: { color: '#94a3b8' } } }
-    }
+    data: { labels: oStratNames, datasets: [{ data: oStratNames.map(s => parseFloat(oStratStats[s].pnl.toFixed(2))), backgroundColor: oStratNames.map(s => oStratStats[s].pnl >= 0 ? 'rgba(34,197,94,0.7)' : 'rgba(239,68,68,0.7)'), borderRadius: 4 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { color: '#8b8fa3', font: { size: 11 } } }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3', callback: v => '$' + v } } } }
   });
+} else {
+  document.getElementById('overviewStratChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:300px;color:var(--muted)">No data</div>';
 }
 
-// Whale bets table
-const wRows = WHALE_BETS.map(b => ({
-  date: b.timestamp, crypto: b.crypto || '?', whale_action: b.whale_action || '?',
-  whale_outcome: b.whale_outcome || '?', whale_price: b.whale_price || 0,
-  kalshi_side: b.kalshi_side || '?', our_price: b.kalshi_price || 0,
-  pnl: b.pnl || null, result: b.result || 'pending', bet_amount: b.bet_amount || 0
-})).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+// Strategy breakdown table
+const oStratEl = document.getElementById('overviewStratContent');
+if (oStratNames.length > 0) {
+  let html = '<div class="card" style="margin-bottom:20px"><div class="scroll-table"><table><thead><tr><th>Strategy</th><th>Bets</th><th>W-L</th><th>Win Rate</th><th>P&L</th><th>Avg P&L/Trade</th></tr></thead><tbody>';
+  for (const name of oStratNames) {
+    const s = oStratStats[name];
+    const resolved = s.wins + s.losses;
+    const wr = resolved > 0 ? (s.wins / resolved * 100).toFixed(1) + '%' : '--';
+    const avgPnl = resolved > 0 ? (s.pnl / resolved).toFixed(4) : '--';
+    const pc = s.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    html += `<tr><td style="font-weight:600">${name}</td><td>${s.bets}</td><td>${s.wins}W-${s.losses}L</td><td>${wr}</td><td style="color:${pc}">$${s.pnl >= 0 ? '+' : ''}${s.pnl.toFixed(2)}</td><td style="color:${pc}">${avgPnl !== '--' ? '$' + (parseFloat(avgPnl) >= 0 ? '+' : '') + avgPnl : '--'}</td></tr>`;
+  }
+  // Totals
+  const totW = oStratNames.reduce((s, n) => s + oStratStats[n].wins, 0);
+  const totL = oStratNames.reduce((s, n) => s + oStratStats[n].losses, 0);
+  const totB = oStratNames.reduce((s, n) => s + oStratStats[n].bets, 0);
+  const totP = oStratNames.reduce((s, n) => s + oStratStats[n].pnl, 0);
+  const totWr = (totW + totL) > 0 ? (totW / (totW + totL) * 100).toFixed(1) + '%' : '--';
+  const totAvg = (totW + totL) > 0 ? (totP / (totW + totL)).toFixed(4) : '--';
+  const tpc = totP >= 0 ? 'var(--green)' : 'var(--red)';
+  html += `<tr style="border-top:2px solid var(--border);font-weight:700"><td>TOTAL</td><td>${totB}</td><td>${totW}W-${totL}L</td><td>${totWr}</td><td style="color:${tpc}">$${totP >= 0 ? '+' : ''}${totP.toFixed(2)}</td><td style="color:${tpc}">${totAvg !== '--' ? '$' + (parseFloat(totAvg) >= 0 ? '+' : '') + totAvg : '--'}</td></tr>`;
+  html += '</tbody></table></div></div>';
+  oStratEl.innerHTML = html;
+} else {
+  oStratEl.innerHTML = '<div class="card"><div class="empty-state"><div class="msg">No trades yet</div></div></div>';
+}
 
-function renderWhaleTable(filter) {
-  let rows = wRows;
-  if (filter === 'resolved') rows = rows.filter(r => r.result === 'win' || r.result === 'loss');
-  if (filter === 'open') rows = rows.filter(r => r.result === 'open');
-  if (filter === 'wins') rows = rows.filter(r => r.result === 'win');
-  if (filter === 'losses') rows = rows.filter(r => r.result === 'loss');
-  if (['BTC', 'SOL', 'XRP'].includes(filter)) rows = rows.filter(r => r.crypto === filter);
-  document.getElementById('whaleBetsBody').innerHTML = rows.map(r => `
-    <tr>
-      <td>${r.date ? getDate(r.date) : '-'}</td>
-      <td>${cryptoTag(r.crypto)}</td>
-      <td><span class="tag ${r.whale_action === 'BUY' ? 'win' : 'loss'}">${r.whale_action}</span></td>
-      <td>${r.whale_outcome}</td>
-      <td>${(r.whale_price * 100).toFixed(1)}c</td>
-      <td>${r.kalshi_side.toUpperCase()}</td>
-      <td>${r.our_price ? (r.our_price * 100).toFixed(1) + 'c' : '-'}</td>
-      <td>${r.result === 'win' || r.result === 'loss' ? pnlHtml(r.pnl) : '-'}</td>
-      <td><span class="tag ${r.result}">${r.result.toUpperCase()}</span></td>
-    </tr>
-  `).join('');
-}
-function filterWhaleTable(f, el) {
-  document.querySelectorAll('#whaleTabs .tab').forEach(t => t.classList.remove('active'));
-  el.classList.add('active');
-  renderWhaleTable(f);
-}
-renderWhaleTable('all');
+// Recent activity — last 20 trades across all types
+const recentAll = allBets.map(b => ({
+  date: b.timestamp, type: b._type, asset: b._asset,
+  side: b.side || b.label || '?', price: b.price || 0,
+  amount: b.bet_amount || 0, pnl: b.pnl || null, result: b.result || 'pending',
+})).sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 30);
+
+document.getElementById('overviewRecentBody').innerHTML = recentAll.map(r => {
+  const typeTag = r.type === 'Crypto' ? `<span style="color:var(--orange);font-weight:600">${r.type}</span>` : `<span style="color:var(--teal);font-weight:600">${r.type}</span>`;
+  return `<tr>
+    <td>${r.date ? getDate(r.date) : '-'}</td>
+    <td>${typeTag}</td>
+    <td>${r.asset}</td>
+    <td>${(r.side || '').toUpperCase()}</td>
+    <td>${(r.price * 100).toFixed(1)}c</td>
+    <td>$${r.amount.toFixed(2)}</td>
+    <td>${r.result === 'win' || r.result === 'loss' ? pnlHtml(r.pnl) : '-'}</td>
+    <td><span class="tag ${r.result}">${r.result.toUpperCase()}</span></td>
+  </tr>`;
+}).join('');
 </script>
 </body>
 </html>
