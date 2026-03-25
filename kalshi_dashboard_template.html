@@ -350,10 +350,17 @@
       <div class="chart-container med"><canvas id="cryptoAssetPnlChart"></canvas></div>
     </div>
     <div class="card">
-      <h3>Entry Window Stats</h3>
-      <div class="chart-container med"><canvas id="cryptoWindowChart"></canvas></div>
+      <h3>Win Rate by Price Bucket</h3>
+      <div class="chart-container med"><canvas id="cryptoPriceBucketChart"></canvas></div>
     </div>
   </div>
+
+  <hr class="section-divider">
+  <div class="section-header">
+    <h2>Performance by Price Bucket</h2>
+    <span class="badge badge-crypto">Per Crypto</span>
+  </div>
+  <div id="cryptoPriceBucketContent"></div>
 
   <hr class="section-divider">
   <div class="section-header"><h2>All Crypto Bets</h2></div>
@@ -725,6 +732,88 @@ if (cAssetNames.length > 0 && cResolved.length > 0) {
   });
 } else {
   document.getElementById('cryptoAssetPnlChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:260px;color:var(--muted)">No data</div>';
+}
+
+// ═══ Performance by Price Bucket (per crypto) ═══
+const priceBuckets = ['80-85c', '85-90c', '90-95c', '95-99c'];
+function getBucket(price) {
+  const c = price * 100;
+  if (c < 80) return null;
+  if (c < 85) return '80-85c';
+  if (c < 90) return '85-90c';
+  if (c < 95) return '90-95c';
+  return '95-99c';
+}
+
+// Build stats: { crypto: { bucket: { wins, losses, pnl, bets, wagered } } }
+const bucketStats = {};
+const bucketTotals = {};
+priceBuckets.forEach(b => bucketTotals[b] = { wins: 0, losses: 0, pnl: 0, bets: 0, wagered: 0 });
+
+CRYPTO_BETS.forEach(b => {
+  const c = b.crypto || 'Unknown';
+  const bucket = getBucket(b.price || 0);
+  if (!bucket) return;
+  if (!bucketStats[c]) {
+    bucketStats[c] = {};
+    priceBuckets.forEach(bk => bucketStats[c][bk] = { wins: 0, losses: 0, pnl: 0, bets: 0, wagered: 0 });
+  }
+  const s = bucketStats[c][bucket];
+  const t = bucketTotals[bucket];
+  s.bets++; t.bets++;
+  s.wagered += b.bet_amount || 0; t.wagered += b.bet_amount || 0;
+  if (b.result === 'win') { s.wins++; t.wins++; s.pnl += (b.pnl || 0); t.pnl += (b.pnl || 0); }
+  else if (b.result === 'loss') { s.losses++; t.losses++; s.pnl += (b.pnl || 0); t.pnl += (b.pnl || 0); }
+});
+
+const pbEl = document.getElementById('cryptoPriceBucketContent');
+if (CR.total_bets === 0) {
+  pbEl.innerHTML = '<div class="card"><div class="empty-state"><div class="msg">No crypto trades yet</div></div></div>';
+} else {
+  let html = '<div class="card" style="margin-bottom:20px"><div class="scroll-table"><table><thead><tr><th>Crypto</th>';
+  priceBuckets.forEach(b => html += `<th colspan="3" style="text-align:center;border-left:2px solid var(--border)">${b}</th>`);
+  html += '</tr><tr><th></th>';
+  priceBuckets.forEach(() => html += '<th style="border-left:2px solid var(--border)">W-L</th><th>Win%</th><th>P&L</th>');
+  html += '</tr></thead><tbody>';
+  const allCryptos = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE'].filter(c => bucketStats[c]);
+  for (const c of allCryptos) {
+    html += `<tr><td>${cryptoTag(c)}</td>`;
+    priceBuckets.forEach(bk => {
+      const s = bucketStats[c][bk];
+      const wr = (s.wins + s.losses) > 0 ? (s.wins / (s.wins + s.losses) * 100).toFixed(0) + '%' : '--';
+      const pc = s.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+      html += `<td style="border-left:2px solid var(--border)">${s.wins}W-${s.losses}L</td><td>${wr}</td><td style="color:${pc}">${s.bets > 0 ? '$' + (s.pnl >= 0 ? '+' : '') + s.pnl.toFixed(2) : '--'}</td>`;
+    });
+    html += '</tr>';
+  }
+  // Totals row
+  html += '<tr style="border-top:2px solid var(--border);font-weight:700"><td>TOTAL</td>';
+  priceBuckets.forEach(bk => {
+    const t = bucketTotals[bk];
+    const wr = (t.wins + t.losses) > 0 ? (t.wins / (t.wins + t.losses) * 100).toFixed(0) + '%' : '--';
+    const pc = t.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    html += `<td style="border-left:2px solid var(--border)">${t.wins}W-${t.losses}L</td><td>${wr}</td><td style="color:${pc}">${t.bets > 0 ? '$' + (t.pnl >= 0 ? '+' : '') + t.pnl.toFixed(2) : '--'}</td>`;
+  });
+  html += '</tr></tbody></table></div></div>';
+  pbEl.innerHTML = html;
+}
+
+// Price bucket win rate chart
+const bucketChartData = priceBuckets.filter(b => bucketTotals[b].bets > 0);
+if (bucketChartData.length > 0) {
+  new Chart(document.getElementById('cryptoPriceBucketChart'), {
+    type: 'bar',
+    data: {
+      labels: bucketChartData,
+      datasets: [
+        { label: 'Wins', data: bucketChartData.map(b => bucketTotals[b].wins), backgroundColor: 'rgba(34,197,94,0.7)', borderRadius: 4 },
+        { label: 'Losses', data: bucketChartData.map(b => bucketTotals[b].losses), backgroundColor: 'rgba(239,68,68,0.7)', borderRadius: 4 },
+      ]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#8b8fa3' } } }, scales: { x: { stacked: true, grid: { display: false }, ticks: { color: '#8b8fa3' } }, y: { stacked: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3' } } } }
+  });
+} else {
+  document.getElementById('cryptoPriceBucketChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:260px;color:var(--muted)">No data</div>';
 }
 
 // Entry window chart (bets per crypto with window label)
