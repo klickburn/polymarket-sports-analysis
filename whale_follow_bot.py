@@ -39,6 +39,9 @@ PRICE_BUMP_CENTS = 2         # Buy 2c above to fill at ask
 POLL_INTERVAL = 2            # Seconds between Polymarket polls
 EVENT_REFRESH = 900          # Refresh active events every 15 min
 
+GITHUB_TOKEN = os.environ.get("GH_TOKEN", "")
+GITHUB_REPO = "klickburn/polymarket-sports-analysis"
+
 LOG_FILE = "whale_follow_bot.log"
 TRADES_FILE = "whale_trades.json"
 STATUS_FILE = "whale_status.json"
@@ -424,6 +427,38 @@ def save_json(path, data):
         json.dump(data, f, indent=2, default=str)
 
 
+def push_to_github(filename, data):
+    """Push a JSON file to the GitHub repo so the dashboard can read it."""
+    if not GITHUB_TOKEN:
+        return
+    try:
+        api_url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{filename}"
+        headers = {
+            "Authorization": f"token {GITHUB_TOKEN}",
+            "Accept": "application/vnd.github.v3+json",
+        }
+        # Get current file SHA (needed for updates)
+        r = requests.get(api_url, headers=headers, timeout=15)
+        sha = r.json().get("sha", "") if r.status_code == 200 else ""
+
+        content = base64.b64encode(json.dumps(data, indent=2, default=str).encode()).decode()
+        payload = {
+            "message": f"whale-bot: update {filename}",
+            "content": content,
+            "branch": "main",
+        }
+        if sha:
+            payload["sha"] = sha
+
+        r = requests.put(api_url, headers=headers, json=payload, timeout=15)
+        if r.status_code in (200, 201):
+            P(f"  Pushed {filename} to GitHub")
+        else:
+            P(f"  GitHub push failed: {r.status_code}")
+    except Exception as e:
+        P(f"  GitHub push error: {e}")
+
+
 # ── Main Bot ────────────────────────────────────────────────────────────
 def run(live=False):
     P("=" * 65)
@@ -742,7 +777,7 @@ def run(live=False):
 
                 # Update status
                 uptime = int(time.time() - start_time)
-                save_json(STATUS_FILE, {
+                status_data = {
                     "last_poll": datetime.now(timezone.utc).isoformat(),
                     "uptime_seconds": uptime,
                     "active_events": len(active_events),
@@ -751,7 +786,12 @@ def run(live=False):
                     "trades_logged": len(trades_log),
                     "whale_wallets": WHALE_WALLETS,
                     "our_positions": {f"{k[0]}:{k[1]}": v for k, v in our_positions.items()},
-                })
+                }
+                save_json(STATUS_FILE, status_data)
+
+                # Push to GitHub so dashboard can read the data
+                push_to_github("whale_trades.json", trades_log)
+                push_to_github("whale_status.json", status_data)
 
             time.sleep(POLL_INTERVAL)
 
