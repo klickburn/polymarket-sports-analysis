@@ -179,7 +179,7 @@ def get_existing_positions():
 # ── Order placement ─────────────────────────────────────────────────────
 def place_order(ticker, side, price_dollars, amount_dollars):
     price_cents = min(99, int(round(price_dollars * 100)) + PRICE_BUMP_CENTS)
-    count = max(1, int(amount_dollars / (price_cents / 100)))
+    count = 2
 
     order = {
         "ticker": ticker,
