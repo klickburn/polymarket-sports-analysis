@@ -669,12 +669,11 @@ def run(live=False):
                         P(f"    No Kalshi series for {crypto}")
                         trade_record["kalshi_status"] = "no_series"
                     else:
-                        # Match Polymarket window to Kalshi market by end/strike time
+                        # Match Polymarket window to Kalshi market by exact end/strike time
+                        # NO fallback — if we can't match the exact window, skip it
                         market = None
                         if poly_end_date:
                             market = find_kalshi_market_for_window(series, poly_end_date)
-                        if not market:
-                            market = find_kalshi_market(series)  # fallback to nearest
                         if not market:
                             P(f"  └─ No matching Kalshi market for {series} (window: {poly_end_date[:19]})")
                             trade_record["kalshi_status"] = "no_market"
@@ -729,13 +728,11 @@ def run(live=False):
                     P(f"\n  ┌─ [{whale_name}] EXIT {crypto} {outcome}")
                     P(f"  │  Whale sold:   {size:.1f} shares @ {price:.2f}")
 
-                    # Find our position on the matching Kalshi market
+                    # Find our position on the matching Kalshi market (exact window only)
                     if series:
                         market = None
                         if poly_end_date:
                             market = find_kalshi_market_for_window(series, poly_end_date)
-                        if not market:
-                            market = find_kalshi_market(series)
                         if market:
                             ticker = market["ticker"]
                             trade_record["kalshi_ticker"] = ticker
