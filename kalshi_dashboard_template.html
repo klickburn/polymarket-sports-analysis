@@ -426,18 +426,39 @@
 </div>
 
 
+<div id="loadingOverlay" style="position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:9999;flex-direction:column;gap:16px">
+  <div style="font-size:20px;font-weight:600;color:var(--cyan)">Loading dashboard...</div>
+  <div style="color:var(--muted);font-size:14px">Fetching live data from Kalshi API</div>
+</div>
+
 <script>
 // ═══ Data ═══
-const SR = KALSHI_REPORT_PLACEHOLDER;
-const SPORTS_STATUS = KALSHI_STATUS_PLACEHOLDER;
-const CR = CRYPTO_REPORT_PLACEHOLDER;
-const CRYPTO_STATUS = CRYPTO_STATUS_PLACEHOLDER;
-const WR = WHALE_REPORT_PLACEHOLDER;
-const WHALE_STATUS = WHALE_STATUS_PLACEHOLDER;
-const DATA_REFRESHED_AT = "DATA_REFRESHED_PLACEHOLDER";
-const SPORTS_BETS = SR.bets || [];
-const CRYPTO_BETS = CR.bets || [];
-const WHALE_BETS = WR.bets || [];
+let SR, CR, SPORTS_BETS, CRYPTO_BETS, DATA_REFRESHED_AT;
+
+// Try live API first, fall back to baked-in placeholders
+async function loadData() {
+  try {
+    const resp = await fetch('/api/data');
+    if (!resp.ok) throw new Error('API error');
+    const data = await resp.json();
+    SR = data.sports_report;
+    CR = data.crypto_report;
+    DATA_REFRESHED_AT = data.refreshed_at;
+  } catch(e) {
+    // Fallback: use baked-in data (for GitHub Pages)
+    const empty = {total_bets:0,resolved:0,wins:0,losses:0,win_rate:0,total_pnl:0,total_wagered:0,open_count:0,open_cost:0,pending_count:0,balance:0,portfolio_value:0,bets:[]};
+    const baked = window._BAKED_DATA || {};
+    SR = baked.sports_report || empty;
+    CR = baked.crypto_report || empty;
+    DATA_REFRESHED_AT = baked.refreshed_at || new Date().toISOString();
+  }
+  SPORTS_BETS = SR.bets || [];
+  CRYPTO_BETS = CR.bets || [];
+  document.getElementById('loadingOverlay').style.display = 'none';
+  renderAll();
+}
+
+function renderAll() {
 
 const stratNames = { S1: 'Coin Flip Fav', S2: 'Coin Flip Dog', S3: 'UCL Underdog', S4: 'Bundesliga Draw' };
 const stratColors = { S1: '#3b82f6', S2: '#eab308', S3: '#a855f7', S4: '#06b6d4' };
@@ -984,6 +1005,10 @@ document.getElementById('overviewRecentBody').innerHTML = recentAll.map(r => {
     <td><span class="tag ${r.result}">${r.result.toUpperCase()}</span></td>
   </tr>`;
 }).join('');
+
+} // end renderAll()
+
+loadData();
 </script>
 </body>
 </html>

@@ -324,24 +324,24 @@ with open(template_file) as f:
 
 refresh_time = datetime.now(timezone.utc).isoformat()
 
-html = html.replace("KALSHI_REPORT_PLACEHOLDER", json.dumps(report, default=str))
-html = html.replace("KALSHI_STATUS_PLACEHOLDER", json.dumps(bot_status, default=str))
-html = html.replace("CRYPTO_REPORT_PLACEHOLDER", json.dumps(crypto_report, default=str))
-html = html.replace("CRYPTO_STATUS_PLACEHOLDER", json.dumps(crypto_status, default=str))
-html = html.replace("WHALE_REPORT_PLACEHOLDER", json.dumps(whale_report, default=str))
-html = html.replace("WHALE_STATUS_PLACEHOLDER", json.dumps(whale_status, default=str))
-html = html.replace("DATA_REFRESHED_PLACEHOLDER", refresh_time)
+# Inject data as global variables before the main script
+data_script = f"""<script>
+window._BAKED_DATA = {{
+  sports_report: {json.dumps(report, default=str)},
+  crypto_report: {json.dumps(crypto_report, default=str)},
+  refreshed_at: "{refresh_time}"
+}};
+</script>"""
+html = html.replace("</head>", data_script + "\n</head>")
 
 with open("kalshi_dashboard.html", "w") as f:
     f.write(html)
 
 s_resolved = [b for b in bot_bets if b.get("result") in ("win", "loss")]
 c_resolved = [b for b in crypto_bets if b.get("result") in ("win", "loss")]
-w_resolved = [b for b in whale_bets if b.get("result") in ("win", "loss")]
 
 P()
 P(f"  Kalshi Dashboard refreshed!")
 P(f"  Sports: {len(bot_bets)} bets, {len(s_resolved)} resolved, P&L: ${sum(b.get('pnl',0) for b in s_resolved):+.2f}")
 P(f"  Crypto: {len(crypto_bets)} bets, {len(c_resolved)} resolved, P&L: ${sum(b.get('pnl',0) for b in c_resolved):+.2f}")
-P(f"  Whale:  {len(whale_bets)} bets, {len(w_resolved)} resolved, P&L: ${sum(b.get('pnl',0) for b in w_resolved):+.2f}")
 P(f"  -> Open kalshi_dashboard.html to view")
