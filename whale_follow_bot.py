@@ -26,13 +26,17 @@ DATA_API = "https://data-api.polymarket.com"
 KALSHI_KEY_ID = os.environ.get("KALSHI_KEY_ID", "")
 KALSHI_PRIVATE_KEY = os.environ.get("KALSHI_PRIVATE_KEY", "")
 
-WHALE_WALLET = os.environ.get(
-    "WHALE_WALLET", "0xc1737e2db2d19e0b73a958ecd5d0f279d0e726ee"
-).lower()
+WHALE_WALLETS = {
+    "0xc1737e2db2d19e0b73a958ecd5d0f279d0e726ee": "Fickle-Spark",
+    "0x63ce342161250d705dc0b16df89036c8e5f9ba9a": "Blushing-Fine",
+    "0x576b0696fd5a9225d66fd9500fd98f5be10b0cab": "Moral-Roof",
+}
+# Normalize to lowercase
+WHALE_WALLETS = {k.lower(): v for k, v in WHALE_WALLETS.items()}
 
-BET_AMOUNT = 0.50            # $0.50 per mirrored trade
+WHALE_SCALE = 0.0025         # 0.25% of whale's trade size (proportional sizing)
 PRICE_BUMP_CENTS = 2         # Buy 2c above to fill at ask
-POLL_INTERVAL = 5            # Seconds between Polymarket polls
+POLL_INTERVAL = 2            # Seconds between Polymarket polls
 EVENT_REFRESH = 900          # Refresh active events every 15 min
 
 LOG_FILE = "whale_follow_bot.log"
@@ -43,6 +47,7 @@ SEEN_FILE = "whale_seen_trades.json"
 # Polymarket crypto → Kalshi series
 CRYPTO_MAP = {
     "btc": {"name": "BTC", "series": "KXBTC15M"},
+    "eth": {"name": "ETH", "series": "KXETH15M"},
     "sol": {"name": "SOL", "series": "KXSOL15M"},
     "xrp": {"name": "XRP", "series": "KXXRP15M"},
 }
@@ -247,39 +252,79 @@ def place_sell(ticker, side, count):
 
 
 # ── Kalshi Market Finder ────────────────────────────────────────────────
-def find_kalshi_market(series_ticker):
-    """Find the currently open Kalshi market for a crypto series."""
-    try:
-        data = kalshi_public("/events", params={
-            "series_ticker": series_ticker,
-            "status": "open",
-            "limit": 5,
-        })
-        events = data.get("events", [])
-        now = datetime.now(timezone.utc)
-        best_event = None
-        best_delta = timedelta(days=999)
+# Cache: {series_ticker: {strike_iso: market_dict, ...}}
+_kalshi_market_cache = {}
+_kalshi_cache_time = 0
+KALSHI_CACHE_TTL = 120  # Refresh Kalshi markets every 2 minutes
 
-        for ev in events:
-            strike_str = ev.get("strike_date", "")
-            if not strike_str:
-                continue
+
+def refresh_kalshi_markets():
+    """Fetch all open Kalshi 15m crypto markets and cache by series + strike time."""
+    global _kalshi_market_cache, _kalshi_cache_time
+    now = time.time()
+    if now - _kalshi_cache_time < KALSHI_CACHE_TTL and _kalshi_market_cache:
+        return
+    _kalshi_market_cache = {}
+    for crypto_key, cfg in CRYPTO_MAP.items():
+        series = cfg["series"]
+        try:
+            data = kalshi_public("/events", params={
+                "series_ticker": series,
+                "status": "open",
+                "limit": 5,
+            })
+            for ev in data.get("events", []):
+                strike_str = ev.get("strike_date", "")
+                if not strike_str:
+                    continue
+                event_ticker = ev["event_ticker"]
+                time.sleep(0.2)
+                resp = kalshi_public(f"/events/{event_ticker}")
+                markets = resp.get("markets", [])
+                if markets:
+                    if series not in _kalshi_market_cache:
+                        _kalshi_market_cache[series] = {}
+                    # Normalize strike time for matching
+                    strike_norm = strike_str.replace("+00:00", "Z")
+                    if not strike_norm.endswith("Z"):
+                        strike_norm += "Z"
+                    _kalshi_market_cache[series][strike_norm] = markets[0]
+        except Exception as e:
+            P(f"    Error fetching Kalshi markets for {series}: {e}")
+        time.sleep(0.3)
+    _kalshi_cache_time = now
+    total = sum(len(v) for v in _kalshi_market_cache.values())
+    P(f"  Kalshi market cache: {total} markets across {len(_kalshi_market_cache)} series")
+
+
+def find_kalshi_market_for_window(series_ticker, poly_end_date):
+    """Find the Kalshi market that matches a specific Polymarket window end time."""
+    refresh_kalshi_markets()
+    series_markets = _kalshi_market_cache.get(series_ticker, {})
+    # Normalize poly end date
+    end_norm = poly_end_date.replace("+00:00", "Z")
+    if not end_norm.endswith("Z"):
+        end_norm += "Z"
+    return series_markets.get(end_norm)
+
+
+def find_kalshi_market(series_ticker):
+    """Find the nearest open Kalshi market for a crypto series (fallback)."""
+    refresh_kalshi_markets()
+    series_markets = _kalshi_market_cache.get(series_ticker, {})
+    now = datetime.now(timezone.utc)
+    best = None
+    best_delta = timedelta(days=999)
+    for strike_str, market in series_markets.items():
+        try:
             strike = datetime.fromisoformat(strike_str.replace("Z", "+00:00"))
             delta = strike - now
             if timedelta(0) < delta < timedelta(minutes=16) and delta < best_delta:
                 best_delta = delta
-                best_event = ev
-
-        if not best_event:
-            return None
-
-        event_ticker = best_event["event_ticker"]
-        resp = kalshi_public(f"/events/{event_ticker}")
-        markets = resp.get("markets", [])
-        return markets[0] if markets else None
-    except Exception as e:
-        P(f"    Error finding Kalshi market for {series_ticker}: {e}")
-        return None
+                best = market
+        except Exception:
+            pass
+    return best
 
 
 def get_kalshi_price(ticker, side):
@@ -325,6 +370,7 @@ def fetch_active_poly_events():
                 if crypto:
                     ev["_crypto"] = crypto
                     ev["_series"] = CRYPTO_MAP.get(crypto.lower(), {}).get("series", "")
+                    ev["_end_date"] = ev.get("endDate", "")
                     events.append(ev)
     except Exception as e:
         P(f"  Error fetching Poly events: {e}")
@@ -332,7 +378,7 @@ def fetch_active_poly_events():
 
 
 def fetch_event_trades(event_id):
-    """Fetch trades for a Polymarket event, return whale trades only."""
+    """Fetch trades for a Polymarket event, return trades from any tracked whale."""
     whale_trades = []
     offset = 0
     while True:
@@ -346,7 +392,9 @@ def fetch_event_trades(event_id):
             if not isinstance(trades, list) or not trades:
                 break
             for t in trades:
-                if t.get("proxyWallet", "").lower() == WHALE_WALLET:
+                wallet = t.get("proxyWallet", "").lower()
+                if wallet in WHALE_WALLETS:
+                    t["_whale_name"] = WHALE_WALLETS[wallet]
                     whale_trades.append(t)
             if len(trades) < 1000:
                 break
@@ -380,8 +428,10 @@ def save_json(path, data):
 def run(live=False):
     P("=" * 65)
     P("  WHALE FOLLOW BOT — Mirror Polymarket Whale on Kalshi")
-    P(f"  Mode: {'LIVE' if live else 'DRY RUN'} | Bet: ${BET_AMOUNT:.2f}/trade")
-    P(f"  Whale: {WHALE_WALLET[:10]}...{WHALE_WALLET[-4:]}")
+    P(f"  Mode: {'LIVE' if live else 'DRY RUN'} | Scale: {WHALE_SCALE*100:.2f}% of whale volume")
+    P(f"  Following {len(WHALE_WALLETS)} whales:")
+    for wallet, name in WHALE_WALLETS.items():
+        P(f"    {name:20s} {wallet[:10]}...{wallet[-4:]}")
     P(f"  Cryptos: {', '.join(c['name'] for c in CRYPTO_MAP.values())}")
     P(f"  Poll: every {POLL_INTERVAL}s")
     P("=" * 65)
@@ -399,11 +449,8 @@ def run(live=False):
     P(f"  Previously seen trades: {len(seen_ids)}")
     P(f"  Previously logged trades: {len(trades_log)}")
 
-    # Track our Kalshi positions for exit signals
-    our_positions = {}  # {kalshi_ticker: {side, count, poly_event_id}}
-
-    # Track which Kalshi tickers we've already bet on (one bet per market)
-    bet_tickers = set()
+    # Track our Kalshi positions for exit signals — keyed by (whale, ticker)
+    our_positions = {}  # {(whale_name, kalshi_ticker): {side, count, poly_event_id}}
 
     # Fetch initial events
     active_events = fetch_active_poly_events()
@@ -428,6 +475,9 @@ def run(live=False):
     total_mirrored = 0
     total_exits = 0
     start_time = time.time()
+    last_heartbeat = time.time()
+    poll_count = 0
+    HEARTBEAT_INTERVAL = 60  # Log heartbeat every 60 seconds
 
     P(f"\n  Polling started — watching for whale trades...")
 
@@ -438,12 +488,35 @@ def run(live=False):
                 active_events = fetch_active_poly_events()
                 P(f"  Refreshed events: {len(active_events)} active")
                 last_event_refresh = time.time()
-                bet_tickers.clear()  # New windows = new bets allowed
+
+            poll_count += 1
+
+            # Heartbeat log
+            if time.time() - last_heartbeat >= HEARTBEAT_INTERVAL:
+                uptime_min = int((time.time() - start_time) / 60)
+                P(f"  ♥ Heartbeat: {poll_count} polls, {uptime_min}m uptime, {len(active_events)} events, "
+                  f"{total_mirrored} mirrored, {len(seen_ids)} seen")
+                last_heartbeat = time.time()
 
             new_whale_trades = []
 
-            # Poll each active event for whale trades
+            # Only poll events with windows ending in the next 15 minutes
+            now_utc = datetime.now(timezone.utc)
+            cutoff = now_utc + timedelta(minutes=15)
+            relevant_events = []
             for ev in active_events:
+                end_str = ev.get("_end_date", "")
+                if end_str:
+                    try:
+                        end_dt = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
+                        if now_utc <= end_dt <= cutoff:
+                            relevant_events.append(ev)
+                    except Exception:
+                        relevant_events.append(ev)  # include if can't parse
+                else:
+                    relevant_events.append(ev)
+
+            for ev in relevant_events:
                 event_id = ev.get("id")
                 if not event_id:
                     continue
@@ -459,28 +532,34 @@ def run(live=False):
                     t["_crypto"] = ev.get("_crypto", "?")
                     t["_series"] = ev.get("_series", "")
                     t["_event_id"] = event_id
+                    t["_end_date"] = ev.get("_end_date", "")
                     new_whale_trades.append(t)
 
-            # Aggregate whale trades by event to determine NET direction
-            # The whale often buys both sides — we follow the heavier side
-            event_agg = {}  # {event_id: {Up_vol, Down_vol, crypto, series, trades}}
+            # Aggregate whale trades by (whale, event) to determine NET direction
+            # Each whale gets their own aggregation — we follow each independently
+            event_agg = {}  # {(whale_name, event_id): {Up_vol, Down_vol, ...}}
             for t in new_whale_trades:
+                whale_name = t.get("_whale_name", "?")
                 eid = t["_event_id"]
-                if eid not in event_agg:
-                    event_agg[eid] = {"Up": 0, "Down": 0, "crypto": t["_crypto"],
-                                      "series": t["_series"], "buys": [], "sells": []}
+                key = (whale_name, eid)
+                if key not in event_agg:
+                    event_agg[key] = {"Up": 0, "Down": 0, "crypto": t["_crypto"],
+                                      "series": t["_series"], "whale": whale_name,
+                                      "buys": [], "sells": []}
                 action = t.get("side", "")
                 outcome = t.get("outcome", "")
                 size = float(t.get("size", 0))
+                price_t = float(t.get("price", 0))
+                dollar_vol = size * price_t
                 if action == "BUY" and outcome in ("Up", "Down"):
-                    event_agg[eid][outcome] += size
-                    event_agg[eid]["buys"].append(t)
+                    event_agg[key][outcome] += dollar_vol
+                    event_agg[key]["buys"].append(t)
                 elif action == "SELL":
-                    event_agg[eid]["sells"].append(t)
+                    event_agg[key]["sells"].append(t)
 
-            # Build one trade signal per event based on net direction
+            # Build one trade signal per (whale, event) based on net direction
             aggregated_trades = []
-            for eid, agg in event_agg.items():
+            for key, agg in event_agg.items():
                 # Handle sells
                 for t in agg["sells"]:
                     aggregated_trades.append(t)
@@ -504,6 +583,8 @@ def run(live=False):
             for t in aggregated_trades:
                 crypto = t["_crypto"]
                 series = t["_series"]
+                poly_end_date = t.get("_end_date", "")
+                whale_name = t.get("_whale_name", "?")
                 action = t.get("side", "")  # BUY or SELL
                 outcome = t.get("outcome", "")  # Up or Down
                 price = float(t.get("price", 0))
@@ -523,10 +604,16 @@ def run(live=False):
                     P(f"  ?? Unknown outcome: {net_side} for {crypto}")
                     continue
 
-                P(f"\n  WHALE SIGNAL: {action} {crypto} {net_side} — net ${net_vol:.2f} volume")
+                # Proportional sizing: our bet = WHALE_SCALE * whale's net volume
+                bet_amount = max(0.01, round(WHALE_SCALE * net_vol, 2))
+                P(f"\n  ┌─ [{whale_name}] {action} {crypto} {net_side}")
+                P(f"  │  Whale volume:  ${net_vol:>10.2f}  (price: {price:.2f}, size: {size:.1f} shares)")
+                P(f"  │  Our bet:       ${bet_amount:>10.2f}  ({WHALE_SCALE*100:.2f}% of whale)")
+                P(f"  │  Kalshi side:   {kalshi_side.upper()}")
 
                 trade_record = {
                     "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "whale_name": whale_name,
                     "whale_timestamp": ts,
                     "crypto": crypto,
                     "whale_action": action,
@@ -542,83 +629,109 @@ def run(live=False):
                 }
 
                 if action == "BUY":
-                    # Mirror: buy on Kalshi
+                    # Mirror: buy on Kalshi — match by window time
                     if not series:
                         P(f"    No Kalshi series for {crypto}")
                         trade_record["kalshi_status"] = "no_series"
                     else:
-                        time.sleep(0.5)  # Rate limit
-                        market = find_kalshi_market(series)
+                        # Match Polymarket window to Kalshi market by end/strike time
+                        market = None
+                        if poly_end_date:
+                            market = find_kalshi_market_for_window(series, poly_end_date)
                         if not market:
-                            P(f"    No open Kalshi market for {series}")
+                            market = find_kalshi_market(series)  # fallback to nearest
+                        if not market:
+                            P(f"  └─ No matching Kalshi market for {series} (window: {poly_end_date[:19]})")
                             trade_record["kalshi_status"] = "no_market"
                         else:
                             ticker = market["ticker"]
                             trade_record["kalshi_ticker"] = ticker
                             trade_record["kalshi_action"] = "buy"
 
-                            # Only one bet per Kalshi market per window
-                            if ticker in bet_tickers:
-                                P(f"    Already bet on {ticker} — skipping")
-                                trade_record["kalshi_status"] = "duplicate"
-                            else:
-                                time.sleep(0.3)  # Rate limit
-                                kalshi_price = get_kalshi_price(ticker, kalshi_side)
-                                if kalshi_price:
-                                    trade_record["kalshi_price"] = kalshi_price
-                                    P(f"    Kalshi: {ticker} {kalshi_side.upper()} @ {kalshi_price:.2f}")
+                            time.sleep(0.3)  # Rate limit
+                            kalshi_price = get_kalshi_price(ticker, kalshi_side)
+                            if kalshi_price and kalshi_price >= 0.02:
+                                trade_record["kalshi_price"] = kalshi_price
+                                contracts = max(1, int(bet_amount / (kalshi_price + 0.02)))
+                                cost_est = round(contracts * (kalshi_price + 0.02), 2)
+                                P(f"  │  Kalshi mkt:   {ticker}")
+                                P(f"  │  Kalshi price:  {kalshi_price:.2f} → {contracts} contracts ≈ ${cost_est:.2f}")
 
-                                    if live:
-                                        time.sleep(0.3)  # Rate limit
-                                        result = place_buy(ticker, kalshi_side, kalshi_price, BET_AMOUNT)
-                                        if result:
-                                            trade_record["kalshi_status"] = "filled"
-                                            bet_tickers.add(ticker)
-                                            our_positions[ticker] = {
-                                                "side": kalshi_side,
-                                                "count": max(1, int(BET_AMOUNT / (kalshi_price + 0.02))),
-                                                "poly_event_id": t["_event_id"],
-                                            }
-                                            total_mirrored += 1
-                                        else:
-                                            trade_record["kalshi_status"] = "failed"
+                                pos_key = (whale_name, ticker)
+                                if live:
+                                    time.sleep(0.3)  # Rate limit
+                                    result = place_buy(ticker, kalshi_side, kalshi_price, bet_amount)
+                                    if result:
+                                        trade_record["kalshi_status"] = "filled"
+                                        trade_record["bet_amount"] = bet_amount
+                                        our_positions[pos_key] = {
+                                            "side": kalshi_side,
+                                            "count": our_positions.get(pos_key, {}).get("count", 0) + contracts,
+                                            "poly_event_id": t["_event_id"],
+                                        }
+                                        total_mirrored += 1
+                                        P(f"  └─ PLACED ✓")
                                     else:
-                                        trade_record["kalshi_status"] = "dry_run"
-                                        P(f"    [DRY RUN] Would buy {kalshi_side} on {ticker}")
+                                        trade_record["kalshi_status"] = "failed"
+                                        P(f"  └─ FAILED ✗")
                                 else:
-                                    P(f"    No price available for {ticker}")
-                                    trade_record["kalshi_status"] = "no_price"
+                                    trade_record["kalshi_status"] = "dry_run"
+                                    trade_record["bet_amount"] = bet_amount
+                                    our_positions[pos_key] = {
+                                        "side": kalshi_side,
+                                        "count": our_positions.get(pos_key, {}).get("count", 0) + contracts,
+                                        "poly_event_id": t["_event_id"],
+                                    }
+                                    total_mirrored += 1
+                                    P(f"  └─ [DRY RUN] Would place order")
+                            else:
+                                P(f"  └─ No valid price for {ticker} (got: {kalshi_price})")
+                                trade_record["kalshi_status"] = "no_price"
 
                 elif action == "SELL":
                     # Exit: sell our Kalshi position
                     trade_record["kalshi_action"] = "sell"
+                    P(f"\n  ┌─ [{whale_name}] EXIT {crypto} {outcome}")
+                    P(f"  │  Whale sold:   {size:.1f} shares @ {price:.2f}")
 
                     # Find our position on the matching Kalshi market
                     if series:
-                        time.sleep(0.5)  # Rate limit
-                        market = find_kalshi_market(series)
+                        market = None
+                        if poly_end_date:
+                            market = find_kalshi_market_for_window(series, poly_end_date)
+                        if not market:
+                            market = find_kalshi_market(series)
                         if market:
                             ticker = market["ticker"]
                             trade_record["kalshi_ticker"] = ticker
 
-                            if ticker in our_positions:
-                                pos = our_positions[ticker]
-                                P(f"    EXIT: Selling {pos['count']}x {pos['side']} on {ticker}")
+                            pos_key = (whale_name, ticker)
+                            if pos_key in our_positions:
+                                pos = our_positions[pos_key]
+                                P(f"  │  Our position: {pos['count']}x {pos['side'].upper()} on {ticker} (via {whale_name})")
 
                                 if live:
                                     result = place_sell(ticker, pos["side"], pos["count"])
                                     if result:
                                         trade_record["kalshi_status"] = "sold"
-                                        del our_positions[ticker]
+                                        del our_positions[pos_key]
                                         total_exits += 1
+                                        P(f"  └─ EXITED ✓")
                                     else:
                                         trade_record["kalshi_status"] = "sell_failed"
+                                        P(f"  └─ EXIT FAILED ✗")
                                 else:
                                     trade_record["kalshi_status"] = "dry_run"
-                                    P(f"    [DRY RUN] Would sell {pos['side']} on {ticker}")
+                                    del our_positions[pos_key]
+                                    total_exits += 1
+                                    P(f"  └─ [DRY RUN] Would exit position")
                             else:
-                                P(f"    No Kalshi position to exit for {ticker}")
+                                P(f"  └─ No position for {whale_name} on {ticker}")
                                 trade_record["kalshi_status"] = "no_position"
+                        else:
+                            P(f"  └─ No open Kalshi market for {series}")
+                    else:
+                        P(f"  └─ No Kalshi series for {crypto}")
 
                 trades_log.append(trade_record)
 
@@ -636,8 +749,8 @@ def run(live=False):
                     "total_mirrored": total_mirrored,
                     "total_exits": total_exits,
                     "trades_logged": len(trades_log),
-                    "whale_wallet": WHALE_WALLET,
-                    "our_positions": {k: v for k, v in our_positions.items()},
+                    "whale_wallets": WHALE_WALLETS,
+                    "our_positions": {f"{k[0]}:{k[1]}": v for k, v in our_positions.items()},
                 })
 
             time.sleep(POLL_INTERVAL)
