@@ -5,10 +5,8 @@ on:
   workflow_run:
     workflows: ["Trading Bot"]
     types: [completed]
-  # Run at :15 and :45 (offset from bot at :00 and :30)
   schedule:
-    - cron: '15 * * * *'
-    - cron: '45 * * * *'
+    - cron: '*/5 * * * *'
   workflow_dispatch: # Manual trigger
 
 permissions:

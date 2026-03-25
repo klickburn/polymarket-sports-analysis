@@ -5,10 +5,8 @@ on:
   workflow_run:
     workflows: ["Kalshi Bot"]
     types: [completed]
-  # Run at :20 and :50 (offset from bot at :05 and :35)
   schedule:
-    - cron: '20 * * * *'
-    - cron: '50 * * * *'
+    - cron: '*/5 * * * *'
   workflow_dispatch: # Manual trigger
 
 permissions:
