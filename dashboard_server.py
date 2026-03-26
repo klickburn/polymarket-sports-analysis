@@ -36,7 +36,7 @@ CRYPTO_SERIES = {
     "KXBNB15M": "BNB",
 }
 
-REFRESH_INTERVAL = 120  # Refresh data every 2 minutes
+REFRESH_INTERVAL = 60  # Refresh data every 60 seconds
 
 # ── Shared data store ──────────────────────────────────────────────────
 _data = {"result": None, "refreshing": False, "last_refresh": 0}
