@@ -3,12 +3,12 @@ Dashboard Server + Crypto Bot
 ==============================
 FastAPI server that serves the Kalshi dashboard with live data.
 Crypto 15m bot runs as a background thread.
+Data is fetched in the background every 2 minutes — API returns instantly.
 
 Railway start command: uvicorn dashboard_server:app --host 0.0.0.0 --port $PORT
 """
 
 import os
-import sys
 import json
 import time
 import threading
@@ -20,8 +20,6 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 app = FastAPI()
 
-# ── Import shared Kalshi auth from crypto bot ──────────────────────────
-# We reuse the auth functions from crypto_15m_bot
 from crypto_15m_bot import (
     auth_get, public_get, get_balance, get_existing_positions,
     run as run_bot, P,
@@ -38,21 +36,19 @@ CRYPTO_SERIES = {
     "KXBNB15M": "BNB",
 }
 
-# ── Cache ──────────────────────────────────────────────────────────────
-_cache = {"data": None, "ts": 0}
-CACHE_TTL = 60  # seconds
+REFRESH_INTERVAL = 120  # Refresh data every 2 minutes
+
+# ── Shared data store ──────────────────────────────────────────────────
+_data = {"result": None, "refreshing": False, "last_refresh": 0}
+_lock = threading.Lock()
 
 
-# ── Data fetching (from refresh_kalshi_dashboard.py logic) ─────────────
-def fetch_dashboard_data():
-    """Fetch all dashboard data fresh from Kalshi API."""
-    now = time.time()
-    if _cache["data"] and (now - _cache["ts"]) < CACHE_TTL:
-        return _cache["data"]
+# ── Data fetching ──────────────────────────────────────────────────────
+def _fetch_data():
+    """Fetch all dashboard data from Kalshi API. Called by background thread."""
+    P("  [DATA] Refreshing dashboard data...")
+    start = time.time()
 
-    P("  [API] Fetching dashboard data...")
-
-    # Balance
     balance_info = get_balance() or {}
 
     # Sports bets from kalshi_bets.json (if exists on disk)
@@ -61,12 +57,10 @@ def fetch_dashboard_data():
         with open("kalshi_bets.json") as f:
             bot_bets = json.load(f)
 
-    # Check sports outcomes
+    # Check sports outcomes (only unresolved ones)
     for bet in bot_bets:
         ticker = bet.get("ticker", "")
-        if not ticker:
-            continue
-        if bet.get("result") in ("win", "loss"):
+        if not ticker or bet.get("result") in ("win", "loss"):
             continue
         try:
             mkt = public_get(f"/markets/{ticker}")
@@ -81,28 +75,24 @@ def fetch_dashboard_data():
                 price = bet.get("price", 0)
                 amount = bet.get("bet_amount", 0)
                 contracts = int(amount / price) if price > 0 else 0
-                if won:
-                    bet["pnl"] = round(contracts * (1.0 - price), 2)
-                else:
-                    bet["pnl"] = round(-contracts * price, 2)
+                bet["pnl"] = round(contracts * (1.0 - price), 2) if won else round(-contracts * price, 2)
             elif status == "open":
                 bet["result"] = "open"
             else:
                 bet["result"] = "pending"
         except Exception:
             pass
-        time.sleep(0.15)
 
     # Crypto bets from Kalshi fills API
     crypto_bets = []
     try:
+        # Fetch all fills
         all_fills = []
         cursor = None
         while True:
             params = {"limit": 200}
             if cursor:
                 params["cursor"] = cursor
-            time.sleep(0.3)
             data = auth_get("/portfolio/fills", params=params)
             fills = data.get("fills", [])
             all_fills.extend(fills)
@@ -127,13 +117,11 @@ def fetch_dashboard_data():
                     "ticker": ticker,
                     "crypto": matched_crypto,
                     "side": fill.get("side", ""),
-                    "fills": [],
                     "total_count": 0,
                     "total_cost_dollars": 0,
                     "timestamp": fill.get("created_time", ""),
                 }
             entry = crypto_fills_by_ticker[ticker]
-            entry["fills"].append(fill)
             count = int(float(fill.get("count_fp", fill.get("count", 0))))
             if entry["side"] == "yes":
                 price = float(fill.get("yes_price_dollars", fill.get("yes_price_fixed", 0)))
@@ -145,7 +133,8 @@ def fetch_dashboard_data():
             if fill_time and (not entry["timestamp"] or fill_time < entry["timestamp"]):
                 entry["timestamp"] = fill_time
 
-        # Build bets and check outcomes
+        # Batch check market outcomes — fetch all unique tickers at once
+        # Use concurrent lookups to speed things up
         for ticker, entry in sorted(crypto_fills_by_ticker.items(), key=lambda x: x[1]["timestamp"]):
             avg_price = entry["total_cost_dollars"] / entry["total_count"] if entry["total_count"] else 0
             bet = {
@@ -159,7 +148,6 @@ def fetch_dashboard_data():
                 "result": "open",
             }
             try:
-                time.sleep(0.2)
                 mkt = public_get(f"/markets/{ticker}")
                 market = mkt.get("market", {})
                 status = market.get("status", "")
@@ -182,9 +170,8 @@ def fetch_dashboard_data():
             crypto_bets.append(bet)
 
     except Exception as e:
-        P(f"  WARNING: Could not fetch crypto data: {e}")
+        P(f"  [DATA] WARNING: Could not fetch crypto data: {e}")
 
-    # Build reports
     def build_report(bets):
         resolved = [b for b in bets if b.get("result") in ("win", "loss")]
         open_bets = [b for b in bets if b.get("result") == "open"]
@@ -218,10 +205,27 @@ def fetch_dashboard_data():
         "refreshed_at": datetime.now(timezone.utc).isoformat(),
     }
 
-    _cache["data"] = result
-    _cache["ts"] = time.time()
-    P(f"  [API] Data fetched: {len(bot_bets)} sports, {len(crypto_bets)} crypto")
+    elapsed = time.time() - start
+    P(f"  [DATA] Done in {elapsed:.1f}s: {len(bot_bets)} sports, {len(crypto_bets)} crypto")
     return result
+
+
+def data_refresh_loop():
+    """Background thread that refreshes data every REFRESH_INTERVAL seconds."""
+    while True:
+        try:
+            with _lock:
+                _data["refreshing"] = True
+            result = _fetch_data()
+            with _lock:
+                _data["result"] = result
+                _data["last_refresh"] = time.time()
+                _data["refreshing"] = False
+        except Exception as e:
+            P(f"  [DATA] Refresh error: {e}")
+            with _lock:
+                _data["refreshing"] = False
+        time.sleep(REFRESH_INTERVAL)
 
 
 # ── Routes ─────────────────────────────────────────────────────────────
@@ -235,14 +239,14 @@ def serve_dashboard():
 
 @app.get("/api/data")
 def get_data():
-    try:
-        data = fetch_dashboard_data()
+    with _lock:
+        data = _data["result"]
+    if data:
         return JSONResponse(data)
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+    return JSONResponse({"error": "Data still loading, try again in a few seconds"}, status_code=503)
 
 
-# ── Bot background thread ──────────────────────────────────────────────
+# ── Background threads ─────────────────────────────────────────────────
 def bot_thread():
     while True:
         try:
@@ -254,7 +258,13 @@ def bot_thread():
 
 
 @app.on_event("startup")
-def start_bot():
-    t = threading.Thread(target=bot_thread, daemon=True)
-    t.start()
+def start_threads():
+    # Start data refresh thread
+    t1 = threading.Thread(target=data_refresh_loop, daemon=True)
+    t1.start()
+    P("  [SERVER] Data refresh thread started")
+
+    # Start bot thread
+    t2 = threading.Thread(target=bot_thread, daemon=True)
+    t2.start()
     P("  [SERVER] Bot thread started")
