@@ -29,7 +29,7 @@ KALSHI_KEY_ID = os.environ.get("KALSHI_KEY_ID", "")
 KALSHI_PRIVATE_KEY = os.environ.get("KALSHI_PRIVATE_KEY", "")
 
 BET_AMOUNT = 0.10            # $0.10 per bet
-MIN_PRICE = 0.80             # Dominant side at 80c+
+MIN_PRICE = 0.75             # Dominant side at 75c+
 PRICE_BUMP_CENTS = 2         # Buy 2c above to fill at ask
 
 LOG_FILE = "crypto_15m_bot.log"
