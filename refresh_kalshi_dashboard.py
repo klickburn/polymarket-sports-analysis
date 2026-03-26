@@ -19,6 +19,11 @@ def P(msg=""):
     print(msg, flush=True)
 
 
+def kalshi_fee(price):
+    """Kalshi fee per contract: 0.07 * P * (1 - P)"""
+    return 0.07 * price * (1 - price)
+
+
 # Crypto series prefixes — used to identify crypto 15m bot orders
 CRYPTO_SERIES = {
     "KXBTC15M": "BTC",
@@ -81,10 +86,12 @@ if KALSHI_KEY_ID and KALSHI_PRIVATE_KEY:
                         price = bet.get("price", 0)
                         amount = bet.get("bet_amount", 0)
                         contracts = int(amount / price) if price > 0 else 0
+                        fee = round(kalshi_fee(price) * contracts, 4)
+                        bet["fee"] = fee
                         if won:
-                            bet["pnl"] = round(contracts * (1.0 - price), 2)
+                            bet["pnl"] = round(contracts * (1.0 - price) - fee, 2)
                         else:
-                            bet["pnl"] = round(-contracts * price, 2)
+                            bet["pnl"] = round(-contracts * price - fee, 2)
                     elif ticker in positions:
                         bet["result"] = "open"
                     elif status == "open":
@@ -200,10 +207,12 @@ if KALSHI_KEY_ID and KALSHI_PRIVATE_KEY:
                           (result_val == "no" and bet["side"] == "no")
                     bet["result"] = "win" if won else "loss"
                     bet["market_result"] = result_val
+                    fee = round(kalshi_fee(avg_price) * entry["total_count"], 4)
+                    bet["fee"] = fee
                     if won:
-                        bet["pnl"] = round(entry["total_count"] * (1.0 - avg_price), 2)
+                        bet["pnl"] = round(entry["total_count"] * (1.0 - avg_price) - fee, 2)
                     else:
-                        bet["pnl"] = round(-entry["total_count"] * avg_price, 2)
+                        bet["pnl"] = round(-entry["total_count"] * avg_price - fee, 2)
                 elif status == "open":
                     bet["result"] = "open"
                 else:
@@ -233,6 +242,7 @@ def build_report(bets):
     wins = [b for b in resolved if b["result"] == "win"]
     losses = [b for b in resolved if b["result"] == "loss"]
     total_pnl = sum(b.get("pnl", 0) for b in resolved)
+    total_fees = sum(b.get("fee", 0) for b in resolved)
     total_wagered = sum(b.get("bet_amount", 0) for b in bets)
     open_cost = sum(b.get("bet_amount", 0) for b in open_bets)
     return {
@@ -242,6 +252,7 @@ def build_report(bets):
         "losses": len(losses),
         "win_rate": round(len(wins) / len(resolved) * 100, 1) if resolved else 0,
         "total_pnl": round(total_pnl, 2),
+        "total_fees": round(total_fees, 2),
         "total_wagered": round(total_wagered, 2),
         "open_count": len(open_bets),
         "open_cost": round(open_cost, 2),
@@ -291,10 +302,12 @@ if KALSHI_KEY_ID and KALSHI_PRIVATE_KEY and whale_bets:
                     bet["result"] = "win" if won else "loss"
                     bet["market_result"] = result_val
                     contracts = max(1, int(0.50 / (kalshi_price + 0.02))) if kalshi_price else 1
+                    fee = round(kalshi_fee(kalshi_price) * contracts, 4)
+                    bet["fee"] = fee
                     if won:
-                        bet["pnl"] = round(contracts * (1.0 - kalshi_price), 2)
+                        bet["pnl"] = round(contracts * (1.0 - kalshi_price) - fee, 2)
                     else:
-                        bet["pnl"] = round(-contracts * kalshi_price, 2)
+                        bet["pnl"] = round(-contracts * kalshi_price - fee, 2)
                     bet["bet_amount"] = round(contracts * kalshi_price, 2)
                 elif status == "open":
                     bet["result"] = "open"

@@ -514,7 +514,7 @@ document.getElementById('lastUpdated').textContent = refreshDate.toLocaleDateStr
 const sRoi = SR.total_wagered > 0 ? (SR.total_pnl / SR.total_wagered * 100).toFixed(1) : '0';
 const sportsKpis = [
   { label: 'Balance', value: SR.balance > 0 ? `$${SR.balance.toFixed(2)}` : '--', cls: 'cyan', sub: SR.portfolio_value > 0 ? `$${SR.portfolio_value.toFixed(2)} portfolio` : '' },
-  { label: 'Sports P&L', value: `$${SR.total_pnl >= 0 ? '+' : ''}${SR.total_pnl.toFixed(2)}`, cls: SR.total_pnl >= 0 ? 'green' : 'red', sub: `${SR.total_bets} total bets` },
+  { label: 'Sports P&L', value: `$${SR.total_pnl >= 0 ? '+' : ''}${SR.total_pnl.toFixed(2)}`, cls: SR.total_pnl >= 0 ? 'green' : 'red', sub: `fees: $${(SR.total_fees || 0).toFixed(2)}` },
   { label: 'ROI', value: `${sRoi}%`, cls: parseFloat(sRoi) >= 0 ? 'green' : 'red', sub: `$${SR.total_wagered.toFixed(2)} wagered` },
   { label: 'Win Rate', value: SR.resolved > 0 ? `${SR.win_rate}%` : '--', cls: SR.win_rate >= 50 ? 'green' : 'red', sub: `${SR.wins}W - ${SR.losses}L` },
   { label: 'Open', value: SR.open_count, cls: 'blue', sub: `$${SR.open_cost.toFixed(2)} at risk` },
@@ -681,7 +681,7 @@ renderSportsTable('all');
 const cRoi = CR.total_wagered > 0 ? (CR.total_pnl / CR.total_wagered * 100).toFixed(1) : '0';
 const cryptoKpis = [
   { label: 'Balance', value: CR.balance > 0 ? `$${CR.balance.toFixed(2)}` : '--', cls: 'orange', sub: 'Shared Kalshi balance' },
-  { label: 'Crypto P&L', value: `$${CR.total_pnl >= 0 ? '+' : ''}${CR.total_pnl.toFixed(2)}`, cls: CR.total_pnl >= 0 ? 'green' : 'red', sub: `${CR.total_bets} total trades` },
+  { label: 'Crypto P&L', value: `$${CR.total_pnl >= 0 ? '+' : ''}${CR.total_pnl.toFixed(2)}`, cls: CR.total_pnl >= 0 ? 'green' : 'red', sub: `fees: $${(CR.total_fees || 0).toFixed(2)}` },
   { label: 'ROI', value: `${cRoi}%`, cls: parseFloat(cRoi) >= 0 ? 'green' : 'red', sub: `$${CR.total_wagered.toFixed(2)} wagered` },
   { label: 'Win Rate', value: CR.resolved > 0 ? `${CR.win_rate}%` : '--', cls: CR.win_rate >= 50 ? 'green' : 'red', sub: `${CR.wins}W - ${CR.losses}L` },
   { label: 'Open', value: CR.open_count, cls: 'blue', sub: `$${CR.open_cost.toFixed(2)} at risk` },
@@ -905,6 +905,7 @@ const allResolved = allBets.filter(b => b.result === 'win' || b.result === 'loss
 const allWins = allResolved.filter(b => b.result === 'win');
 const allLosses = allResolved.filter(b => b.result === 'loss');
 const totalPnl = allResolved.reduce((s, b) => s + (b.pnl || 0), 0);
+const totalFees = (SR.total_fees || 0) + (CR.total_fees || 0);
 const totalWagered = allBets.reduce((s, b) => s + (b.bet_amount || 0), 0);
 const allOpen = allBets.filter(b => b.result === 'open');
 const totalRoi = totalWagered > 0 ? (totalPnl / totalWagered * 100).toFixed(1) : '0';
@@ -913,7 +914,7 @@ const totalWinRate = allResolved.length > 0 ? (allWins.length / allResolved.leng
 // KPIs
 const overviewKpis = [
   { label: 'Account Balance', value: SR.balance > 0 ? `$${SR.balance.toFixed(2)}` : '--', cls: 'cyan', sub: SR.portfolio_value > 0 ? `$${SR.portfolio_value.toFixed(2)} portfolio` : '' },
-  { label: 'Total P&L', value: `$${totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}`, cls: totalPnl >= 0 ? 'green' : 'red', sub: `${allResolved.length} resolved trades` },
+  { label: 'Total P&L', value: `$${totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}`, cls: totalPnl >= 0 ? 'green' : 'red', sub: `fees: $${totalFees.toFixed(2)}` },
   { label: 'Win Rate', value: `${totalWinRate}%`, cls: parseFloat(totalWinRate) >= 50 ? 'green' : 'red', sub: `${allWins.length}W - ${allLosses.length}L` },
   { label: 'ROI', value: `${totalRoi}%`, cls: parseFloat(totalRoi) >= 0 ? 'green' : 'red', sub: `$${totalWagered.toFixed(2)} wagered` },
   { label: 'Total Trades', value: allBets.length, cls: 'blue', sub: `${SPORTS_BETS.length} sports + ${CRYPTO_BETS.length} crypto` },
