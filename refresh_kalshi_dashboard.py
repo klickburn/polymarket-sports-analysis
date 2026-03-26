@@ -35,6 +35,9 @@ CRYPTO_SERIES = {
     "KXBNB15M": "BNB",
 }
 
+# Exclude specific outlier tickers from dashboard
+EXCLUDED_TICKERS = {"KXNCAAWBGAME-26MAR23UVAIOWA-UVA"}
+
 
 P("  [1/4] Loading Kalshi bot data...")
 
@@ -67,6 +70,8 @@ if KALSHI_KEY_ID and KALSHI_PRIVATE_KEY:
         # Try to get settlement info for placed bets
         P("  Checking sports bet outcomes...")
         positions = get_existing_positions()
+        # Filter out excluded tickers
+        bot_bets = [b for b in bot_bets if b.get("ticker", "") not in EXCLUDED_TICKERS]
         for bet in bot_bets:
             ticker = bet.get("ticker", "")
             if not ticker:

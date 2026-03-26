@@ -44,6 +44,9 @@ SPORTS_PREFIXES = [
     "KXCS2", "KXLOL", "KXEUR", "KXDOTA", "KXCBB", "KXWCBB",
 ]
 
+# Exclude specific outlier tickers from dashboard
+EXCLUDED_TICKERS = {"KXNCAAWBGAME-26MAR23UVAIOWA-UVA"}
+
 REFRESH_INTERVAL = 60  # Refresh data every 60 seconds
 
 # ── Shared data store ──────────────────────────────────────────────────
@@ -101,6 +104,8 @@ def _fetch_data():
         Uses actual fee_cost and is_taker from API (like kalshi-dash)."""
         bets = []
         for ticker, fills in fills_by_ticker.items():
+            if ticker in EXCLUDED_TICKERS:
+                continue
             category = ticker_filter(ticker)
             if not category:
                 continue
