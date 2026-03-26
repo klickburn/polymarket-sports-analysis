@@ -466,11 +466,21 @@ async function loadData() {
   renderAll();
 }
 
-function renderAll() {
-
 const stratNames = { S1: 'Coin Flip Fav', S2: 'Coin Flip Dog', S3: 'UCL Underdog', S4: 'Bundesliga Draw' };
 const stratColors = { S1: '#3b82f6', S2: '#eab308', S3: '#a855f7', S4: '#06b6d4' };
 const cryptoColors = { BTC: '#f7931a', ETH: '#627eea', SOL: '#00ffa3', XRP: '#00a2e0', DOGE: '#c4b040', HYPE: '#00ced1', BNB: '#f3ba2f' };
+
+// ═══ Mode switching ═══
+function switchMode(mode) {
+  document.getElementById('sectionOverview').classList.toggle('active', mode === 'overview');
+  document.getElementById('sectionSports').classList.toggle('active', mode === 'sports');
+  document.getElementById('sectionCrypto').classList.toggle('active', mode === 'crypto');
+  document.getElementById('tabOverview').className = 'mode-tab' + (mode === 'overview' ? ' active-overview' : '');
+  document.getElementById('tabSports').className = 'mode-tab' + (mode === 'sports' ? ' active-sports' : '');
+  document.getElementById('tabCrypto').className = 'mode-tab' + (mode === 'crypto' ? ' active-crypto' : '');
+}
+
+function renderAll() {
 
 function getDate(ts) {
   if (!ts) return '';
@@ -488,16 +498,6 @@ function stratTag(s) {
 function cryptoTag(c) {
   if (!c) return '-';
   return `<span class="crypto-tag ${c.toLowerCase()}">${c}</span>`;
-}
-
-// ═══ Mode switching ═══
-function switchMode(mode) {
-  document.getElementById('sectionOverview').classList.toggle('active', mode === 'overview');
-  document.getElementById('sectionSports').classList.toggle('active', mode === 'sports');
-  document.getElementById('sectionCrypto').classList.toggle('active', mode === 'crypto');
-  document.getElementById('tabOverview').className = 'mode-tab' + (mode === 'overview' ? ' active-overview' : '');
-  document.getElementById('tabSports').className = 'mode-tab' + (mode === 'sports' ? ' active-sports' : '');
-  document.getElementById('tabCrypto').className = 'mode-tab' + (mode === 'crypto' ? ' active-crypto' : '');
 }
 
 // ═══ Timestamps ═══
@@ -665,11 +665,11 @@ function renderSportsTable(filter) {
     </tr>
   `).join('');
 }
-function filterSportsTable(f, el) {
+window.filterSportsTable = function(f, el) {
   document.querySelectorAll('#sportsTabs .tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
   renderSportsTable(f);
-}
+};
 renderSportsTable('all');
 
 
@@ -886,11 +886,11 @@ function renderCryptoTable(filter) {
     </tr>
   `).join('');
 }
-function filterCryptoTable(f, el) {
+window.filterCryptoTable = function(f, el) {
   document.querySelectorAll('#cryptoTabs .tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
   renderCryptoTable(f);
-}
+};
 renderCryptoTable('all');
 
 // ═══════════════════════════════════════════════════════════════
