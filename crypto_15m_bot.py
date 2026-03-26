@@ -49,7 +49,7 @@ CRYPTOS = {
     "BNB":  {"series": "KXBNB15M"},
 }
 
-POLL_INTERVAL = 30       # Seconds between retries
+POLL_INTERVAL = 5        # Seconds between retries
 ENTRY_AFTER_MINUTES = 10     # Wait 10 min into window (= 5 min before strike)
 
 # ── Logging ─────────────────────────────────────────────────────────────
@@ -369,7 +369,7 @@ def run(live=False):
                 if crypto in placed_this_window:
                     continue
 
-                time.sleep(0.3)
+                time.sleep(0.1)
                 market, event = find_current_market(cfg["series"])
                 if not market:
                     continue
@@ -380,7 +380,7 @@ def run(live=False):
                     placed_this_window.add(crypto)
                     continue
 
-                time.sleep(0.3)
+                time.sleep(0.1)
                 side, price = get_dominant_side(ticker)
                 if not side or not price:
                     continue
