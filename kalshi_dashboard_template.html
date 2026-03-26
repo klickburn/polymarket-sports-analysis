@@ -245,7 +245,7 @@
 <body>
 <div class="header">
   <div>
-    <h1>Kalshi Dashboard</h1>
+    <h1>Kalshi Dashboard <span id="accountBadge" style="font-size:14px;background:rgba(99,102,241,0.2);color:#818cf8;padding:3px 10px;border-radius:6px;vertical-align:middle"></span></h1>
     <div class="subtitle">Sports + Crypto Automated Trading</div>
   </div>
   <div style="text-align:right">
@@ -447,6 +447,7 @@ async function loadData() {
       SR = data.sports_report;
       CR = data.crypto_report;
       DATA_REFRESHED_AT = data.refreshed_at;
+      if (data.account_name) document.getElementById('accountBadge').textContent = data.account_name;
       break;
     }
     if (!SR) throw new Error('timeout');

@@ -45,9 +45,10 @@ SPORTS_PREFIXES = [
 ]
 
 # Exclude specific outlier tickers from dashboard
-EXCLUDED_TICKERS = {"KXNCAAWBGAME-26MAR23UVAIOWA-UVA"}
+EXCLUDED_TICKERS = set(os.environ.get("EXCLUDED_TICKERS", "KXNCAAWBGAME-26MAR23UVAIOWA-UVA").split(","))
 
-REFRESH_INTERVAL = 60  # Refresh data every 60 seconds
+ACCOUNT_NAME = os.environ.get("ACCOUNT_NAME", "Default")
+REFRESH_INTERVAL = int(os.environ.get("REFRESH_INTERVAL", "60"))
 
 # ── Shared data store ──────────────────────────────────────────────────
 _data = {"result": None, "refreshing": False, "last_refresh": 0}
@@ -256,6 +257,7 @@ def _fetch_data():
         }
 
     result = {
+        "account_name": ACCOUNT_NAME,
         "sports_report": build_report(sports_bets),
         "sports_status": {},
         "crypto_report": build_report(crypto_bets),

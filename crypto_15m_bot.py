@@ -28,9 +28,10 @@ API_BASE = "https://api.elections.kalshi.com/trade-api/v2"
 KALSHI_KEY_ID = os.environ.get("KALSHI_KEY_ID", "")
 KALSHI_PRIVATE_KEY = os.environ.get("KALSHI_PRIVATE_KEY", "")
 
-BET_AMOUNT = 0.10            # $0.10 per bet
-MIN_PRICE = 0.75             # Dominant side at 75c+
-PRICE_BUMP_CENTS = 2         # Buy 2c above to fill at ask
+BET_AMOUNT = float(os.environ.get("BET_AMOUNT", "0.10"))
+MIN_PRICE = float(os.environ.get("MIN_PRICE", "0.75"))
+PRICE_BUMP_CENTS = int(os.environ.get("PRICE_BUMP_CENTS", "2"))
+ACCOUNT_NAME = os.environ.get("ACCOUNT_NAME", "Default")
 
 LOG_FILE = "crypto_15m_bot.log"
 BETS_FILE = "crypto_15m_bets.json"
@@ -49,8 +50,8 @@ CRYPTOS = {
     "BNB":  {"series": "KXBNB15M"},
 }
 
-POLL_INTERVAL = 5        # Seconds between retries
-ENTRY_AFTER_MINUTES = 10     # Wait 10 min into window (= 5 min before strike)
+POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "5"))
+ENTRY_AFTER_MINUTES = int(os.environ.get("ENTRY_AFTER_MINUTES", "10"))
 
 # ── Logging ─────────────────────────────────────────────────────────────
 _log = None
