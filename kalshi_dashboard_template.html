@@ -806,7 +806,7 @@ if (CR.total_bets === 0) {
   html += '</tr><tr><th></th>';
   priceBuckets.forEach(() => html += '<th style="border-left:2px solid var(--border)">W-L</th><th>Win%</th><th>P&L</th>');
   html += '</tr></thead><tbody>';
-  const allCryptos = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE'].filter(c => bucketStats[c]);
+  const allCryptos = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'HYPE', 'BNB'].filter(c => bucketStats[c]);
   for (const c of allCryptos) {
     html += `<tr><td>${cryptoTag(c)}</td>`;
     priceBuckets.forEach(bk => {
