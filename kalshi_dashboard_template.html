@@ -755,10 +755,11 @@ if (cAssetNames.length > 0 && cResolved.length > 0) {
 }
 
 // ═══ Performance by Price Bucket (per crypto) ═══
-const priceBuckets = ['<80c', '80-85c', '85-90c', '90-95c', '95-99c'];
+const priceBuckets = ['<75c', '75-80c', '80-85c', '85-90c', '90-95c', '95-99c'];
 function getBucket(price) {
   const c = price * 100;
-  if (c < 80) return '<80c';
+  if (c < 75) return '<75c';
+  if (c < 80) return '75-80c';
   if (c < 85) return '80-85c';
   if (c < 90) return '85-90c';
   if (c < 95) return '90-95c';
