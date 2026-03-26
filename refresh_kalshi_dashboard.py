@@ -162,11 +162,16 @@ if KALSHI_KEY_ID and KALSHI_PRIVATE_KEY:
                     "fills": [],
                     "total_count": 0,
                     "total_cost_dollars": 0,
+                    "total_fee": 0,
+                    "maker_count": 0,
+                    "taker_count": 0,
                     "timestamp": fill.get("created_time", ""),
                 }
             entry = crypto_fills_by_ticker[ticker]
             entry["fills"].append(fill)
             count = int(float(fill.get("count_fp", fill.get("count", 0))))
+            fee = float(fill.get("fee_cost", 0))
+            is_taker = fill.get("is_taker", False)
             # Prices are dollar strings like "0.8900"
             if entry["side"] == "yes":
                 price = float(fill.get("yes_price_dollars", fill.get("yes_price_fixed", 0)))
@@ -174,6 +179,11 @@ if KALSHI_KEY_ID and KALSHI_PRIVATE_KEY:
                 price = float(fill.get("no_price_dollars", fill.get("no_price_fixed", 0)))
             entry["total_count"] += count
             entry["total_cost_dollars"] += count * price
+            entry["total_fee"] += fee
+            if is_taker:
+                entry["taker_count"] += count
+            else:
+                entry["maker_count"] += count
             # Use earliest fill time as timestamp
             fill_time = fill.get("created_time", "")
             if fill_time and (not entry["timestamp"] or fill_time < entry["timestamp"]):
@@ -184,6 +194,7 @@ if KALSHI_KEY_ID and KALSHI_PRIVATE_KEY:
         # Build crypto bets list and check market outcomes
         for ticker, entry in sorted(crypto_fills_by_ticker.items(), key=lambda x: x[1]["timestamp"]):
             avg_price = entry["total_cost_dollars"] / entry["total_count"] if entry["total_count"] else 0
+            actual_fee = entry["total_fee"]
             bet = {
                 "ticker": ticker,
                 "crypto": entry["crypto"],
@@ -192,6 +203,9 @@ if KALSHI_KEY_ID and KALSHI_PRIVATE_KEY:
                 "bet_amount": round(entry["total_cost_dollars"], 2),
                 "contracts": entry["total_count"],
                 "timestamp": entry["timestamp"],
+                "fee": round(actual_fee, 4),
+                "maker_count": entry["maker_count"],
+                "taker_count": entry["taker_count"],
                 "result": "open",
             }
 
@@ -207,12 +221,10 @@ if KALSHI_KEY_ID and KALSHI_PRIVATE_KEY:
                           (result_val == "no" and bet["side"] == "no")
                     bet["result"] = "win" if won else "loss"
                     bet["market_result"] = result_val
-                    fee = round(kalshi_fee(avg_price) * entry["total_count"], 4)
-                    bet["fee"] = fee
                     if won:
-                        bet["pnl"] = round(entry["total_count"] * (1.0 - avg_price) - fee, 2)
+                        bet["pnl"] = round(entry["total_count"] * (1.0 - avg_price) - actual_fee, 2)
                     else:
-                        bet["pnl"] = round(-entry["total_count"] * avg_price - fee, 2)
+                        bet["pnl"] = round(-entry["total_count"] * avg_price - actual_fee, 2)
                 elif status == "open":
                     bet["result"] = "open"
                 else:
