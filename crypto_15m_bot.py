@@ -31,6 +31,7 @@ KALSHI_PRIVATE_KEY = os.environ.get("KALSHI_PRIVATE_KEY", "")
 BET_AMOUNT = float(os.environ.get("BET_AMOUNT", "0.10"))
 MIN_PRICE = float(os.environ.get("MIN_PRICE", "0.75"))
 PRICE_BUMP_CENTS = int(os.environ.get("PRICE_BUMP_CENTS", "2"))
+CONTRACT_COUNT = int(os.environ.get("CONTRACT_COUNT", "2"))
 ACCOUNT_NAME = os.environ.get("ACCOUNT_NAME", "Default")
 
 LOG_FILE = "crypto_15m_bot.log"
@@ -180,7 +181,7 @@ def get_existing_positions():
 # ── Order placement ─────────────────────────────────────────────────────
 def place_order(ticker, side, price_dollars, amount_dollars):
     price_cents = min(99, int(round(price_dollars * 100)) + PRICE_BUMP_CENTS)
-    count = 2
+    count = CONTRACT_COUNT
 
     order = {
         "ticker": ticker,
