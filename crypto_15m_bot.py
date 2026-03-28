@@ -29,7 +29,8 @@ KALSHI_KEY_ID = os.environ.get("KALSHI_KEY_ID", "")
 KALSHI_PRIVATE_KEY = os.environ.get("KALSHI_PRIVATE_KEY", "")
 
 BET_AMOUNT = float(os.environ.get("BET_AMOUNT", "0.10"))
-MIN_PRICE = float(os.environ.get("MIN_PRICE", "0.75"))
+MIN_PRICE = float(os.environ.get("MIN_PRICE", "0.85"))
+MAX_PRICE = float(os.environ.get("MAX_PRICE", "0.90"))
 PRICE_BUMP_CENTS = int(os.environ.get("PRICE_BUMP_CENTS", "2"))
 CONTRACT_COUNT = int(os.environ.get("CONTRACT_COUNT", "2"))
 ACCOUNT_NAME = os.environ.get("ACCOUNT_NAME", "Default")
@@ -333,7 +334,7 @@ def run(live=False):
     P("=" * 65)
     P("  CRYPTO 15-MIN BOT — Late Entry Dominant Side")
     P(f"  Mode: {'LIVE' if live else 'DRY RUN'} | Bet: ${BET_AMOUNT:.2f}/trade")
-    P(f"  Min price: {MIN_PRICE*100:.0f}c | Entry after: {ENTRY_AFTER_MINUTES} min into window")
+    P(f"  Price range: {MIN_PRICE*100:.0f}c-{MAX_PRICE*100:.0f}c | Entry after: {ENTRY_AFTER_MINUTES} min into window")
     P(f"  Cryptos: {', '.join(CRYPTOS.keys())}")
     P("=" * 65)
 
@@ -387,7 +388,7 @@ def run(live=False):
                 if not side or not price:
                     continue
 
-                if price < MIN_PRICE:
+                if price < MIN_PRICE or price > MAX_PRICE:
                     continue
 
                 P(f"    {crypto}: {side.upper()} @ {price:.4f} ({mins_in:.1f}m in, {mins_left:.1f}m left)")
