@@ -35,6 +35,10 @@ PRICE_BUMP_CENTS = int(os.environ.get("PRICE_BUMP_CENTS", "2"))
 CONTRACT_COUNT = int(os.environ.get("CONTRACT_COUNT", "2"))
 ACCOUNT_NAME = os.environ.get("ACCOUNT_NAME", "Default")
 
+# Trading schedule — comma-separated "HH:MM-HH:MM" windows in UTC
+# Default: 3:45-6:30 and 9:00-14:30 UTC
+TRADING_WINDOWS = os.environ.get("TRADING_WINDOWS", "03:45-06:30,09:00-14:30")
+
 LOG_FILE = "crypto_15m_bot.log"
 BETS_FILE = "crypto_15m_bets.json"
 STATUS_FILE = "crypto_15m_status.json"
@@ -52,6 +56,37 @@ CRYPTOS = {
 
 POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "5"))
 ENTRY_AFTER_MINUTES = int(os.environ.get("ENTRY_AFTER_MINUTES", "10"))
+
+
+# ── Trading schedule ─────────────────────────────────────────────────────
+def _parse_trading_windows(windows_str):
+    """Parse 'HH:MM-HH:MM,HH:MM-HH:MM' into list of (start_minutes, end_minutes)."""
+    windows = []
+    for w in windows_str.split(","):
+        w = w.strip()
+        if not w:
+            continue
+        start_str, end_str = w.split("-")
+        sh, sm = map(int, start_str.split(":"))
+        eh, em = map(int, end_str.split(":"))
+        windows.append((sh * 60 + sm, eh * 60 + em))
+    return windows
+
+
+_PARSED_WINDOWS = _parse_trading_windows(TRADING_WINDOWS)
+
+
+def is_trading_time():
+    """Check if current UTC time falls within any trading window."""
+    if not _PARSED_WINDOWS:
+        return True  # No windows configured = always trade
+    now = datetime.now(timezone.utc)
+    now_minutes = now.hour * 60 + now.minute
+    for start, end in _PARSED_WINDOWS:
+        if start <= now_minutes < end:
+            return True
+    return False
+
 
 # ── Logging ─────────────────────────────────────────────────────────────
 _log = None
@@ -333,6 +368,7 @@ def run(live=False):
     P("  CRYPTO 15-MIN BOT — Late Entry Dominant Side")
     P(f"  Mode: {'LIVE' if live else 'DRY RUN'} | Bet: ${BET_AMOUNT:.2f}/trade")
     P(f"  Price range: {MIN_PRICE*100:.0f}c-{MAX_PRICE*100:.0f}c | Entry after: {ENTRY_AFTER_MINUTES} min into window")
+    P(f"  Schedule (UTC): {TRADING_WINDOWS}")
     P(f"  Cryptos: {', '.join(CRYPTOS.keys())}")
     P("=" * 65)
 
@@ -360,7 +396,12 @@ def run(live=False):
                 placed_this_window = set()
                 P(f"\n  ── Window {window_start.strftime('%H:%M')}-{window_end.strftime('%H:%M')} UTC ──")
 
-            # Too early — wait until 5 min into window
+            # Outside trading hours — sleep
+            if not is_trading_time():
+                time.sleep(POLL_INTERVAL)
+                continue
+
+            # Too early — wait until entry time into window
             if mins_in < ENTRY_AFTER_MINUTES:
                 time.sleep(POLL_INTERVAL)
                 continue
