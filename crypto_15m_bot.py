@@ -427,6 +427,11 @@ def run(live=False):
                 if not side or not price:
                     continue
 
+                # If price range is below 50c, flip to underdog side
+                if MAX_PRICE < 0.50:
+                    side = "no" if side == "yes" else "yes"
+                    price = 1.0 - price
+
                 if price < MIN_PRICE or price > MAX_PRICE:
                     continue
 
