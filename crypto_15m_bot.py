@@ -29,15 +29,35 @@ KALSHI_KEY_ID = os.environ.get("KALSHI_KEY_ID", "")
 KALSHI_PRIVATE_KEY = os.environ.get("KALSHI_PRIVATE_KEY", "")
 
 BET_AMOUNT = float(os.environ.get("BET_AMOUNT", "0.10"))
-MIN_PRICE = float(os.environ.get("MIN_PRICE", "0.85"))
-MAX_PRICE = float(os.environ.get("MAX_PRICE", "0.90"))
 PRICE_BUMP_CENTS = int(os.environ.get("PRICE_BUMP_CENTS", "2"))
-CONTRACT_COUNT = int(os.environ.get("CONTRACT_COUNT", "2"))
 ACCOUNT_NAME = os.environ.get("ACCOUNT_NAME", "Default")
 
-# Trading schedule — comma-separated "HH:MM-HH:MM" windows in UTC
-# Default: 3:45-6:30 and 9:00-14:30 UTC
-TRADING_WINDOWS = os.environ.get("TRADING_WINDOWS", "03:45-06:30,09:00-14:30")
+# ── Trading profiles ─────────────────────────────────────────────────────
+# Each profile: windows, min/max price, contracts, side mode
+# PROFILE_1: dominant side (default: 80-100c during 02:15-04:30,08:00-13:30)
+# PROFILE_2: underdog side (default: 0-20c during 00:00-02:15,04:30-08:00,13:30-23:59)
+PROFILES = []
+
+p1_windows = os.environ.get("P1_WINDOWS", "02:15-04:30,08:00-13:30")
+p1_min = float(os.environ.get("P1_MIN_PRICE", "0.80"))
+p1_max = float(os.environ.get("P1_MAX_PRICE", "1.00"))
+p1_contracts = int(os.environ.get("P1_CONTRACTS", "1"))
+p1_mode = os.environ.get("P1_MODE", "dominant")  # dominant or underdog
+if p1_windows:
+    PROFILES.append({"name": "P1", "windows": p1_windows, "min": p1_min, "max": p1_max, "contracts": p1_contracts, "mode": p1_mode})
+
+p2_windows = os.environ.get("P2_WINDOWS", "00:00-02:15,04:30-08:00,13:30-23:59")
+p2_min = float(os.environ.get("P2_MIN_PRICE", "0.00"))
+p2_max = float(os.environ.get("P2_MAX_PRICE", "0.20"))
+p2_contracts = int(os.environ.get("P2_CONTRACTS", "1"))
+p2_mode = os.environ.get("P2_MODE", "underdog")
+if p2_windows:
+    PROFILES.append({"name": "P2", "windows": p2_windows, "min": p2_min, "max": p2_max, "contracts": p2_contracts, "mode": p2_mode})
+
+# Legacy env vars (ignored if profiles are set)
+MIN_PRICE = float(os.environ.get("MIN_PRICE", "0.80"))
+MAX_PRICE = float(os.environ.get("MAX_PRICE", "1.00"))
+CONTRACT_COUNT = int(os.environ.get("CONTRACT_COUNT", "1"))
 
 LOG_FILE = "crypto_15m_bot.log"
 BETS_FILE = "crypto_15m_bets.json"
@@ -73,19 +93,20 @@ def _parse_trading_windows(windows_str):
     return windows
 
 
-_PARSED_WINDOWS = _parse_trading_windows(TRADING_WINDOWS)
+# Parse windows for each profile
+for prof in PROFILES:
+    prof["_parsed"] = _parse_trading_windows(prof["windows"])
 
 
-def is_trading_time():
-    """Check if current UTC time falls within any trading window."""
-    if not _PARSED_WINDOWS:
-        return True  # No windows configured = always trade
+def get_active_profile():
+    """Return the currently active trading profile based on UTC time, or None."""
     now = datetime.now(timezone.utc)
     now_minutes = now.hour * 60 + now.minute
-    for start, end in _PARSED_WINDOWS:
-        if start <= now_minutes < end:
-            return True
-    return False
+    for prof in PROFILES:
+        for start, end in prof["_parsed"]:
+            if start <= now_minutes < end:
+                return prof
+    return None
 
 
 # ── Logging ─────────────────────────────────────────────────────────────
@@ -213,9 +234,9 @@ def get_existing_positions():
 
 
 # ── Order placement ─────────────────────────────────────────────────────
-def place_order(ticker, side, price_dollars, amount_dollars):
+def place_order(ticker, side, price_dollars, amount_dollars, count=None):
     price_cents = min(99, int(round(price_dollars * 100)) + PRICE_BUMP_CENTS)
-    count = CONTRACT_COUNT
+    count = count or CONTRACT_COUNT
 
     order = {
         "ticker": ticker,
@@ -365,10 +386,10 @@ def save_bets(bets):
 # ── Main ────────────────────────────────────────────────────────────────
 def run(live=False):
     P("=" * 65)
-    P("  CRYPTO 15-MIN BOT — Late Entry Dominant Side")
-    P(f"  Mode: {'LIVE' if live else 'DRY RUN'} | Bet: ${BET_AMOUNT:.2f}/trade")
-    P(f"  Price range: {MIN_PRICE*100:.0f}c-{MAX_PRICE*100:.0f}c | Entry after: {ENTRY_AFTER_MINUTES} min into window")
-    P(f"  Schedule (UTC): {TRADING_WINDOWS}")
+    P("  CRYPTO 15-MIN BOT — Multi-Profile")
+    P(f"  Mode: {'LIVE' if live else 'DRY RUN'} | Account: {ACCOUNT_NAME}")
+    for prof in PROFILES:
+        P(f"  {prof['name']}: {prof['mode']} {prof['min']*100:.0f}-{prof['max']*100:.0f}c | {prof['contracts']}x | {prof['windows']}")
     P(f"  Cryptos: {', '.join(CRYPTOS.keys())}")
     P("=" * 65)
 
@@ -396,8 +417,9 @@ def run(live=False):
                 placed_this_window = set()
                 P(f"\n  ── Window {window_start.strftime('%H:%M')}-{window_end.strftime('%H:%M')} UTC ──")
 
-            # Outside trading hours — sleep
-            if not is_trading_time():
+            # Get active profile for current time
+            profile = get_active_profile()
+            if not profile:
                 time.sleep(POLL_INTERVAL)
                 continue
 
@@ -408,7 +430,9 @@ def run(live=False):
 
             # Check each crypto
             for crypto, cfg in CRYPTOS.items():
-                if crypto in placed_this_window:
+                # Track per profile+crypto to allow both profiles to bet same window
+                profile_key = f"{profile['name']}:{crypto}"
+                if profile_key in placed_this_window:
                     continue
 
                 time.sleep(0.5)
@@ -417,9 +441,9 @@ def run(live=False):
                     continue
                 ticker = market["ticker"]
 
-                # Skip if already have position or bet on this ticker
-                if any(b.get("ticker") == ticker for b in bets):
-                    placed_this_window.add(crypto)
+                # Skip if already have position or bet on this ticker+profile
+                if any(b.get("ticker") == ticker and b.get("profile") == profile["name"] for b in bets):
+                    placed_this_window.add(profile_key)
                     continue
 
                 time.sleep(0.5)
@@ -427,15 +451,15 @@ def run(live=False):
                 if not side or not price:
                     continue
 
-                # If price range is below 50c, flip to underdog side
-                if MAX_PRICE < 0.50:
+                # Flip to underdog if profile mode is underdog
+                if profile["mode"] == "underdog":
                     side = "no" if side == "yes" else "yes"
                     price = 1.0 - price
 
-                if price < MIN_PRICE or price > MAX_PRICE:
+                if price < profile["min"] or price > profile["max"]:
                     continue
 
-                P(f"    {crypto}: {side.upper()} @ {price:.4f} ({mins_in:.1f}m in, {mins_left:.1f}m left)")
+                P(f"    [{profile['name']}] {crypto}: {side.upper()} @ {price:.4f} ({mins_in:.1f}m in, {mins_left:.1f}m left)")
 
                 bet_record = {
                     "crypto": crypto,
@@ -444,6 +468,8 @@ def run(live=False):
                     "side": side,
                     "price": price,
                     "bet_amount": BET_AMOUNT,
+                    "profile": profile["name"],
+                    "mode": profile["mode"],
                     "entry_window": round(mins_left, 1),
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                     "window_end": window_end.isoformat(),
@@ -451,7 +477,7 @@ def run(live=False):
                 }
 
                 if live:
-                    result = place_order(ticker, side, price, BET_AMOUNT)
+                    result = place_order(ticker, side, price, BET_AMOUNT, count=profile["contracts"])
                     if result:
                         order = result.get("order", {})
                         bet_record["order_id"] = order.get("order_id", "")
@@ -460,17 +486,17 @@ def run(live=False):
                         bets.append(bet_record)
                         save_bets(bets)
                         total_new += 1
-                        placed_this_window.add(crypto)
-                        P(f"    {crypto}: BET PLACED ✓ {side.upper()} @ {price:.4f}")
+                        placed_this_window.add(profile_key)
+                        P(f"    [{profile['name']}] {crypto}: BET PLACED ✓ {side.upper()} @ {price:.4f}")
                     else:
-                        P(f"    {crypto}: Order failed")
+                        P(f"    [{profile['name']}] {crypto}: Order failed")
                 else:
-                    P(f"    {crypto}: [DRY RUN] {side.upper()} @ {price:.4f}")
+                    P(f"    [{profile['name']}] {crypto}: [DRY RUN] {side.upper()} @ {price:.4f}")
                     bet_record["status"] = "dry_run"
                     bets.append(bet_record)
                     save_bets(bets)
                     total_new += 1
-                    placed_this_window.add(crypto)
+                    placed_this_window.add(profile_key)
 
             time.sleep(POLL_INTERVAL)
 
