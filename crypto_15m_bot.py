@@ -411,7 +411,7 @@ def run(live=False):
                 if crypto in placed_this_window:
                     continue
 
-                time.sleep(0.1)
+                time.sleep(0.5)
                 market, event = find_current_market(cfg["series"])
                 if not market:
                     continue
@@ -422,7 +422,7 @@ def run(live=False):
                     placed_this_window.add(crypto)
                     continue
 
-                time.sleep(0.1)
+                time.sleep(0.5)
                 side, price = get_dominant_side(ticker)
                 if not side or not price:
                     continue
