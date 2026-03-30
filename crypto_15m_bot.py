@@ -84,18 +84,22 @@ def _parse_trading_windows(windows_str):
     windows = []
     for w in windows_str.split(","):
         w = w.strip()
-        if not w:
+        if not w or ":" not in w:
             continue
-        start_str, end_str = w.split("-")
-        sh, sm = map(int, start_str.split(":"))
-        eh, em = map(int, end_str.split(":"))
-        windows.append((sh * 60 + sm, eh * 60 + em))
+        try:
+            start_str, end_str = w.split("-")
+            sh, sm = map(int, start_str.split(":"))
+            eh, em = map(int, end_str.split(":"))
+            windows.append((sh * 60 + sm, eh * 60 + em))
+        except (ValueError, AttributeError):
+            continue
     return windows
 
 
-# Parse windows for each profile
+# Parse windows for each profile; drop profiles with no valid windows
 for prof in PROFILES:
     prof["_parsed"] = _parse_trading_windows(prof["windows"])
+PROFILES = [p for p in PROFILES if p["_parsed"]]
 
 
 def get_active_profile():
