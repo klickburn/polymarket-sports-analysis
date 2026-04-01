@@ -500,6 +500,8 @@ def scan_markets(live=False):
     existing_positions = get_existing_positions()
     placed_bets = load_placed_bets()
     placed_tickers = {b["ticker"] for b in placed_bets}
+    # Also track events we've already bet on to avoid betting both sides
+    placed_events = {b.get("event", b.get("event_ticker", "")) for b in placed_bets if b.get("event") or b.get("event_ticker")}
     skip_tickers = existing_positions | placed_tickers
 
     qualifying = []
@@ -523,7 +525,7 @@ def scan_markets(live=False):
             signals = classify_market(league, markets)
 
             for sig in signals:
-                already = sig["ticker"] in skip_tickers
+                already = sig["ticker"] in skip_tickers or sig.get("event", "") in placed_events or event_ticker in placed_events
                 tag = "[DONE]" if already else "[SIGNAL]"
                 P(f"    {tag} [{STRATEGY_NAMES[sig['strategy']]}] {title[:40]:<40} | {sig['label']:<20} @{sig['price']:.0%}")
 
@@ -587,6 +589,9 @@ def scan_markets(live=False):
                     "order_result": result,
                 })
                 P(f"    BET PLACED")
+                # Track event to prevent betting both sides of same game
+                if sig.get("event"):
+                    placed_events.add(sig["event"])
             else:
                 P(f"    BET FAILED")
 
