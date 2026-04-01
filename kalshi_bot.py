@@ -1,7 +1,7 @@
 """
 Kalshi Trading Bot — Kalshi-Validated Multi-Sport Strategy
 ==========================================================
-Scans 15+ sports/esports on Kalshi. Places automated bets at 2% bankroll.
+Scans 15+ sports/esports on Kalshi. Places automated bets at configurable bankroll %.
 
 Strategies (backtested on 2000+ Kalshi games):
   S1: Coin flip favorite (40-60%)  — NBA, NFL, MLB, Soccer, Esports, Tennis
@@ -9,7 +9,7 @@ Strategies (backtested on 2000+ Kalshi games):
   S3: UCL underdog (15-40%)        — Champions League upsets
   S4: Bundesliga draw (15-35%)     — Only league where draws are profitable
 
-Sizing: 2% of bankroll per bet
+Sizing: BANKROLL_PCT env var (default 0.3%)
 Uses Kalshi API (api.elections.kalshi.com)
 
 Usage:
@@ -34,9 +34,9 @@ DEMO_BASE = "https://demo-api.kalshi.co/trade-api/v2"
 KALSHI_KEY_ID = os.environ.get("KALSHI_KEY_ID", "")
 KALSHI_PRIVATE_KEY = os.environ.get("KALSHI_PRIVATE_KEY", "")  # PEM content
 
-BANKROLL_PCT = 0.02          # 2% of bankroll per bet
-MIN_BET = 1.00               # $1 minimum
-MAX_BET = 500.00             # Safety cap
+BANKROLL_PCT = float(os.environ.get("BANKROLL_PCT", "0.003"))  # 0.3% of bankroll per bet
+MIN_BET = float(os.environ.get("MIN_BET", "1.00"))            # $1 minimum
+MAX_BET = float(os.environ.get("MAX_BET", "500.00"))          # Safety cap
 
 LOG_FILE = "kalshi_bot.log"
 BETS_FILE = "kalshi_bets.json"
@@ -478,7 +478,7 @@ def place_order(ticker, side, price_dollars, amount_dollars):
 def scan_markets(live=False):
     P("=" * 65)
     P("  KALSHI BOT — MULTI-SPORT STRATEGY")
-    P(f"  Mode: {'LIVE' if live else 'DRY RUN'} | Sizing: 2% per bet")
+    P(f"  Mode: {'LIVE' if live else 'DRY RUN'} | Sizing: {BANKROLL_PCT*100:.1f}% per bet")
     P(f"  Leagues: {len(LEAGUES)}")
     P("=" * 65)
     P()
@@ -493,7 +493,7 @@ def scan_markets(live=False):
         P("  Could not fetch balance — scan-only mode")
 
     bet_size = max(MIN_BET, min(bankroll * BANKROLL_PCT, MAX_BET)) if bankroll > 0 else 0
-    P(f"  Bet size: ${bet_size:.2f} (2%)")
+    P(f"  Bet size: ${bet_size:.2f} ({BANKROLL_PCT*100:.1f}%)")
     P()
 
     # Get existing positions and placed bets
