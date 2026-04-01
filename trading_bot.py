@@ -392,6 +392,8 @@ def scan_markets(live=False):
 
     placed_bets = load_placed_bets()
     placed_slugs = {b["market_slug"] for b in placed_bets}  # Bot's own history
+    # Track events to prevent betting both sides of same game
+    placed_events = {b.get("event_title", "") for b in placed_bets if b.get("event_title")}
 
     # Also check API for existing positions (catches duplicates if bets file was stale)
     active_positions = get_existing_positions()
@@ -419,7 +421,7 @@ def scan_markets(live=False):
                     continue
 
                 slug = parsed["slug"]
-                already_bet = slug in placed_slugs
+                already_bet = slug in placed_slugs or title in placed_events
 
                 # For draw bets: the bet price is the Yes price (min of the two)
                 is_draw = parsed.get("is_draw", False)
@@ -547,6 +549,9 @@ def scan_markets(live=False):
                     "order_result": result,
                 })
                 P(f"    BET PLACED on {mkt['bet_label']}")
+                # Track event to prevent betting both sides of same game
+                if mkt.get("event_title"):
+                    placed_events.add(mkt["event_title"])
             else:
                 P(f"    BET FAILED for {mkt['bet_label']}")
 
