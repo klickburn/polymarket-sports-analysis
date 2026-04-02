@@ -30,7 +30,6 @@ from crypto_15m_bot import (
 
 # ── Config ─────────────────────────────────────────────────────────────
 CRYPTO_SERIES = {
-    "KXBTC15M": "BTC",
     "KXETH15M": "ETH",
     "KXSOL15M": "SOL",
     "KXXRP15M": "XRP",
