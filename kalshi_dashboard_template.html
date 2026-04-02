@@ -396,6 +396,23 @@
   <div id="cryptoPriceBucketContent"></div>
 
   <hr class="section-divider">
+  <div class="section-header">
+    <h2>Daily P&L — 3am–8:30am CDT Window</h2>
+    <span class="badge badge-crypto">08:00–13:30 UTC</span>
+  </div>
+  <div id="cryptoDailyWindowContent"></div>
+  <div class="grid-2" style="margin-top:20px">
+    <div class="card">
+      <h3>Daily P&L (3am–8:30am CDT)</h3>
+      <div class="chart-container med"><canvas id="cryptoDailyPnlChart"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Daily P&L by Crypto (3am–8:30am CDT)</h3>
+      <div class="chart-container med"><canvas id="cryptoDailyCryptoPnlChart"></canvas></div>
+    </div>
+  </div>
+
+  <hr class="section-divider">
   <div class="section-header"><h2>All Crypto Bets</h2></div>
   <div class="card" style="margin-bottom:24px">
     <div class="tabs" id="cryptoTabs">
@@ -404,12 +421,10 @@
       <div class="tab" onclick="filterCryptoTable('open',this)">Open</div>
       <div class="tab" onclick="filterCryptoTable('wins',this)">Wins</div>
       <div class="tab" onclick="filterCryptoTable('losses',this)">Losses</div>
-      <div class="tab" onclick="filterCryptoTable('BTC',this)">BTC</div>
       <div class="tab" onclick="filterCryptoTable('ETH',this)">ETH</div>
       <div class="tab" onclick="filterCryptoTable('SOL',this)">SOL</div>
       <div class="tab" onclick="filterCryptoTable('XRP',this)">XRP</div>
       <div class="tab" onclick="filterCryptoTable('DOGE',this)">DOGE</div>
-      <div class="tab" onclick="filterCryptoTable('HYPE',this)">HYPE</div>
       <div class="tab" onclick="filterCryptoTable('BNB',this)">BNB</div>
     </div>
     <div class="scroll-table">
@@ -850,6 +865,110 @@ if (cAssetNames.length > 0) {
   });
 } else {
   document.getElementById('cryptoWindowChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:260px;color:var(--muted)">No data</div>';
+}
+
+// ═══ Daily P&L — 3am–8:30am CDT Window (08:00–13:30 UTC) ═══
+const windowBets = CRYPTO_BETS.filter(b => {
+  if (!b.timestamp || b.timestamp.length < 16) return false;
+  const hm = b.timestamp.substring(11, 16);
+  return hm >= '08:00' && hm <= '13:30';
+});
+const windowResolved = windowBets.filter(b => b.result === 'win' || b.result === 'loss');
+
+// Group by date
+const dailyWindow = {};
+const dailyCrypto = {};
+windowResolved.forEach(b => {
+  const date = b.timestamp.substring(0, 10);
+  const c = b.crypto || '?';
+  if (!dailyWindow[date]) dailyWindow[date] = { pnl: 0, wins: 0, losses: 0, trades: 0 };
+  dailyWindow[date].pnl += (b.pnl || 0);
+  dailyWindow[date].trades++;
+  if (b.result === 'win') dailyWindow[date].wins++; else dailyWindow[date].losses++;
+
+  const key = date + '|' + c;
+  if (!dailyCrypto[key]) dailyCrypto[key] = { date, crypto: c, pnl: 0, wins: 0, losses: 0, trades: 0 };
+  dailyCrypto[key].pnl += (b.pnl || 0);
+  dailyCrypto[key].trades++;
+  if (b.result === 'win') dailyCrypto[key].wins++; else dailyCrypto[key].losses++;
+});
+
+const dailyDates = Object.keys(dailyWindow).sort();
+const dwEl = document.getElementById('cryptoDailyWindowContent');
+
+if (dailyDates.length === 0) {
+  dwEl.innerHTML = '<div class="card"><div class="empty-state"><div class="msg">No resolved trades in 3am–8:30am CDT window yet</div></div></div>';
+} else {
+  // Summary table: per day totals + per crypto per day
+  const windowCryptos = [...new Set(windowResolved.map(b => b.crypto))].filter(Boolean).sort();
+  let html = '<div class="card" style="margin-bottom:20px"><div class="scroll-table"><table><thead><tr><th>Date</th><th>Trades</th><th>W-L</th><th>Win%</th><th>P&L</th>';
+  windowCryptos.forEach(c => html += `<th style="border-left:2px solid var(--border)">${cryptoTag(c)} P&L</th>`);
+  html += '</tr></thead><tbody>';
+  let totalPnlW = 0, totalWinsW = 0, totalLossesW = 0, totalTradesW = 0;
+  const cryptoTotals = {};
+  windowCryptos.forEach(c => cryptoTotals[c] = 0);
+
+  for (const date of dailyDates) {
+    const d = dailyWindow[date];
+    const wr = d.trades > 0 ? (d.wins / d.trades * 100).toFixed(1) + '%' : '--';
+    const pc = d.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    const displayDate = new Date(date + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', weekday: 'short' });
+    html += `<tr><td>${displayDate}</td><td>${d.trades}</td><td>${d.wins}W-${d.losses}L</td><td>${wr}</td><td style="color:${pc};font-weight:600">$${d.pnl >= 0 ? '+' : ''}${d.pnl.toFixed(2)}</td>`;
+    totalPnlW += d.pnl; totalWinsW += d.wins; totalLossesW += d.losses; totalTradesW += d.trades;
+    windowCryptos.forEach(c => {
+      const entry = dailyCrypto[date + '|' + c];
+      if (entry) {
+        const epc = entry.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+        html += `<td style="border-left:2px solid var(--border);color:${epc}">$${entry.pnl >= 0 ? '+' : ''}${entry.pnl.toFixed(2)} <span style="color:var(--muted);font-size:11px">(${entry.wins}W-${entry.losses}L)</span></td>`;
+        cryptoTotals[c] += entry.pnl;
+      } else {
+        html += `<td style="border-left:2px solid var(--border);color:var(--muted)">--</td>`;
+      }
+    });
+    html += '</tr>';
+  }
+  // Totals row
+  const twpc = totalPnlW >= 0 ? 'var(--green)' : 'var(--red)';
+  const twr = totalTradesW > 0 ? (totalWinsW / totalTradesW * 100).toFixed(1) + '%' : '--';
+  html += `<tr style="border-top:2px solid var(--border);font-weight:700"><td>TOTAL</td><td>${totalTradesW}</td><td>${totalWinsW}W-${totalLossesW}L</td><td>${twr}</td><td style="color:${twpc}">$${totalPnlW >= 0 ? '+' : ''}${totalPnlW.toFixed(2)}</td>`;
+  windowCryptos.forEach(c => {
+    const ctpc = cryptoTotals[c] >= 0 ? 'var(--green)' : 'var(--red)';
+    html += `<td style="border-left:2px solid var(--border);color:${ctpc};font-weight:700">$${cryptoTotals[c] >= 0 ? '+' : ''}${cryptoTotals[c].toFixed(2)}</td>`;
+  });
+  html += '</tr></tbody></table></div></div>';
+  dwEl.innerHTML = html;
+}
+
+// Daily P&L bar chart
+if (dailyDates.length > 0) {
+  const dailyPnls = dailyDates.map(d => parseFloat(dailyWindow[d].pnl.toFixed(2)));
+  const dailyLabels = dailyDates.map(d => new Date(d + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+  new Chart(document.getElementById('cryptoDailyPnlChart'), {
+    type: 'bar',
+    data: { labels: dailyLabels, datasets: [{ data: dailyPnls, backgroundColor: dailyPnls.map(v => v >= 0 ? 'rgba(34,197,94,0.7)' : 'rgba(239,68,68,0.7)'), borderRadius: 4 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `$${ctx.raw >= 0 ? '+' : ''}${ctx.raw.toFixed(2)}` } } }, scales: { x: { grid: { display: false }, ticks: { color: '#8b8fa3' } }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3', callback: v => '$' + v } } } }
+  });
+} else {
+  document.getElementById('cryptoDailyPnlChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:260px;color:var(--muted)">No data</div>';
+}
+
+// Daily P&L by crypto stacked bar chart
+if (dailyDates.length > 0) {
+  const windowCryptos2 = [...new Set(windowResolved.map(b => b.crypto))].filter(Boolean).sort();
+  const dailyLabels2 = dailyDates.map(d => new Date(d + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+  const datasets = windowCryptos2.map(c => ({
+    label: c,
+    data: dailyDates.map(d => { const e = dailyCrypto[d + '|' + c]; return e ? parseFloat(e.pnl.toFixed(2)) : 0; }),
+    backgroundColor: cryptoColors[c] || '#f59e0b',
+    borderRadius: 2,
+  }));
+  new Chart(document.getElementById('cryptoDailyCryptoPnlChart'), {
+    type: 'bar',
+    data: { labels: dailyLabels2, datasets },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#8b8fa3' } } }, scales: { x: { stacked: true, grid: { display: false }, ticks: { color: '#8b8fa3' } }, y: { stacked: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3', callback: v => '$' + v } } } }
+  });
+} else {
+  document.getElementById('cryptoDailyCryptoPnlChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:260px;color:var(--muted)">No data</div>';
 }
 
 // Crypto bets table

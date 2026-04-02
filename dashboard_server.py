@@ -40,6 +40,7 @@ CRYPTO_SERIES = {
 SPORTS_PREFIXES = [
     "KXNBA", "KXMLB", "KXNHL", "KXNCAA", "KXEPL", "KXUCL",
     "KXCS2", "KXLOL", "KXEUR", "KXDOTA", "KXCBB", "KXWCBB",
+    "KXIPL",
 ]
 
 # Exclude specific outlier tickers from dashboard

@@ -72,6 +72,8 @@ LEAGUES = {
     "WTA": "KXWTAGAME",
     # Basketball
     "Euroleague": "KXEUROLEAGUEGAME",
+    # Cricket (2-way)
+    "IPL": "KXIPLGAME",
 }
 
 # Strategy: which side to bet in coin flips
