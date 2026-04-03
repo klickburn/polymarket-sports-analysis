@@ -237,6 +237,27 @@ def get_existing_positions():
         return set()
 
 
+def get_open_orders():
+    """Get tickers with resting/open orders on Kalshi to prevent duplicates."""
+    try:
+        tickers = set()
+        cursor = None
+        while True:
+            params = {"limit": 200, "status": "resting"}
+            if cursor:
+                params["cursor"] = cursor
+            data = auth_get("/portfolio/orders", params=params)
+            for order in data.get("orders", []):
+                tickers.add(order.get("ticker", ""))
+            cursor = data.get("cursor")
+            if not cursor or not data.get("orders"):
+                break
+        return tickers
+    except Exception as e:
+        P(f"  WARNING: Could not fetch open orders: {e}")
+        return set()
+
+
 # ── Order placement ─────────────────────────────────────────────────────
 def place_order(ticker, side, price_dollars, amount_dollars, count=None):
     price_cents = min(99, int(round(price_dollars * 100)) + PRICE_BUMP_CENTS)
@@ -406,6 +427,7 @@ def run(live=False):
     total_new = 0
     last_window_end = None
     placed_this_window = set()
+    skip_tickers = set()
 
     P(f"\n  Running continuously — polling every {POLL_INTERVAL}s...")
 
@@ -415,10 +437,16 @@ def run(live=False):
             mins_left = minutes_until_strike()
             mins_in = 15 - mins_left
 
-            # New window? Reset targets
+            # New window? Reset targets and check for existing orders/positions
             if window_end != last_window_end:
                 last_window_end = window_end
                 placed_this_window = set()
+                # Check for resting orders + existing positions to prevent duplicates
+                open_order_tickers = get_open_orders()
+                existing_positions = get_existing_positions()
+                skip_tickers = open_order_tickers | existing_positions
+                if skip_tickers:
+                    P(f"  Skipping {len(skip_tickers)} tickers with open orders/positions")
                 P(f"\n  ── Window {window_start.strftime('%H:%M')}-{window_end.strftime('%H:%M')} UTC ──")
 
             # Get active profile for current time
@@ -445,7 +473,10 @@ def run(live=False):
                     continue
                 ticker = market["ticker"]
 
-                # Skip if already have position or bet on this ticker+profile
+                # Skip if already have open order, position, or bet on this ticker
+                if ticker in skip_tickers:
+                    placed_this_window.add(profile_key)
+                    continue
                 if any(b.get("ticker") == ticker and b.get("profile") == profile["name"] for b in bets):
                     placed_this_window.add(profile_key)
                     continue
