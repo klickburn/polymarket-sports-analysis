@@ -102,9 +102,15 @@ for prof in PROFILES:
 PROFILES = [p for p in PROFILES if p["_parsed"]]
 
 
+SKIP_DAYS = set(int(d) for d in os.environ.get("SKIP_DAYS", "4,5").split(",") if d.strip().isdigit())
+# Default: 4=Friday, 5=Saturday (Python weekday: 0=Mon, 6=Sun)
+
+
 def get_active_profile():
     """Return the currently active trading profile based on UTC time, or None."""
     now = datetime.now(timezone.utc)
+    if now.weekday() in SKIP_DAYS:
+        return None
     now_minutes = now.hour * 60 + now.minute
     for prof in PROFILES:
         for start, end in prof["_parsed"]:
