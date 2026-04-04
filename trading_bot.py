@@ -151,6 +151,23 @@ def get_existing_positions():
         return set()
 
 
+def get_open_orders():
+    """Get slugs with open/live orders on Polymarket to prevent duplicates."""
+    try:
+        slugs = set()
+        data = auth_get("/v1/orders", params={"status": "live", "limit": 200})
+        for order in data.get("orders", []):
+            slug = order.get("marketSlug", "")
+            if slug:
+                slugs.add(slug)
+        if slugs:
+            P(f"  Open orders on {len(slugs)} markets")
+        return slugs
+    except Exception as e:
+        P(f"  WARNING: Could not fetch open orders: {e}")
+        return set()
+
+
 # ── Market Discovery ────────────────────────────────────────────────────
 def get_league_events(league_slug, limit=50):
     """Get active events for a league. Markets are embedded in events."""
@@ -395,9 +412,10 @@ def scan_markets(live=False):
     # Track events to prevent betting both sides of same game
     placed_events = {b.get("event_title", "") for b in placed_bets if b.get("event_title")}
 
-    # Also check API for existing positions (catches duplicates if bets file was stale)
+    # Also check API for existing positions and open orders (catches duplicates if bets file was stale)
     active_positions = get_existing_positions()
-    placed_slugs = placed_slugs | active_positions  # Merge both sets
+    open_orders = get_open_orders()
+    placed_slugs = placed_slugs | active_positions | open_orders  # Merge all sets
 
     qualifying = []
 

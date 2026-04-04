@@ -217,6 +217,27 @@ def get_existing_positions():
         return set()
 
 
+def get_open_orders():
+    """Get tickers with resting/open orders on Kalshi to prevent duplicates."""
+    try:
+        tickers = set()
+        cursor = None
+        while True:
+            params = {"limit": 200, "status": "resting"}
+            if cursor:
+                params["cursor"] = cursor
+            data = auth_get("/portfolio/orders", params=params)
+            for order in data.get("orders", []):
+                tickers.add(order.get("ticker", ""))
+            cursor = data.get("cursor")
+            if not cursor or not data.get("orders"):
+                break
+        return tickers
+    except Exception as e:
+        P(f"  WARNING: Could not fetch open orders: {e}")
+        return set()
+
+
 # ── Game date filter ──────────────────────────────────────────────────
 MONTHS = {'JAN': 1, 'FEB': 2, 'MAR': 3, 'APR': 4, 'MAY': 5, 'JUN': 6,
           'JUL': 7, 'AUG': 8, 'SEP': 9, 'OCT': 10, 'NOV': 11, 'DEC': 12}
@@ -498,13 +519,16 @@ def scan_markets(live=False):
     P(f"  Bet size: ${bet_size:.2f} ({BANKROLL_PCT*100:.1f}%)")
     P()
 
-    # Get existing positions and placed bets
+    # Get existing positions, open orders, and placed bets
     existing_positions = get_existing_positions()
+    open_orders = get_open_orders()
     placed_bets = load_placed_bets()
     placed_tickers = {b["ticker"] for b in placed_bets}
     # Also track events we've already bet on to avoid betting both sides
     placed_events = {b.get("event", b.get("event_ticker", "")) for b in placed_bets if b.get("event") or b.get("event_ticker")}
-    skip_tickers = existing_positions | placed_tickers
+    skip_tickers = existing_positions | placed_tickers | open_orders
+    if open_orders:
+        P(f"  Skipping {len(open_orders)} tickers with resting orders")
 
     qualifying = []
 
