@@ -34,7 +34,6 @@ CRYPTO_SERIES = {
     "KXSOL15M": "SOL",
     "KXXRP15M": "XRP",
     "KXDOGE15M": "DOGE",
-    "KXBNB15M": "BNB",
 }
 
 SPORTS_PREFIXES = [
