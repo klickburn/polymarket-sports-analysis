@@ -27,6 +27,7 @@ from crypto_15m_bot import (
     auth_get, public_get, get_balance, get_existing_positions,
     run as run_bot, P,
 )
+from fetch_kalshi_history import fetch_all as fetch_history, OUT_FILE as HISTORY_FILE
 
 # ── Config ─────────────────────────────────────────────────────────────
 CRYPTO_SERIES = {
@@ -54,6 +55,11 @@ REFRESH_INTERVAL = int(os.environ.get("REFRESH_INTERVAL", "60"))
 # ── Shared data store ──────────────────────────────────────────────────
 _data = {"result": None, "refreshing": False, "last_refresh": 0}
 _lock = threading.Lock()
+
+_history = {"records": None, "refreshing": False, "last_refresh": 0}
+_history_lock = threading.Lock()
+
+HISTORY_REFRESH_INTERVAL = int(os.environ.get("HISTORY_REFRESH_INTERVAL", "86400"))  # daily
 
 
 # ── Helpers ────────────────────────────────────────────────────────────
@@ -307,6 +313,91 @@ def get_data():
     return JSONResponse({"error": "Data still loading, try again in a few seconds"}, status_code=503)
 
 
+@app.get("/api/history")
+def get_history():
+    """Serve all historical sports game records (pre-game odds + winner).
+    Optional query params:
+      series=KXNBAGAME  — filter by series
+      limit=1000        — cap results
+    """
+    from fastapi import Request  # noqa
+    with _history_lock:
+        records = _history["records"]
+        last_refresh = _history["last_refresh"]
+        refreshing = _history["refreshing"]
+
+    if records is None:
+        # Try loading from disk if file exists but memory empty
+        if os.path.exists(HISTORY_FILE):
+            try:
+                with open(HISTORY_FILE) as f:
+                    records = json.load(f)
+            except Exception:
+                records = None
+
+    if records is None:
+        return JSONResponse(
+            {"error": "History still loading. Check back shortly.", "refreshing": refreshing},
+            status_code=503,
+        )
+
+    return JSONResponse({
+        "count": len(records),
+        "last_refresh": last_refresh,
+        "refreshing": refreshing,
+        "records": records,
+    })
+
+
+@app.get("/api/history/refresh")
+def trigger_history_refresh():
+    """Manually trigger a history refresh in the background."""
+    with _history_lock:
+        if _history["refreshing"]:
+            return JSONResponse({"status": "already refreshing"})
+    t = threading.Thread(target=_run_history_fetch, daemon=True)
+    t.start()
+    return JSONResponse({"status": "refresh started"})
+
+
+# ── History fetch ──────────────────────────────────────────────────────
+def _run_history_fetch():
+    with _history_lock:
+        if _history["refreshing"]:
+            return
+        _history["refreshing"] = True
+    try:
+        P("  [HISTORY] Background fetch starting...")
+        records = fetch_history()
+        with _history_lock:
+            _history["records"] = records
+            _history["last_refresh"] = time.time()
+        P(f"  [HISTORY] Background fetch done: {len(records)} records")
+    except Exception as e:
+        P(f"  [HISTORY] Fetch error: {e}")
+    finally:
+        with _history_lock:
+            _history["refreshing"] = False
+
+
+def history_refresh_loop():
+    # Load cached file into memory on boot
+    if os.path.exists(HISTORY_FILE):
+        try:
+            with open(HISTORY_FILE) as f:
+                cached = json.load(f)
+            with _history_lock:
+                _history["records"] = cached
+                _history["last_refresh"] = os.path.getmtime(HISTORY_FILE)
+            P(f"  [HISTORY] Loaded {len(cached)} cached records from disk")
+        except Exception as e:
+            P(f"  [HISTORY] Cache load failed: {e}")
+
+    while True:
+        _run_history_fetch()
+        time.sleep(HISTORY_REFRESH_INTERVAL)
+
+
 # ── Background threads ─────────────────────────────────────────────────
 def bot_thread():
     while True:
@@ -329,3 +420,8 @@ def start_threads():
     t2 = threading.Thread(target=bot_thread, daemon=True)
     t2.start()
     P("  [SERVER] Bot thread started")
+
+    # Start history fetch thread
+    t3 = threading.Thread(target=history_refresh_loop, daemon=True)
+    t3.start()
+    P("  [SERVER] History refresh thread started")
