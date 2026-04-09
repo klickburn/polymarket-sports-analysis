@@ -40,7 +40,7 @@ BANKROLL_PCT_T1 = 0.015      # 1.5% for T1 (Polymarket-specific, unconfirmed on 
 MIN_BET = 1.00               # Minimum bet size
 MAX_BET = 500.00             # Safety cap per bet
 
-LEAGUES = ["nba", "cbb", "epl", "nhl", "mlb", "atp", "wta"]
+LEAGUES = ["nba", "cbb", "nhl", "mlb"]
 NEW_LEAGUES = {"nhl", "mlb", "atp", "wta"}  # Leagues without backtest data — use reduced sizing
 # In T2 coin flips: these leagues bet UNDERDOG (Kalshi-validated), rest bet FAVORITE
 T2_UNDERDOG_LEAGUES = {"cbb", "nhl"}
