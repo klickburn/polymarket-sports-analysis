@@ -86,32 +86,60 @@ def fetch_settled_markets(series_ticker):
     return markets
 
 
-def get_pregame_yes_price(series_ticker, market_ticker, open_ts, close_ts):
-    """Return yes close price (cents) of the candle right before peak-volume candle."""
-    if not open_ts or not close_ts or close_ts <= open_ts:
+def _candle_volume(c):
+    try:
+        return float(c.get("volume_fp", 0) or 0)
+    except Exception:
+        return 0
+
+
+def _candle_close_dollars(c):
+    price = c.get("price") or {}
+    val = price.get("close_dollars") or price.get("mean_dollars")
+    if val is None:
         return None
     try:
-        data = public_get(
-            f"/series/{series_ticker}/markets/{market_ticker}/candlesticks",
-            params={
-                "start_ts": open_ts,
-                "end_ts": close_ts,
-                "period_interval": 60,
-            },
-        )
+        return float(val)
     except Exception:
         return None
-    candles = data.get("candlesticks", [])
-    if not candles:
+
+
+def get_pregame_yes_price(series_ticker, market_ticker, open_ts, close_ts):
+    """Return yes close price (dollars, 0.0–1.0) right before peak-volume candle.
+
+    Kalshi's candlesticks endpoint caps the window so we fetch in chunks
+    (max ~5000 minutes per request at 60-min intervals).
+    """
+    if not open_ts or not close_ts or close_ts <= open_ts:
         return None
 
-    def _vol(c):
-        return c.get("volume", 0) or 0
+    all_candles = []
+    # Fetch in 7-day chunks to stay under any window limits
+    CHUNK = 7 * 24 * 3600
+    cur = open_ts
+    while cur < close_ts:
+        chunk_end = min(cur + CHUNK, close_ts)
+        try:
+            data = public_get(
+                f"/series/{series_ticker}/markets/{market_ticker}/candlesticks",
+                params={
+                    "start_ts": cur,
+                    "end_ts": chunk_end,
+                    "period_interval": 60,
+                },
+            )
+        except Exception:
+            break
+        all_candles.extend(data.get("candlesticks", []))
+        cur = chunk_end
+        time.sleep(RATE_LIMIT_SLEEP)
 
-    max_idx = max(range(len(candles)), key=lambda i: _vol(candles[i]))
-    pick = candles[max_idx - 1] if max_idx > 0 else candles[0]
-    price = pick.get("price") or {}
-    return price.get("close")
+    if not all_candles:
+        return None
+
+    max_idx = max(range(len(all_candles)), key=lambda i: _candle_volume(all_candles[i]))
+    pick = all_candles[max_idx - 1] if max_idx > 0 else all_candles[0]
+    return _candle_close_dollars(pick)
 
 
 def load_existing(path):
@@ -167,7 +195,7 @@ def fetch_all(out_file=OUT_FILE, resume=True):
                 "open_time": m.get("open_time", ""),
                 "close_time": m.get("close_time", ""),
                 "result": result,
-                "pregame_yes_cents": pregame_yes,
+                "pregame_yes_dollars": pregame_yes,
             })
             done.add(ticker)
             new_in_series += 1
