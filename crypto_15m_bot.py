@@ -1,7 +1,7 @@
 """
 Kalshi 15-Minute Crypto Bot
 ============================
-Trades 4 cryptos (ETH, SOL, XRP, DOGE) on Kalshi's 15-min prediction markets.
+Trades 7 cryptos (BTC, ETH, SOL, XRP, DOGE, HYPE, BNB) on Kalshi's 15-min prediction markets.
 
 Strategy: "Late Entry Dominant Side"
   - Wait until 5 minutes into each 15-min window (10 min before strike)
@@ -67,10 +67,13 @@ session = requests.Session()
 
 # ── Crypto configs ──────────────────────────────────────────────────────
 CRYPTOS = {
+    "BTC":  {"series": "KXBTC15M"},
     "ETH":  {"series": "KXETH15M"},
     "SOL":  {"series": "KXSOL15M"},
     "XRP":  {"series": "KXXRP15M"},
     "DOGE": {"series": "KXDOGE15M"},
+    "HYPE": {"series": "KXHYPE15M"},
+    "BNB":  {"series": "KXBNB15M"},
 }
 
 POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "5"))
