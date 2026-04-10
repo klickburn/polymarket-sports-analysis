@@ -380,8 +380,8 @@ def _run_history_fetch():
             _history["refreshing"] = False
 
 
-def history_refresh_loop():
-    # Load cached file into memory on boot
+def _load_history_cache():
+    """Load cached history file into memory on boot (no API calls)."""
     if os.path.exists(HISTORY_FILE):
         try:
             with open(HISTORY_FILE) as f:
@@ -392,10 +392,6 @@ def history_refresh_loop():
             P(f"  [HISTORY] Loaded {len(cached)} cached records from disk")
         except Exception as e:
             P(f"  [HISTORY] Cache load failed: {e}")
-
-    while True:
-        _run_history_fetch()
-        time.sleep(HISTORY_REFRESH_INTERVAL)
 
 
 # ── Background threads ─────────────────────────────────────────────────
@@ -421,7 +417,6 @@ def start_threads():
     t2.start()
     P("  [SERVER] Bot thread started")
 
-    # Start history fetch thread
-    t3 = threading.Thread(target=history_refresh_loop, daemon=True)
-    t3.start()
-    P("  [SERVER] History refresh thread started")
+    # Load cached history (no auto-fetch — use /api/history/refresh manually)
+    _load_history_cache()
+    P("  [SERVER] History cache loaded (manual refresh only via /api/history/refresh)")
