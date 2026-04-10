@@ -59,7 +59,7 @@ SPORTS_SERIES = [
 ]
 
 OUT_FILE = os.environ.get("KALSHI_HISTORY_FILE", "kalshi_history.json")
-RATE_LIMIT_SLEEP = float(os.environ.get("HISTORY_RATE_LIMIT", "0.25"))
+RATE_LIMIT_SLEEP = float(os.environ.get("HISTORY_RATE_LIMIT", "0.5"))
 MAX_RETRIES = 5
 
 
@@ -234,7 +234,11 @@ def fetch_all(out_file=OUT_FILE, resume=True):
             open_ts = _parse_ts(m.get("open_time", ""))
             close_ts = _parse_ts(m.get("close_time", ""))
 
-            pregame_yes = get_pregame_yes_price(series, ticker, open_ts, close_ts)
+            try:
+                pregame_yes = get_pregame_yes_price(series, ticker, open_ts, close_ts)
+            except Exception as e:
+                P(f"  [HISTORY] Candlestick error for {ticker}: {e}")
+                pregame_yes = None
 
             records.append({
                 "ticker": ticker,
@@ -251,7 +255,7 @@ def fetch_all(out_file=OUT_FILE, resume=True):
             done.add(ticker)
             new_in_series += 1
 
-            if new_in_series % 50 == 0:
+            if new_in_series % 20 == 0:
                 save(out_file, records)
                 P(f"  [HISTORY] {series}: {new_in_series}/{len(markets)} processed, {len(records)} total")
 
