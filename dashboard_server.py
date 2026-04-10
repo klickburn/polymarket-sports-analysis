@@ -351,13 +351,30 @@ def get_history():
 
 @app.get("/api/history/refresh")
 def trigger_history_refresh():
-    """Manually trigger a history refresh in the background."""
+    """Manually trigger a history refresh in the background (resumes from cache)."""
     with _history_lock:
         if _history["refreshing"]:
             return JSONResponse({"status": "already refreshing"})
     t = threading.Thread(target=_run_history_fetch, daemon=True)
     t.start()
     return JSONResponse({"status": "refresh started"})
+
+
+@app.get("/api/history/purge")
+def purge_and_refresh():
+    """Delete cached history and start a fresh fetch from scratch."""
+    with _history_lock:
+        if _history["refreshing"]:
+            return JSONResponse({"status": "already refreshing, wait for it to finish"})
+        _history["records"] = None
+        _history["last_refresh"] = 0
+    # Delete cache file
+    if os.path.exists(HISTORY_FILE):
+        os.remove(HISTORY_FILE)
+        P("  [HISTORY] Cache purged")
+    t = threading.Thread(target=_run_history_fetch, daemon=True)
+    t.start()
+    return JSONResponse({"status": "purged and refresh started"})
 
 
 # ── History fetch ──────────────────────────────────────────────────────
