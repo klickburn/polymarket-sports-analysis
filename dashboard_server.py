@@ -378,6 +378,18 @@ def purge_and_refresh():
 
 
 # ── History fetch ──────────────────────────────────────────────────────
+def _sync_history_from_disk():
+    """Read the latest disk file into memory so /api/history serves partial results."""
+    if os.path.exists(HISTORY_FILE):
+        try:
+            with open(HISTORY_FILE) as f:
+                records = json.load(f)
+            with _history_lock:
+                _history["records"] = records
+        except Exception:
+            pass
+
+
 def _run_history_fetch():
     with _history_lock:
         if _history["refreshing"]:
@@ -385,13 +397,17 @@ def _run_history_fetch():
         _history["refreshing"] = True
     try:
         P("  [HISTORY] Background fetch starting...")
-        records = fetch_history()
+        records = fetch_history(progress_callback=_sync_history_from_disk)
         with _history_lock:
             _history["records"] = records
             _history["last_refresh"] = time.time()
         P(f"  [HISTORY] Background fetch done: {len(records)} records")
     except Exception as e:
         P(f"  [HISTORY] Fetch error: {e}")
+        import traceback
+        traceback.print_exc()
+        # Still serve whatever was saved to disk
+        _sync_history_from_disk()
     finally:
         with _history_lock:
             _history["refreshing"] = False

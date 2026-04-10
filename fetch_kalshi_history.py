@@ -210,59 +210,70 @@ def save(path, records):
     os.replace(tmp, path)
 
 
-def fetch_all(out_file=OUT_FILE, resume=True):
+def fetch_all(out_file=OUT_FILE, resume=True, progress_callback=None):
     records = load_existing(out_file) if resume else []
     done = {r["ticker"] for r in records}
     P(f"  [HISTORY] Starting fetch. {len(done)} records already cached.")
 
     for series in SPORTS_SERIES:
-        P(f"  [HISTORY] {series}: fetching settled markets...")
-        markets = fetch_settled_markets(series)
-        P(f"  [HISTORY] {series}: {len(markets)} settled markets")
-        if not markets:
-            continue
-
-        new_in_series = 0
-        for i, m in enumerate(markets):
-            ticker = m.get("ticker", "")
-            if not ticker or ticker in done:
-                continue
-            result = m.get("result", "")
-            if result not in ("yes", "no"):
+        try:
+            P(f"  [HISTORY] {series}: fetching settled markets...")
+            markets = fetch_settled_markets(series)
+            P(f"  [HISTORY] {series}: {len(markets)} settled markets")
+            if not markets:
                 continue
 
-            open_ts = _parse_ts(m.get("open_time", ""))
-            close_ts = _parse_ts(m.get("close_time", ""))
+            new_in_series = 0
+            for i, m in enumerate(markets):
+                ticker = m.get("ticker", "")
+                if not ticker or ticker in done:
+                    continue
+                result = m.get("result", "")
+                if result not in ("yes", "no"):
+                    continue
 
-            try:
-                pregame_yes = get_pregame_yes_price(series, ticker, open_ts, close_ts)
-            except Exception as e:
-                P(f"  [HISTORY] Candlestick error for {ticker}: {e}")
-                pregame_yes = None
+                open_ts = _parse_ts(m.get("open_time", ""))
+                close_ts = _parse_ts(m.get("close_time", ""))
 
-            records.append({
-                "ticker": ticker,
-                "event_ticker": m.get("event_ticker", ""),
-                "series": series,
-                "title": m.get("title", ""),
-                "yes_sub_title": m.get("yes_sub_title", ""),
-                "no_sub_title": m.get("no_sub_title", ""),
-                "open_time": m.get("open_time", ""),
-                "close_time": m.get("close_time", ""),
-                "result": result,
-                "pregame_yes_dollars": pregame_yes,
-            })
-            done.add(ticker)
-            new_in_series += 1
+                try:
+                    pregame_yes = get_pregame_yes_price(series, ticker, open_ts, close_ts)
+                except Exception as e:
+                    P(f"  [HISTORY] Candlestick error for {ticker}: {e}")
+                    pregame_yes = None
 
-            if new_in_series % 20 == 0:
-                save(out_file, records)
-                P(f"  [HISTORY] {series}: {new_in_series}/{len(markets)} processed, {len(records)} total")
+                records.append({
+                    "ticker": ticker,
+                    "event_ticker": m.get("event_ticker", ""),
+                    "series": series,
+                    "title": m.get("title", ""),
+                    "yes_sub_title": m.get("yes_sub_title", ""),
+                    "no_sub_title": m.get("no_sub_title", ""),
+                    "open_time": m.get("open_time", ""),
+                    "close_time": m.get("close_time", ""),
+                    "result": result,
+                    "pregame_yes_dollars": pregame_yes,
+                })
+                done.add(ticker)
+                new_in_series += 1
 
-            time.sleep(RATE_LIMIT_SLEEP)
+                if new_in_series % 20 == 0:
+                    save(out_file, records)
+                    if progress_callback:
+                        progress_callback()
+                    P(f"  [HISTORY] {series}: {new_in_series}/{len(markets)} processed, {len(records)} total")
 
-        save(out_file, records)
-        P(f"  [HISTORY] {series}: done ({new_in_series} new)")
+                time.sleep(RATE_LIMIT_SLEEP)
+
+            save(out_file, records)
+            if progress_callback:
+                progress_callback()
+            P(f"  [HISTORY] {series}: done ({new_in_series} new)")
+
+        except Exception as e:
+            P(f"  [HISTORY] {series}: ERROR — {e}, moving to next series")
+            save(out_file, records)
+            if progress_callback:
+                progress_callback()
 
     save(out_file, records)
     P(f"  [HISTORY] Complete. Total records: {len(records)}")
