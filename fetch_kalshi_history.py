@@ -22,33 +22,64 @@ from datetime import datetime
 from kalshi_bot import auth_get, public_get
 
 
-# Series tickers for each sport on Kalshi.
-# If a series doesn't exist, the API call will error and we skip it.
+# Series tickers for each sport on Kalshi (verified via /series API).
 SPORTS_SERIES = [
-    "KXNBAGAME",
-    "KXMLBGAME",
-    "KXNHLGAME",
-    "KXNCAAFGAME",
-    "KXNCAABGAME",
-    "KXCBBGAME",
-    "KXWCBBGAME",
-    "KXNCAAWBGAME",
-    "KXEPLGAME",
-    "KXUCLGAME",
-    "KXEURGAME",
-    "KXIPLGAME",
-    "KXCS2GAME",
-    "KXLOLGAME",
-    "KXDOTAGAME",
-    "KXNFLGAME",
+    # US major leagues
+    "KXNBAGAME",       # NBA
+    "KXNFLGAME",       # NFL
+    "KXMLBGAME",       # MLB
+    "KXNHLGAME",       # NHL
+    "KXWNBAGAME",      # WNBA
+    "KXMLSGAME",       # MLS
+    # College
+    "KXNCAAFGAME",     # College football
+    "KXNCAABGAME",     # College basketball (men)
+    "KXNCAAWBGAME",    # College basketball (women)
+    # Soccer
+    "KXEPLGAME",       # English Premier League
+    "KXUCLGAME",       # UEFA Champions League
+    "KXLIGUE1GAME",    # Ligue 1
+    "KXSAUDIPLGAME",   # Saudi Pro League
+    "KXLIGAMXGAME",    # Liga MX
+    # Cricket
+    "KXIPLGAME",       # IPL
+    "KXPSLGAME",       # Pakistan Super League
+    # Esports
+    "KXCSGOGAME",      # Counter-Strike 2 (legacy ticker)
+    "KXCS2GAME",       # Counter-Strike 2
+    "KXLOLGAME",       # League of Legends
+    "KXDOTA2GAME",     # Dota 2
+    # Tennis
+    "KXATPGAME",       # ATP
+    "KXWTAGAME",       # WTA
+    # Other
+    "KXUFLGAME",       # UFL
+    "KXKBOGAME",       # Korea KBO Baseball
+    "KXNPBGAME",       # Japan NPB Baseball
 ]
 
 OUT_FILE = os.environ.get("KALSHI_HISTORY_FILE", "kalshi_history.json")
-RATE_LIMIT_SLEEP = float(os.environ.get("HISTORY_RATE_LIMIT", "0.15"))
+RATE_LIMIT_SLEEP = float(os.environ.get("HISTORY_RATE_LIMIT", "0.25"))
+MAX_RETRIES = 5
 
 
 def P(msg=""):
     print(msg, flush=True)
+
+
+def _api_call(path, params=None):
+    """public_get with retry + exponential backoff on 429."""
+    for attempt in range(MAX_RETRIES):
+        try:
+            return public_get(path, params=params)
+        except Exception as e:
+            if "429" in str(e):
+                wait = (2 ** attempt) + 1
+                P(f"  [HISTORY] 429 rate-limited, waiting {wait}s (attempt {attempt+1}/{MAX_RETRIES})")
+                time.sleep(wait)
+            else:
+                raise
+    return public_get(path, params=params)  # final attempt, let it raise
 
 
 def _parse_ts(s):
@@ -73,7 +104,7 @@ def fetch_settled_markets(series_ticker):
         if cursor:
             params["cursor"] = cursor
         try:
-            data = public_get("/markets", params=params)
+            data = _api_call("/markets", params=params)
         except Exception as e:
             P(f"  [{series_ticker}] fetch error: {e}")
             break
@@ -120,7 +151,7 @@ def get_pregame_yes_price(series_ticker, market_ticker, open_ts, close_ts):
     while cur < close_ts:
         chunk_end = min(cur + CHUNK, close_ts)
         try:
-            data = public_get(
+            data = _api_call(
                 f"/series/{series_ticker}/markets/{market_ticker}/candlesticks",
                 params={
                     "start_ts": cur,
