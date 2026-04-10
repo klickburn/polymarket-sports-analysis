@@ -27,7 +27,8 @@ from crypto_15m_bot import (
     auth_get, public_get, get_balance, get_existing_positions,
     run as run_bot, P,
 )
-from fetch_kalshi_history import fetch_all as fetch_history, OUT_FILE as HISTORY_FILE
+# History data is committed as kalshi_history.json — no live fetch on Railway
+HISTORY_FILE = "kalshi_history.json"
 
 # ── Config ─────────────────────────────────────────────────────────────
 CRYPTO_SERIES = {
@@ -56,10 +57,8 @@ REFRESH_INTERVAL = int(os.environ.get("REFRESH_INTERVAL", "60"))
 _data = {"result": None, "refreshing": False, "last_refresh": 0}
 _lock = threading.Lock()
 
-_history = {"records": None, "refreshing": False, "last_refresh": 0}
+_history = {"records": None}
 _history_lock = threading.Lock()
-
-HISTORY_REFRESH_INTERVAL = int(os.environ.get("HISTORY_REFRESH_INTERVAL", "86400"))  # daily
 
 
 # ── Helpers ────────────────────────────────────────────────────────────
@@ -315,113 +314,41 @@ def get_data():
 
 @app.get("/api/history")
 def get_history():
-    """Serve all historical sports game records (pre-game odds + winner).
-    Optional query params:
-      series=KXNBAGAME  — filter by series
-      limit=1000        — cap results
-    """
-    from fastapi import Request  # noqa
+    """Serve historical sports game records from committed JSON file."""
     with _history_lock:
         records = _history["records"]
-        last_refresh = _history["last_refresh"]
-        refreshing = _history["refreshing"]
 
     if records is None:
-        # Try loading from disk if file exists but memory empty
+        # Load from committed file on first request
         if os.path.exists(HISTORY_FILE):
             try:
                 with open(HISTORY_FILE) as f:
                     records = json.load(f)
+                with _history_lock:
+                    _history["records"] = records
             except Exception:
                 records = None
 
     if records is None:
         return JSONResponse(
-            {"error": "History still loading. Check back shortly.", "refreshing": refreshing},
-            status_code=503,
+            {"error": "No history data. Run fetch_kalshi_history.py locally and commit kalshi_history.json."},
+            status_code=404,
         )
 
     return JSONResponse({
         "count": len(records),
-        "last_refresh": last_refresh,
-        "refreshing": refreshing,
         "records": records,
     })
 
 
-@app.get("/api/history/refresh")
-def trigger_history_refresh():
-    """Manually trigger a history refresh in the background (resumes from cache)."""
-    with _history_lock:
-        if _history["refreshing"]:
-            return JSONResponse({"status": "already refreshing"})
-    t = threading.Thread(target=_run_history_fetch, daemon=True)
-    t.start()
-    return JSONResponse({"status": "refresh started"})
-
-
-@app.get("/api/history/purge")
-def purge_and_refresh():
-    """Delete cached history and start a fresh fetch from scratch."""
-    with _history_lock:
-        if _history["refreshing"]:
-            return JSONResponse({"status": "already refreshing, wait for it to finish"})
-        _history["records"] = None
-        _history["last_refresh"] = 0
-    # Delete cache file
-    if os.path.exists(HISTORY_FILE):
-        os.remove(HISTORY_FILE)
-        P("  [HISTORY] Cache purged")
-    t = threading.Thread(target=_run_history_fetch, daemon=True)
-    t.start()
-    return JSONResponse({"status": "purged and refresh started"})
-
-
-# ── History fetch ──────────────────────────────────────────────────────
-def _sync_history_from_disk():
-    """Read the latest disk file into memory so /api/history serves partial results."""
-    if os.path.exists(HISTORY_FILE):
-        try:
-            with open(HISTORY_FILE) as f:
-                records = json.load(f)
-            with _history_lock:
-                _history["records"] = records
-        except Exception:
-            pass
-
-
-def _run_history_fetch():
-    with _history_lock:
-        if _history["refreshing"]:
-            return
-        _history["refreshing"] = True
-    try:
-        P("  [HISTORY] Background fetch starting...")
-        records = fetch_history(progress_callback=_sync_history_from_disk)
-        with _history_lock:
-            _history["records"] = records
-            _history["last_refresh"] = time.time()
-        P(f"  [HISTORY] Background fetch done: {len(records)} records")
-    except Exception as e:
-        P(f"  [HISTORY] Fetch error: {e}")
-        import traceback
-        traceback.print_exc()
-        # Still serve whatever was saved to disk
-        _sync_history_from_disk()
-    finally:
-        with _history_lock:
-            _history["refreshing"] = False
-
-
 def _load_history_cache():
-    """Load cached history file into memory on boot (no API calls)."""
+    """Load committed history JSON into memory on boot."""
     if os.path.exists(HISTORY_FILE):
         try:
             with open(HISTORY_FILE) as f:
                 cached = json.load(f)
             with _history_lock:
                 _history["records"] = cached
-                _history["last_refresh"] = os.path.getmtime(HISTORY_FILE)
             P(f"  [HISTORY] Loaded {len(cached)} cached records from disk")
         except Exception as e:
             P(f"  [HISTORY] Cache load failed: {e}")
