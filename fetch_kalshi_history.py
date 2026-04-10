@@ -136,16 +136,18 @@ def _candle_close_dollars(c):
 
 
 def get_pregame_yes_price(series_ticker, market_ticker, open_ts, close_ts):
-    """Return yes close price (dollars, 0.0–1.0) right before peak-volume candle.
+    """Return yes close price (dollars, 0.0–1.0) right before the game starts.
 
-    Kalshi's candlesticks endpoint caps the window so we fetch in chunks
-    (max ~5000 minutes per request at 60-min intervals).
+    Heuristic: find the first candle where volume spikes >3× the running
+    median of all prior candles. That candle is game-start; the one before
+    it is the last pre-game snapshot.
+
+    Kalshi's candlesticks endpoint caps the window so we fetch in chunks.
     """
     if not open_ts or not close_ts or close_ts <= open_ts:
         return None
 
     all_candles = []
-    # Fetch in 7-day chunks to stay under any window limits
     CHUNK = 7 * 24 * 3600
     cur = open_ts
     while cur < close_ts:
@@ -168,8 +170,26 @@ def get_pregame_yes_price(series_ticker, market_ticker, open_ts, close_ts):
     if not all_candles:
         return None
 
-    max_idx = max(range(len(all_candles)), key=lambda i: _candle_volume(all_candles[i]))
-    pick = all_candles[max_idx - 1] if max_idx > 0 else all_candles[0]
+    # Find first volume spike (game start):
+    #   volume > 3× median of prior candles AND volume > 5000 (absolute floor)
+    # The absolute floor prevents false positives on tiny early-market fluctuations.
+    MIN_SPIKE_VOL = 5000
+    vols = [_candle_volume(c) for c in all_candles]
+    spike_idx = None
+    for i in range(2, len(vols)):
+        prior = sorted(vols[:i])
+        median_prior = prior[len(prior) // 2]
+        if vols[i] >= MIN_SPIKE_VOL and median_prior > 0 and vols[i] > 3 * median_prior:
+            spike_idx = i
+            break
+
+    if spike_idx is not None and spike_idx > 0:
+        pick = all_candles[spike_idx - 1]
+    else:
+        # Fallback: use the candle before the peak volume candle
+        max_idx = max(range(len(all_candles)), key=lambda i: vols[i])
+        pick = all_candles[max_idx - 1] if max_idx > 0 else all_candles[0]
+
     return _candle_close_dollars(pick)
 
 
