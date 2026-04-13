@@ -67,13 +67,8 @@ session = requests.Session()
 
 # ── Crypto configs ──────────────────────────────────────────────────────
 CRYPTOS = {
-    "BTC":  {"series": "KXBTC15M"},
     "ETH":  {"series": "KXETH15M"},
-    "SOL":  {"series": "KXSOL15M"},
-    "XRP":  {"series": "KXXRP15M"},
     "DOGE": {"series": "KXDOGE15M"},
-    "HYPE": {"series": "KXHYPE15M"},
-    "BNB":  {"series": "KXBNB15M"},
 }
 
 POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "5"))
