@@ -27,6 +27,7 @@ from crypto_15m_bot import (
     auth_get, public_get, get_balance, get_existing_positions,
     run as run_bot, P,
 )
+from crypto_score_bot import run as run_score_bot
 # History data is committed as kalshi_history.json — no live fetch on Railway
 HISTORY_FILE = "kalshi_history.json"
 
@@ -354,6 +355,111 @@ def _load_history_cache():
             P(f"  [HISTORY] Cache load failed: {e}")
 
 
+# ── Score bot data ─────────────────────────────────────────────────────
+SCORE_BETS_FILE = "crypto_score_bets.json"
+SCORE_STATUS_FILE = "crypto_score_status.json"
+
+
+@app.get("/api/score-data")
+def get_score_data():
+    """Serve score bot bets + status for dashboard."""
+    bets = []
+    status = {}
+    if os.path.exists(SCORE_BETS_FILE):
+        try:
+            with open(SCORE_BETS_FILE) as f:
+                bets = json.load(f)
+        except Exception:
+            pass
+    if os.path.exists(SCORE_STATUS_FILE):
+        try:
+            with open(SCORE_STATUS_FILE) as f:
+                status = json.load(f)
+        except Exception:
+            pass
+
+    # Build report from bets
+    trades = [b for b in bets if b.get("action") == "trade"]
+    skips = [b for b in bets if b.get("action") == "skip"]
+
+    # Check outcomes for trades
+    for bet in trades:
+        if bet.get("result") == "open":
+            ticker = bet.get("ticker", "")
+            try:
+                mkt = public_get(f"/markets/{ticker}")
+                market = mkt.get("market", {})
+                mkt_status = market.get("status", "")
+                result_val = market.get("result", "")
+                if mkt_status in ("settled", "finalized") and result_val:
+                    side = bet.get("side", "")
+                    won = (result_val == "yes" and side == "yes") or \
+                          (result_val == "no" and side == "no")
+                    bet["result"] = "win" if won else "loss"
+                    bet["market_result"] = result_val
+                    price = bet.get("price", 0)
+                    contracts = bet.get("contracts", 1)
+                    if won:
+                        bet["pnl"] = round(contracts * (1.0 - price), 2)
+                    else:
+                        bet["pnl"] = round(-contracts * price, 2)
+            except Exception:
+                pass
+
+    # Save updated results back
+    if os.path.exists(SCORE_BETS_FILE):
+        try:
+            with open(SCORE_BETS_FILE, "w") as f:
+                json.dump(bets, f, indent=2, default=str)
+        except Exception:
+            pass
+
+    resolved = [b for b in trades if b.get("result") in ("win", "loss")]
+    wins = [b for b in resolved if b["result"] == "win"]
+    losses = [b for b in resolved if b["result"] == "loss"]
+    total_pnl = sum(b.get("pnl", 0) for b in resolved)
+
+    # Score distribution
+    score_dist = {}
+    for b in trades:
+        sc = b.get("score", 0)
+        score_dist[str(sc)] = score_dist.get(str(sc), 0) + 1
+
+    # Per-crypto breakdown
+    by_crypto = {}
+    for b in trades:
+        c = b.get("crypto", "?")
+        if c not in by_crypto:
+            by_crypto[c] = {"trades": 0, "wins": 0, "losses": 0, "pnl": 0, "skips": 0}
+        by_crypto[c]["trades"] += 1
+        if b.get("result") == "win":
+            by_crypto[c]["wins"] += 1
+            by_crypto[c]["pnl"] += b.get("pnl", 0)
+        elif b.get("result") == "loss":
+            by_crypto[c]["losses"] += 1
+            by_crypto[c]["pnl"] += b.get("pnl", 0)
+    for b in skips:
+        c = b.get("crypto", "?")
+        if c not in by_crypto:
+            by_crypto[c] = {"trades": 0, "wins": 0, "losses": 0, "pnl": 0, "skips": 0}
+        by_crypto[c]["skips"] += 1
+
+    return JSONResponse({
+        "total_trades": len(trades),
+        "total_skips": len(skips),
+        "resolved": len(resolved),
+        "wins": len(wins),
+        "losses": len(losses),
+        "win_rate": round(len(wins) / len(resolved) * 100, 1) if resolved else 0,
+        "total_pnl": round(total_pnl, 2),
+        "score_distribution": score_dist,
+        "by_crypto": by_crypto,
+        "indicators": status.get("indicators", {}),
+        "last_indicator_update": status.get("last_update", ""),
+        "recent_bets": bets[-50:],  # Last 50 decisions
+    })
+
+
 # ── Background threads ─────────────────────────────────────────────────
 def bot_thread():
     while True:
@@ -362,6 +468,16 @@ def bot_thread():
             run_bot(live=True)
         except Exception as e:
             P(f"  [BOT] Crashed: {e}")
+            time.sleep(30)
+
+
+def score_bot_thread():
+    while True:
+        try:
+            P("  [SCORE-BOT] Starting crypto score bot...")
+            run_score_bot(live=True)
+        except Exception as e:
+            P(f"  [SCORE-BOT] Crashed: {e}")
             time.sleep(30)
 
 
@@ -376,6 +492,11 @@ def start_threads():
     t2 = threading.Thread(target=bot_thread, daemon=True)
     t2.start()
     P("  [SERVER] Bot thread started")
+
+    # Start score bot thread
+    t3 = threading.Thread(target=score_bot_thread, daemon=True)
+    t3.start()
+    P("  [SERVER] Score bot thread started")
 
     # Load cached history (no auto-fetch — use /api/history/refresh manually)
     _load_history_cache()
