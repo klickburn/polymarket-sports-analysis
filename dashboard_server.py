@@ -356,8 +356,11 @@ def _load_history_cache():
 
 
 # ── Score bot data ─────────────────────────────────────────────────────
-SCORE_BETS_FILE = "crypto_score_bets.json"
-SCORE_STATUS_FILE = "crypto_score_status.json"
+SCORE_DATA_DIR = os.environ.get("SCORE_DATA_DIR", "/data")
+if not os.path.isdir(SCORE_DATA_DIR):
+    SCORE_DATA_DIR = "."
+SCORE_BETS_FILE = os.path.join(SCORE_DATA_DIR, "crypto_score_bets.json")
+SCORE_STATUS_FILE = os.path.join(SCORE_DATA_DIR, "crypto_score_status.json")
 
 
 @app.get("/api/score-data")

@@ -39,8 +39,11 @@ MIN_PRICE = 0.75
 MAX_PRICE = 0.99
 MIN_SCORE = int(os.environ.get("SCORE_MIN_SCORE", "0"))
 
-BETS_FILE = "crypto_score_bets.json"
-STATUS_FILE = "crypto_score_status.json"
+DATA_DIR = os.environ.get("SCORE_DATA_DIR", "/data")
+if not os.path.isdir(DATA_DIR):
+    DATA_DIR = "."  # Fallback to current dir if volume not mounted
+BETS_FILE = os.path.join(DATA_DIR, "crypto_score_bets.json")
+STATUS_FILE = os.path.join(DATA_DIR, "crypto_score_status.json")
 
 CRYPTOS = {
     "BTC":  {"series": "KXBTC15M"},
