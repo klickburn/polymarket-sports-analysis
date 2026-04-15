@@ -382,8 +382,8 @@ def get_score_data():
     trades = [b for b in bets if b.get("action") == "trade"]
     skips = [b for b in bets if b.get("action") == "skip"]
 
-    # Check outcomes for trades
-    for bet in trades:
+    # Check outcomes for ALL bets (trades AND skips)
+    for bet in bets:
         if bet.get("result") == "open":
             ticker = bet.get("ticker", "")
             try:
@@ -403,6 +403,11 @@ def get_score_data():
                         bet["pnl"] = round(contracts * (1.0 - price), 2)
                     else:
                         bet["pnl"] = round(-contracts * price, 2)
+                    # For skips: record what WOULD have happened
+                    if bet.get("action") == "skip":
+                        bet["hypothetical_pnl"] = bet["pnl"]
+                        bet["would_have_won"] = won
+                        del bet["pnl"]  # skips don't have real P&L
             except Exception:
                 pass
 
@@ -419,6 +424,12 @@ def get_score_data():
     losses = [b for b in resolved if b["result"] == "loss"]
     total_pnl = sum(b.get("pnl", 0) for b in resolved)
 
+    # Skip outcome stats (what would have happened)
+    resolved_skips = [b for b in skips if b.get("result") in ("win", "loss")]
+    skip_would_won = [b for b in resolved_skips if b.get("would_have_won")]
+    skip_would_lost = [b for b in resolved_skips if not b.get("would_have_won")]
+    skip_hypothetical_pnl = sum(b.get("hypothetical_pnl", 0) for b in resolved_skips)
+
     # Score distribution
     score_dist = {}
     for b in trades:
@@ -430,7 +441,7 @@ def get_score_data():
     for b in trades:
         c = b.get("crypto", "?")
         if c not in by_crypto:
-            by_crypto[c] = {"trades": 0, "wins": 0, "losses": 0, "pnl": 0, "skips": 0}
+            by_crypto[c] = {"trades": 0, "wins": 0, "losses": 0, "pnl": 0, "skips": 0, "skip_would_won": 0, "skip_would_lost": 0, "skip_hypothetical_pnl": 0}
         by_crypto[c]["trades"] += 1
         if b.get("result") == "win":
             by_crypto[c]["wins"] += 1
@@ -441,8 +452,14 @@ def get_score_data():
     for b in skips:
         c = b.get("crypto", "?")
         if c not in by_crypto:
-            by_crypto[c] = {"trades": 0, "wins": 0, "losses": 0, "pnl": 0, "skips": 0}
+            by_crypto[c] = {"trades": 0, "wins": 0, "losses": 0, "pnl": 0, "skips": 0, "skip_would_won": 0, "skip_would_lost": 0, "skip_hypothetical_pnl": 0}
         by_crypto[c]["skips"] += 1
+        if b.get("would_have_won") is not None:
+            if b["would_have_won"]:
+                by_crypto[c]["skip_would_won"] += 1
+            else:
+                by_crypto[c]["skip_would_lost"] += 1
+            by_crypto[c]["skip_hypothetical_pnl"] += b.get("hypothetical_pnl", 0)
 
     return JSONResponse({
         "total_trades": len(trades),
@@ -452,11 +469,15 @@ def get_score_data():
         "losses": len(losses),
         "win_rate": round(len(wins) / len(resolved) * 100, 1) if resolved else 0,
         "total_pnl": round(total_pnl, 2),
+        "skip_resolved": len(resolved_skips),
+        "skip_would_won": len(skip_would_won),
+        "skip_would_lost": len(skip_would_lost),
+        "skip_hypothetical_pnl": round(skip_hypothetical_pnl, 2),
         "score_distribution": score_dist,
         "by_crypto": by_crypto,
         "indicators": status.get("indicators", {}),
         "last_indicator_update": status.get("last_update", ""),
-        "recent_bets": bets[-50:],  # Last 50 decisions
+        "recent_bets": bets[-100:],  # Last 100 decisions
     })
 
 

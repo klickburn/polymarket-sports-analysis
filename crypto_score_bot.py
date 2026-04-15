@@ -382,6 +382,12 @@ def run(live=False):
                 reasons_str = ", ".join(f"{r[0]}:{r[2]}" for r in reasons)
                 P(f"    {crypto} {side.upper()} @ {price:.2f} | Score: {score:+d} [{reasons_str}]")
 
+                # Build detailed score breakdown for weight analysis
+                ind = indicators.get(crypto, {})
+                score_breakdown = {}
+                for factor, detail, pts in reasons:
+                    score_breakdown[factor] = {"detail": detail, "points": int(pts)}
+
                 bet_record = {
                     "crypto": crypto,
                     "ticker": ticker,
@@ -390,6 +396,16 @@ def run(live=False):
                     "price": price,
                     "score": score,
                     "reasons": reasons,
+                    "score_breakdown": score_breakdown,
+                    "indicators": {
+                        "ret_1h": round(ind.get("ret_1h", 0), 4),
+                        "ret_3h": round(ind.get("ret_3h", 0), 4),
+                        "vol_6h": round(ind.get("vol_6h", 0), 4),
+                        "rsi": round(ind.get("rsi", 50), 2),
+                        "stoch": round(ind.get("stoch", 50), 2),
+                        "pack_agreement": round(ind.get("pack_agreement", 0.5), 3),
+                        "btc_ret_1h": round(indicators.get("BTC", {}).get("ret_1h", 0), 4),
+                    },
                     "bet_amount": BET_AMOUNT,
                     "contracts": CONTRACT_COUNT,
                     "entry_minute": round(mins_in, 1),
