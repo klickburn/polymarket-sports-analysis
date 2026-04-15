@@ -558,8 +558,6 @@ function switchMode(mode) {
   if (mode === 'score' && !window._scoreLoaded) { loadScoreData(); }
 }
 
-function renderAll() {
-
 function getDate(ts) {
   if (!ts) return '';
   return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -577,6 +575,8 @@ function cryptoTag(c) {
   if (!c) return '-';
   return `<span class="crypto-tag ${c.toLowerCase()}">${c}</span>`;
 }
+
+function renderAll() {
 
 // ═══ Timestamps ═══
 const refreshDate = new Date(DATA_REFRESHED_AT);
@@ -1275,6 +1275,8 @@ function renderScoreBot() {
       data: { labels, datasets: [{ data: vals, borderColor: '#a855f7', backgroundColor: 'rgba(168,85,247,0.1)', fill: true, tension: 0.3, pointRadius: 2 }] },
       options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#8b8fa3', maxTicksLimit: 8 }, grid: { color: 'rgba(42,45,58,0.5)' } }, y: { ticks: { color: '#8b8fa3', callback: v => '$' + v.toFixed(2) }, grid: { color: 'rgba(42,45,58,0.5)' } } } }
     });
+  } else {
+    document.getElementById('scorePnlChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:300px;color:var(--muted)">No resolved trades yet</div>';
   }
 
   // Score distribution chart
@@ -1300,6 +1302,8 @@ function renderScoreBot() {
       },
       options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#8b8fa3' } } }, scales: { x: { ticks: { color: '#8b8fa3' }, grid: { color: 'rgba(42,45,58,0.5)' }, stacked: true }, y: { ticks: { color: '#8b8fa3' }, grid: { color: 'rgba(42,45,58,0.5)' }, stacked: true } } }
     });
+  } else {
+    document.getElementById('scoreDistChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:300px;color:var(--muted)">No decisions yet</div>';
   }
 
   // Live indicators table
@@ -1362,6 +1366,9 @@ function renderScoreBot() {
       },
       options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#8b8fa3' }, grid: { color: 'rgba(42,45,58,0.5)' } }, y: { ticks: { color: '#8b8fa3', callback: v => '$' + v.toFixed(2) }, grid: { color: 'rgba(42,45,58,0.5)' } } } }
     });
+  } else {
+    document.getElementById('scoreCryptoContent').innerHTML = '<div class="card"><div class="empty-state"><div class="msg">No crypto data yet</div></div></div>';
+    document.getElementById('scoreCryptoPnlChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:260px;color:var(--muted)">No data</div>';
   }
 
   // Win rate by score chart
@@ -1383,6 +1390,8 @@ function renderScoreBot() {
       },
       options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#8b8fa3' }, grid: { color: 'rgba(42,45,58,0.5)' } }, y: { ticks: { color: '#8b8fa3', callback: v => v + '%' }, grid: { color: 'rgba(42,45,58,0.5)' }, max: 100 } } }
     });
+  } else {
+    document.getElementById('scoreWinRateChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:260px;color:var(--muted)">No resolved trades yet</div>';
   }
 
   // Recent decisions table
