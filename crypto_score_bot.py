@@ -279,9 +279,9 @@ def run(live=False):
 
     # Indicators cache
     indicators = {}
-    last_indicator_fetch = 0
-    INDICATOR_REFRESH = 600  # refresh every 10 minutes (CoinGecko rate limits)
     checked_positions = False
+    fetched_indicators = False
+    PREFETCH_MINUTE = ENTRY_AFTER_MINUTES - 1  # Fetch CoinGecko 1 min before entry
 
     P(f"\n  Running continuously — polling every {POLL_INTERVAL}s...")
 
@@ -291,37 +291,25 @@ def run(live=False):
             mins_left = minutes_until_strike()
             mins_in = 15 - mins_left
 
-            # New window? Reset placed set
+            # New window? Reset
             if window_end != last_window_end:
                 last_window_end = window_end
                 placed_this_window = set()
                 checked_positions = False
+                fetched_indicators = False
                 P(f"\n  -- Window {window_start.strftime('%H:%M')}-{window_end.strftime('%H:%M')} UTC --")
 
-            # Too early — sleep until entry time
-            if mins_in < ENTRY_AFTER_MINUTES:
+            # Too early — sleep until prefetch time
+            if mins_in < PREFETCH_MINUTE:
                 time.sleep(POLL_INTERVAL)
                 continue
 
-            # Fetch positions/orders only once per window, right before trading
-            if not checked_positions:
-                open_order_tickers = get_open_orders()
-                time.sleep(1)
-                existing_positions = get_existing_positions()
-                skip_tickers = open_order_tickers | existing_positions
-                if skip_tickers:
-                    P(f"  Skipping {len(skip_tickers)} tickers with open orders/positions")
-                checked_positions = True
-                time.sleep(1)
-
-            # Refresh indicators if stale
-            now_ts = time.time()
-            if now_ts - last_indicator_fetch > INDICATOR_REFRESH:
+            # Fetch CoinGecko 1 min before entry (minute 10)
+            if not fetched_indicators:
                 P("  Fetching CoinGecko data...")
                 crypto_data = fetch_crypto_prices()
                 if crypto_data:
                     indicators = compute_indicators(crypto_data)
-                    last_indicator_fetch = now_ts
                     P(f"  Got indicators for {len(indicators)} cryptos")
 
                     # Save status for dashboard
@@ -342,6 +330,23 @@ def run(live=False):
                     save_status(status)
                 else:
                     P("  WARNING: CoinGecko fetch failed")
+                fetched_indicators = True
+
+            # Wait until entry time (minute 11)
+            if mins_in < ENTRY_AFTER_MINUTES:
+                time.sleep(POLL_INTERVAL)
+                continue
+
+            # Fetch positions/orders once per window, right before trading
+            if not checked_positions:
+                open_order_tickers = get_open_orders()
+                time.sleep(1)
+                existing_positions = get_existing_positions()
+                skip_tickers = open_order_tickers | existing_positions
+                if skip_tickers:
+                    P(f"  Skipping {len(skip_tickers)} tickers with open orders/positions")
+                checked_positions = True
+                time.sleep(1)
 
             if not indicators:
                 time.sleep(POLL_INTERVAL)
