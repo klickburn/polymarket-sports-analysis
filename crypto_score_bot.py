@@ -280,7 +280,8 @@ def run(live=False):
     # Indicators cache
     indicators = {}
     last_indicator_fetch = 0
-    INDICATOR_REFRESH = 300  # refresh every 5 minutes
+    INDICATOR_REFRESH = 600  # refresh every 10 minutes (CoinGecko rate limits)
+    checked_positions = False
 
     P(f"\n  Running continuously — polling every {POLL_INTERVAL}s...")
 
@@ -290,21 +291,28 @@ def run(live=False):
             mins_left = minutes_until_strike()
             mins_in = 15 - mins_left
 
-            # New window? Reset
+            # New window? Reset placed set
             if window_end != last_window_end:
                 last_window_end = window_end
                 placed_this_window = set()
+                checked_positions = False
+                P(f"\n  -- Window {window_start.strftime('%H:%M')}-{window_end.strftime('%H:%M')} UTC --")
+
+            # Too early — sleep until entry time
+            if mins_in < ENTRY_AFTER_MINUTES:
+                time.sleep(POLL_INTERVAL)
+                continue
+
+            # Fetch positions/orders only once per window, right before trading
+            if not checked_positions:
                 open_order_tickers = get_open_orders()
+                time.sleep(1)
                 existing_positions = get_existing_positions()
                 skip_tickers = open_order_tickers | existing_positions
                 if skip_tickers:
                     P(f"  Skipping {len(skip_tickers)} tickers with open orders/positions")
-                P(f"\n  -- Window {window_start.strftime('%H:%M')}-{window_end.strftime('%H:%M')} UTC --")
-
-            # Too early
-            if mins_in < ENTRY_AFTER_MINUTES:
-                time.sleep(POLL_INTERVAL)
-                continue
+                checked_positions = True
+                time.sleep(1)
 
             # Refresh indicators if stale
             now_ts = time.time()
@@ -339,12 +347,12 @@ def run(live=False):
                 time.sleep(POLL_INTERVAL)
                 continue
 
-            # Check each crypto
+            # Check each crypto — 1.5s between each to avoid 429
             for crypto, cfg in CRYPTOS.items():
                 if crypto in placed_this_window:
                     continue
 
-                time.sleep(0.5)
+                time.sleep(1.5)
                 market, event = find_current_market(cfg["series"])
                 if not market:
                     continue
@@ -357,7 +365,7 @@ def run(live=False):
                     placed_this_window.add(crypto)
                     continue
 
-                time.sleep(0.5)
+                time.sleep(1.5)
                 side, price = get_dominant_side(ticker)
                 if not side or not price:
                     continue
