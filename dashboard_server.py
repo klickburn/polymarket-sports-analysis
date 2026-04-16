@@ -363,29 +363,21 @@ SCORE_BETS_FILE = os.path.join(SCORE_DATA_DIR, "crypto_score_bets.json")
 SCORE_STATUS_FILE = os.path.join(SCORE_DATA_DIR, "crypto_score_status.json")
 
 
-@app.get("/api/score-data")
-def get_score_data():
-    """Serve score bot bets + status for dashboard."""
+_score_cache = {"result": None, "last_resolve": 0}
+_score_lock = threading.Lock()
+
+
+def _resolve_score_bets():
+    """Background: resolve open score bot bets via Kalshi API."""
     bets = []
-    status = {}
     if os.path.exists(SCORE_BETS_FILE):
         try:
             with open(SCORE_BETS_FILE) as f:
                 bets = json.load(f)
         except Exception:
-            pass
-    if os.path.exists(SCORE_STATUS_FILE):
-        try:
-            with open(SCORE_STATUS_FILE) as f:
-                status = json.load(f)
-        except Exception:
-            pass
+            return
 
-    # Build report from bets
-    trades = [b for b in bets if b.get("action") == "trade"]
-    skips = [b for b in bets if b.get("action") == "skip"]
-
-    # Check outcomes for ALL bets (trades AND skips)
+    changed = False
     for bet in bets:
         if bet.get("result") == "open":
             ticker = bet.get("ticker", "")
@@ -406,40 +398,45 @@ def get_score_data():
                         bet["pnl"] = round(contracts * (1.0 - price), 2)
                     else:
                         bet["pnl"] = round(-contracts * price, 2)
-                    # For skips: record what WOULD have happened
                     if bet.get("action") == "skip":
                         bet["hypothetical_pnl"] = bet["pnl"]
                         bet["would_have_won"] = won
-                        del bet["pnl"]  # skips don't have real P&L
+                        del bet["pnl"]
+                    changed = True
+                time.sleep(0.3)
             except Exception:
                 pass
 
-    # Save updated results back
-    if os.path.exists(SCORE_BETS_FILE):
+    if changed:
         try:
             with open(SCORE_BETS_FILE, "w") as f:
                 json.dump(bets, f, indent=2, default=str)
         except Exception:
             pass
 
+    return bets
+
+
+def _build_score_report(bets, status):
+    """Build the score data report from bets — no API calls, instant."""
+    trades = [b for b in bets if b.get("action") == "trade"]
+    skips = [b for b in bets if b.get("action") == "skip"]
+
     resolved = [b for b in trades if b.get("result") in ("win", "loss")]
     wins = [b for b in resolved if b["result"] == "win"]
     losses = [b for b in resolved if b["result"] == "loss"]
     total_pnl = sum(b.get("pnl", 0) for b in resolved)
 
-    # Skip outcome stats (what would have happened)
     resolved_skips = [b for b in skips if b.get("result") in ("win", "loss")]
     skip_would_won = [b for b in resolved_skips if b.get("would_have_won")]
     skip_would_lost = [b for b in resolved_skips if not b.get("would_have_won")]
     skip_hypothetical_pnl = sum(b.get("hypothetical_pnl", 0) for b in resolved_skips)
 
-    # Score distribution
     score_dist = {}
     for b in trades:
         sc = b.get("score", 0)
         score_dist[str(sc)] = score_dist.get(str(sc), 0) + 1
 
-    # Per-crypto breakdown
     by_crypto = {}
     for b in trades:
         c = b.get("crypto", "?")
@@ -464,7 +461,7 @@ def get_score_data():
                 by_crypto[c]["skip_would_lost"] += 1
             by_crypto[c]["skip_hypothetical_pnl"] += b.get("hypothetical_pnl", 0)
 
-    return JSONResponse({
+    return {
         "total_trades": len(trades),
         "total_skips": len(skips),
         "resolved": len(resolved),
@@ -480,8 +477,54 @@ def get_score_data():
         "by_crypto": by_crypto,
         "indicators": status.get("indicators", {}),
         "last_indicator_update": status.get("last_update", ""),
-        "recent_bets": bets[-100:],  # Last 100 decisions
-    })
+        "recent_bets": bets,
+    }
+
+
+def score_resolve_loop():
+    """Background thread: resolve open bets every 60s, cache the report."""
+    while True:
+        try:
+            bets = _resolve_score_bets() or []
+            status = {}
+            if os.path.exists(SCORE_STATUS_FILE):
+                try:
+                    with open(SCORE_STATUS_FILE) as f:
+                        status = json.load(f)
+                except Exception:
+                    pass
+            report = _build_score_report(bets, status)
+            with _score_lock:
+                _score_cache["result"] = report
+                _score_cache["last_resolve"] = time.time()
+        except Exception as e:
+            P(f"  [SCORE-DATA] Resolve error: {e}")
+        time.sleep(60)
+
+
+@app.get("/api/score-data")
+def get_score_data():
+    """Serve cached score bot report — instant response."""
+    with _score_lock:
+        result = _score_cache["result"]
+    if result:
+        return JSONResponse(result)
+    # First request before cache is ready — build from disk (no API calls)
+    bets = []
+    status = {}
+    if os.path.exists(SCORE_BETS_FILE):
+        try:
+            with open(SCORE_BETS_FILE) as f:
+                bets = json.load(f)
+        except Exception:
+            pass
+    if os.path.exists(SCORE_STATUS_FILE):
+        try:
+            with open(SCORE_STATUS_FILE) as f:
+                status = json.load(f)
+        except Exception:
+            pass
+    return JSONResponse(_build_score_report(bets, status))
 
 
 # ── Background threads ─────────────────────────────────────────────────
@@ -521,6 +564,11 @@ def start_threads():
     t3 = threading.Thread(target=score_bot_thread, daemon=True)
     t3.start()
     P("  [SERVER] Score bot thread started")
+
+    # Start score data resolve thread (background outcome checking)
+    t4 = threading.Thread(target=score_resolve_loop, daemon=True)
+    t4.start()
+    P("  [SERVER] Score resolve thread started")
 
     # Load cached history (no auto-fetch — use /api/history/refresh manually)
     _load_history_cache()

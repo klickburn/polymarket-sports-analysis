@@ -257,12 +257,12 @@
 
 <!-- Mode Tabs -->
 <div class="mode-tabs">
-  <div class="mode-tab active-overview" id="tabOverview" onclick="switchMode('overview')">Overview</div>
-  <div class="mode-tab" id="tabScore" onclick="switchMode('score')">Score Bot</div>
+  <div class="mode-tab active-score" id="tabScore" onclick="switchMode('score')">Score Bot</div>
+  <div class="mode-tab" id="tabOverview" onclick="switchMode('overview')">Overview</div>
 </div>
 
 <!-- ═══════════════════ OVERVIEW SECTION ═══════════════════ -->
-<div class="mode-section active" id="sectionOverview">
+<div class="mode-section" id="sectionOverview">
   <div class="kpi-row" id="overviewKpis"></div>
 
   <div class="grid-2">
@@ -437,7 +437,7 @@
 </div> -->
 
 <!-- ═══════════════════ SCORE BOT SECTION ═══════════════════ -->
-<div class="mode-section" id="sectionScore">
+<div class="mode-section active" id="sectionScore">
   <div class="kpi-row" id="scoreKpis"></div>
 
   <div class="grid-2">
@@ -1246,12 +1246,19 @@ function renderScoreBot() {
   // KPIs
   const wr = d.resolved > 0 ? d.win_rate : 0;
   const skipRate = (d.total_trades + d.total_skips) > 0 ? (d.total_skips / (d.total_trades + d.total_skips) * 100).toFixed(0) : '0';
+  // Losses saved = negative hypothetical P&L of skipped trades that would have lost
+  const skipHypPnl = d.skip_hypothetical_pnl || 0;
+  const lossesSaved = skipHypPnl < 0 ? Math.abs(skipHypPnl) : 0;
+  const skipWouldWon = d.skip_would_won || 0;
+  const skipWouldLost = d.skip_would_lost || 0;
+  const skipResolved = d.skip_resolved || 0;
   const kpis = [
     { label: 'Score Bot P&L', value: `$${d.total_pnl >= 0 ? '+' : ''}${d.total_pnl.toFixed(2)}`, cls: d.total_pnl >= 0 ? 'green' : 'red', sub: `${d.resolved} resolved` },
     { label: 'Win Rate', value: d.resolved > 0 ? `${wr}%` : '--', cls: wr >= 50 ? 'green' : 'red', sub: `${d.wins}W - ${d.losses}L` },
+    { label: 'Losses Saved', value: `$${lossesSaved.toFixed(2)}`, cls: 'green', sub: `${skipWouldLost} bad trades filtered` },
+    { label: 'Skip Accuracy', value: skipResolved > 0 ? `${(skipWouldLost / skipResolved * 100).toFixed(0)}%` : '--', cls: skipWouldLost >= skipWouldWon ? 'green' : 'red', sub: `${skipWouldLost} correct / ${skipWouldWon} missed` },
     { label: 'Total Trades', value: d.total_trades, cls: 'blue', sub: `${d.total_skips} skipped` },
-    { label: 'Skip Rate', value: `${skipRate}%`, cls: 'purple', sub: 'negative scores filtered' },
-    { label: 'Decisions', value: d.total_trades + d.total_skips, cls: 'cyan', sub: 'trades + skips' },
+    { label: 'Decisions', value: d.total_trades + d.total_skips, cls: 'cyan', sub: `skip rate: ${skipRate}%` },
   ];
   document.getElementById('scoreKpis').innerHTML = kpis.map(k =>
     `<div class="kpi"><div class="label">${k.label}</div><div class="value ${k.cls}">${k.value}</div><div class="sub">${k.sub}</div></div>`
@@ -1428,6 +1435,7 @@ function filterScoreTable(filter, el) {
 }
 
 loadData();
+loadScoreData();
 </script>
 </body>
 </html>
