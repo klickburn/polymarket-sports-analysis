@@ -258,9 +258,7 @@
 <!-- Mode Tabs -->
 <div class="mode-tabs">
   <div class="mode-tab active-overview" id="tabOverview" onclick="switchMode('overview')">Overview</div>
-  <div class="mode-tab" id="tabCrypto" onclick="switchMode('crypto')">Crypto 15m</div>
   <div class="mode-tab" id="tabScore" onclick="switchMode('score')">Score Bot</div>
-  <div class="mode-tab" id="tabSports" onclick="switchMode('sports')">Sports</div>
 </div>
 
 <!-- ═══════════════════ OVERVIEW SECTION ═══════════════════ -->
@@ -298,8 +296,8 @@
   </div>
 </div>
 
-<!-- ═══════════════════ SPORTS SECTION ═══════════════════ -->
-<div class="mode-section" id="sectionSports">
+<!-- Sports and Crypto sections removed -->
+<!-- <div class="mode-section" id="sectionSports">
   <div class="kpi-row" id="sportsKpis"></div>
 
   <div class="grid-2">
@@ -436,7 +434,7 @@
       </table>
     </div>
   </div>
-</div>
+</div> -->
 
 <!-- ═══════════════════ SCORE BOT SECTION ═══════════════════ -->
 <div class="mode-section" id="sectionScore">
@@ -548,12 +546,8 @@ const cryptoColors = { BTC: '#f7931a', ETH: '#627eea', SOL: '#00ffa3', XRP: '#00
 // ═══ Mode switching ═══
 function switchMode(mode) {
   document.getElementById('sectionOverview').classList.toggle('active', mode === 'overview');
-  document.getElementById('sectionSports').classList.toggle('active', mode === 'sports');
-  document.getElementById('sectionCrypto').classList.toggle('active', mode === 'crypto');
   document.getElementById('sectionScore').classList.toggle('active', mode === 'score');
   document.getElementById('tabOverview').className = 'mode-tab' + (mode === 'overview' ? ' active-overview' : '');
-  document.getElementById('tabSports').className = 'mode-tab' + (mode === 'sports' ? ' active-sports' : '');
-  document.getElementById('tabCrypto').className = 'mode-tab' + (mode === 'crypto' ? ' active-crypto' : '');
   document.getElementById('tabScore').className = 'mode-tab' + (mode === 'score' ? ' active-score' : '');
   if (mode === 'score' && !window._scoreLoaded) { loadScoreData(); }
 }
