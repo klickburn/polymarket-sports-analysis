@@ -181,8 +181,6 @@ def compute_score(sym, side, price, indicators):
         s -= 1; reasons.append(("Crypto", "BNB", "-1"))
     elif sym == "XRP":
         s -= 1; reasons.append(("Crypto", "XRP", "-1"))
-    elif sym == "ETH":
-        s += 1; reasons.append(("Crypto", "ETH", "+1"))
 
     # Momentum vs side
     ret = ind["ret_1h"]
