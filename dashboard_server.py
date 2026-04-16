@@ -431,6 +431,10 @@ def _build_score_report(bets, status):
     skip_would_won = [b for b in resolved_skips if b.get("would_have_won")]
     skip_would_lost = [b for b in resolved_skips if not b.get("would_have_won")]
     skip_hypothetical_pnl = sum(b.get("hypothetical_pnl", 0) for b in resolved_skips)
+    # Losses saved = sum of what we would have lost on skips that were losers (positive number)
+    skip_losses_saved = sum(abs(b.get("hypothetical_pnl", 0)) for b in skip_would_lost)
+    # Missed gains = sum of what we would have gained on skips that were winners
+    skip_missed_gains = sum(b.get("hypothetical_pnl", 0) for b in skip_would_won)
 
     score_dist = {}
     for b in trades:
@@ -473,6 +477,8 @@ def _build_score_report(bets, status):
         "skip_would_won": len(skip_would_won),
         "skip_would_lost": len(skip_would_lost),
         "skip_hypothetical_pnl": round(skip_hypothetical_pnl, 2),
+        "skip_losses_saved": round(skip_losses_saved, 2),
+        "skip_missed_gains": round(skip_missed_gains, 2),
         "score_distribution": score_dist,
         "by_crypto": by_crypto,
         "indicators": status.get("indicators", {}),
