@@ -1,0 +1,70 @@
+name: Check Polymarket Account
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests cryptography
+
+      - name: Check account info
+        env:
+          PM_API_KEY: ${{ secrets.PM_API_KEY }}
+          PM_API_SECRET: ${{ secrets.PM_API_SECRET }}
+        run: |
+          python3 -c "
+          import os, json, time, base64, requests
+          from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+          API_BASE = 'https://api.polymarket.us'
+          API_KEY = os.environ['PM_API_KEY']
+          API_SECRET = os.environ['PM_API_SECRET']
+
+          def sign_request(method, path, timestamp):
+              message = f'{timestamp}{method.upper()}{path}'
+              secret_bytes = base64.b64decode(API_SECRET)
+              private_key = Ed25519PrivateKey.from_private_bytes(secret_bytes[:32])
+              signature = private_key.sign(message.encode())
+              return base64.b64encode(signature).decode()
+
+          def auth_get(path):
+              timestamp = str(int(time.time() * 1000))
+              signature = sign_request('GET', path, timestamp)
+              headers = {
+                  'X-PM-Access-Key': API_KEY,
+                  'X-PM-Timestamp': timestamp,
+                  'X-PM-Signature': signature,
+                  'Content-Type': 'application/json',
+              }
+              r = requests.get(f'{API_BASE}{path}', headers=headers, timeout=30)
+              r.raise_for_status()
+              return r.json()
+
+          # Try various account endpoints
+          endpoints = [
+              '/v1/account/profile',
+              '/v1/account',
+              '/v1/account/balances',
+              '/v1/me',
+              '/v1/user',
+          ]
+          for ep in endpoints:
+              try:
+                  data = auth_get(ep)
+                  print(f'=== {ep} ===')
+                  print(json.dumps(data, indent=2))
+              except Exception as e:
+                  print(f'=== {ep} === ERROR: {e}')
+          "
