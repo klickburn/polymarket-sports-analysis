@@ -512,10 +512,10 @@ def start_threads():
     t1.start()
     P("  [SERVER] Data refresh thread started")
 
-    # Start bot thread
-    t2 = threading.Thread(target=bot_thread, daemon=True)
-    t2.start()
-    P("  [SERVER] Bot thread started")
+    # Crypto 15m bot disabled — score bot only
+    # t2 = threading.Thread(target=bot_thread, daemon=True)
+    # t2.start()
+    # P("  [SERVER] Bot thread started")
 
     # Start score bot thread
     t3 = threading.Thread(target=score_bot_thread, daemon=True)
