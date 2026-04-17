@@ -37,7 +37,7 @@ ENTRY_AFTER_MINUTES = int(os.environ.get("SCORE_ENTRY_MINUTES", "11"))
 POLL_INTERVAL = int(os.environ.get("SCORE_POLL_INTERVAL", "5"))
 MIN_PRICE = 0.75
 MAX_PRICE = 0.99
-MIN_SCORE = int(os.environ.get("SCORE_MIN_SCORE", "0"))
+MIN_SCORE = int(os.environ.get("SCORE_MIN_SCORE", "-2"))
 
 DATA_DIR = os.environ.get("SCORE_DATA_DIR", "/data")
 if not os.path.isdir(DATA_DIR):
@@ -166,11 +166,11 @@ def compute_score(sym, side, price, indicators):
 
     # Price penalty
     if price >= 0.97:
-        s -= 3; reasons.append(("Price", f"{price:.0%}", "-3"))
+        s -= 2; reasons.append(("Price", f"{price:.0%}", "-2"))
     elif price >= 0.95:
         s -= 2; reasons.append(("Price", f"{price:.0%}", "-2"))
     elif price >= 0.93:
-        s -= 1; reasons.append(("Price", f"{price:.0%}", "-1"))
+        s -= 2; reasons.append(("Price", f"{price:.0%}", "-2"))
     elif price < 0.70:
         s -= 1; reasons.append(("Price", f"{price:.0%}", "-1"))
 
@@ -181,37 +181,41 @@ def compute_score(sym, side, price, indicators):
         s -= 1; reasons.append(("Crypto", "BNB", "-1"))
     elif sym == "XRP":
         s -= 1; reasons.append(("Crypto", "XRP", "-1"))
+    elif sym == "DOGE":
+        s += 1; reasons.append(("Crypto", "DOGE", "+1"))
+    elif sym == "ETH":
+        s += 1; reasons.append(("Crypto", "ETH", "+1"))
 
     # Momentum vs side
     ret = ind["ret_1h"]
-    if ret > 0.5 and side == "no":
+    if ret > 0.6 and side == "no":
         s -= 2; reasons.append(("Momentum", f"UP {ret:+.2f}% vs NO", "-2"))
-    elif ret < -0.5 and side == "yes":
+    elif ret < -0.6 and side == "yes":
         s -= 2; reasons.append(("Momentum", f"DOWN {ret:+.2f}% vs YES", "-2"))
 
     # BTC correlation
     btc_ret = indicators.get("BTC", {}).get("ret_1h", 0)
     if sym != "BTC":
         if btc_ret > 0.3 and side == "no":
-            s -= 2; reasons.append(("BTC", "UP vs NO", "-2"))
+            s -= 3; reasons.append(("BTC", "UP vs NO", "-3"))
         elif btc_ret < -0.3 and side == "yes":
-            s -= 2; reasons.append(("BTC", "DOWN vs YES", "-2"))
+            s -= 3; reasons.append(("BTC", "DOWN vs YES", "-3"))
 
     # Volatility
     vol = ind["vol_6h"]
     if vol > 1.0:
         s -= 1; reasons.append(("Vol", "high", "-1"))
     elif vol < 0.3 and side == "no":
-        s -= 1; reasons.append(("Vol", "calm+NO", "-1"))
+        pass  # vol_calm_no: removed penalty (was -1)
     elif vol < 0.3 and side == "yes":
-        s += 1; reasons.append(("Vol", "calm+YES", "+1"))
+        s -= 1; reasons.append(("Vol", "calm+YES", "-1"))
 
     # RSI
     rsi = ind["rsi"]
-    if rsi > 70 and side == "yes":
-        s -= 1; reasons.append(("RSI", f"{rsi:.0f}+YES", "-1"))
-    elif rsi < 30 and side == "no":
-        s -= 1; reasons.append(("RSI", f"{rsi:.0f}+NO", "-1"))
+    if rsi > 65 and side == "yes":
+        s -= 3; reasons.append(("RSI", f"{rsi:.0f}+YES", "-3"))
+    elif rsi < 25 and side == "no":
+        s -= 3; reasons.append(("RSI", f"{rsi:.0f}+NO", "-3"))
 
     # Saturday penalty
     if now.weekday() == 5:
@@ -220,21 +224,21 @@ def compute_score(sym, side, price, indicators):
     # Stochastic
     stoch = ind["stoch"]
     if stoch > 80 and side == "yes":
-        s -= 1; reasons.append(("Stoch", f"{stoch:.0f}+YES", "-1"))
-    elif stoch < 20 and side == "no":
-        s -= 1; reasons.append(("Stoch", f"{stoch:.0f}+NO", "-1"))
+        s -= 3; reasons.append(("Stoch", f"{stoch:.0f}+YES", "-3"))
+    elif stoch < 10 and side == "no":
+        s -= 3; reasons.append(("Stoch", f"{stoch:.0f}+NO", "-3"))
 
     # Pack agreement
     pa = ind["pack_agreement"]
-    if pa > 0.7:
+    if pa > 0.8:
         if ind["ret_1h"] > 0 and side == "no":
             s -= 1; reasons.append(("Pack", "up vs NO", "-1"))
         elif ind["ret_1h"] < 0 and side == "yes":
             s -= 1; reasons.append(("Pack", "down vs YES", "-1"))
 
     # 3h big move
-    if abs(ind["ret_3h"]) > 2.0:
-        s -= 1; reasons.append(("3h", f"{ind['ret_3h']:+.1f}%", "-1"))
+    if abs(ind["ret_3h"]) > 1.5:
+        pass  # ext_3h: tightened threshold but removed penalty (was -1)
 
     return s, reasons
 
