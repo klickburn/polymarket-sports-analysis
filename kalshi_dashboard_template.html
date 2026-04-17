@@ -473,6 +473,23 @@
   </div>
 
   <hr class="section-divider">
+  <div class="section-header">
+    <h2>Daily P&L</h2>
+    <span class="badge badge-bot">Per Day</span>
+  </div>
+  <div class="grid-2">
+    <div class="card">
+      <h3>Daily P&L</h3>
+      <div class="chart-container tall"><canvas id="scoreDailyPnlChart"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Daily P&L by Crypto</h3>
+      <div class="chart-container tall"><canvas id="scoreDailyCryptoPnlChart"></canvas></div>
+    </div>
+  </div>
+  <div id="scoreDailyContent" style="margin-top:20px"></div>
+
+  <hr class="section-divider">
   <div class="section-header"><h2>Recent Decisions</h2></div>
   <div class="card" style="margin-bottom:24px">
     <div class="tabs" id="scoreTabs">
@@ -1346,6 +1363,99 @@ function renderScoreBot() {
     });
   } else {
     document.getElementById('scoreWinRateChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:260px;color:var(--muted)">No resolved trades yet</div>';
+  }
+
+  // Daily P&L section
+  const dailyMap = {};
+  const dailyCryptoMap = {};
+  trades.forEach(b => {
+    if (!b.timestamp) return;
+    const date = b.timestamp.substring(0, 10);
+    const c = b.crypto || '?';
+    if (!dailyMap[date]) dailyMap[date] = { pnl: 0, wins: 0, losses: 0, trades: 0 };
+    dailyMap[date].pnl += (b.pnl || 0);
+    dailyMap[date].trades++;
+    if (b.result === 'win') dailyMap[date].wins++; else if (b.result === 'loss') dailyMap[date].losses++;
+
+    const key = date + '|' + c;
+    if (!dailyCryptoMap[key]) dailyCryptoMap[key] = { date, crypto: c, pnl: 0, wins: 0, losses: 0, trades: 0 };
+    dailyCryptoMap[key].pnl += (b.pnl || 0);
+    dailyCryptoMap[key].trades++;
+    if (b.result === 'win') dailyCryptoMap[key].wins++; else if (b.result === 'loss') dailyCryptoMap[key].losses++;
+  });
+  const dailyDates = Object.keys(dailyMap).sort();
+
+  if (dailyDates.length > 0) {
+    // Daily P&L bar chart
+    const dailyPnls = dailyDates.map(d => parseFloat(dailyMap[d].pnl.toFixed(2)));
+    const dailyLabels = dailyDates.map(d => new Date(d + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+    if (_scoreCharts.dailyPnl) _scoreCharts.dailyPnl.destroy();
+    _scoreCharts.dailyPnl = new Chart(document.getElementById('scoreDailyPnlChart'), {
+      type: 'bar',
+      data: { labels: dailyLabels, datasets: [{ data: dailyPnls, backgroundColor: dailyPnls.map(v => v >= 0 ? 'rgba(34,197,94,0.7)' : 'rgba(239,68,68,0.7)'), borderRadius: 4 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `$${ctx.raw >= 0 ? '+' : ''}${ctx.raw.toFixed(2)}` } } }, scales: { x: { grid: { display: false }, ticks: { color: '#8b8fa3' } }, y: { grid: { color: 'rgba(42,45,58,0.5)' }, ticks: { color: '#8b8fa3', callback: v => '$' + v } } } }
+    });
+
+    // Daily P&L by crypto stacked bar chart
+    const dayCryptos = [...new Set(trades.map(b => b.crypto))].filter(Boolean).sort();
+    if (_scoreCharts.dailyCryptoPnl) _scoreCharts.dailyCryptoPnl.destroy();
+    _scoreCharts.dailyCryptoPnl = new Chart(document.getElementById('scoreDailyCryptoPnlChart'), {
+      type: 'bar',
+      data: {
+        labels: dailyLabels,
+        datasets: dayCryptos.map(c => ({
+          label: c,
+          data: dailyDates.map(d => { const e = dailyCryptoMap[d + '|' + c]; return e ? parseFloat(e.pnl.toFixed(2)) : 0; }),
+          backgroundColor: cryptoColors[c] || '#666',
+          borderRadius: 2,
+        }))
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#8b8fa3' } } }, scales: { x: { stacked: true, grid: { display: false }, ticks: { color: '#8b8fa3' } }, y: { stacked: true, grid: { color: 'rgba(42,45,58,0.5)' }, ticks: { color: '#8b8fa3', callback: v => '$' + v } } } }
+    });
+
+    // Daily P&L table
+    let totPnl = 0, totW = 0, totL = 0, totTr = 0;
+    const cryptoTotals = {};
+    dayCryptos.forEach(c => cryptoTotals[c] = 0);
+    let tblHtml = '<div class="card"><div class="scroll-table"><table><thead><tr><th>Date</th><th>Trades</th><th>W-L</th><th>Win%</th><th>P&L</th><th>Cum P&L</th>';
+    dayCryptos.forEach(c => tblHtml += `<th style="border-left:2px solid var(--border)">${cryptoTag(c)}</th>`);
+    tblHtml += '</tr></thead><tbody>';
+    let cumPnl = 0;
+    for (const date of dailyDates) {
+      const dd = dailyMap[date];
+      cumPnl += dd.pnl;
+      const wr = dd.trades > 0 ? (dd.wins / dd.trades * 100).toFixed(0) + '%' : '--';
+      const pc = dd.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+      const cpc = cumPnl >= 0 ? 'var(--green)' : 'var(--red)';
+      const displayDate = new Date(date + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', weekday: 'short' });
+      tblHtml += `<tr><td>${displayDate}</td><td>${dd.trades}</td><td>${dd.wins}W-${dd.losses}L</td><td>${wr}</td><td style="color:${pc};font-weight:600">$${dd.pnl >= 0 ? '+' : ''}${dd.pnl.toFixed(2)}</td><td style="color:${cpc}">$${cumPnl >= 0 ? '+' : ''}${cumPnl.toFixed(2)}</td>`;
+      totPnl += dd.pnl; totW += dd.wins; totL += dd.losses; totTr += dd.trades;
+      dayCryptos.forEach(c => {
+        const entry = dailyCryptoMap[date + '|' + c];
+        if (entry) {
+          const epc = entry.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+          tblHtml += `<td style="border-left:2px solid var(--border);color:${epc}">$${entry.pnl >= 0 ? '+' : ''}${entry.pnl.toFixed(2)} <span style="color:var(--muted);font-size:11px">(${entry.wins}W-${entry.losses}L)</span></td>`;
+          cryptoTotals[c] += entry.pnl;
+        } else {
+          tblHtml += `<td style="border-left:2px solid var(--border);color:var(--muted)">--</td>`;
+        }
+      });
+      tblHtml += '</tr>';
+    }
+    // Totals row
+    const tpc = totPnl >= 0 ? 'var(--green)' : 'var(--red)';
+    const twr = totTr > 0 ? (totW / totTr * 100).toFixed(0) + '%' : '--';
+    tblHtml += `<tr style="border-top:2px solid var(--border);font-weight:700"><td>TOTAL</td><td>${totTr}</td><td>${totW}W-${totL}L</td><td>${twr}</td><td style="color:${tpc}">$${totPnl >= 0 ? '+' : ''}${totPnl.toFixed(2)}</td><td style="color:${tpc}">$${cumPnl >= 0 ? '+' : ''}${cumPnl.toFixed(2)}</td>`;
+    dayCryptos.forEach(c => {
+      const ctpc = cryptoTotals[c] >= 0 ? 'var(--green)' : 'var(--red)';
+      tblHtml += `<td style="border-left:2px solid var(--border);color:${ctpc};font-weight:700">$${cryptoTotals[c] >= 0 ? '+' : ''}${cryptoTotals[c].toFixed(2)}</td>`;
+    });
+    tblHtml += '</tr></tbody></table></div></div>';
+    document.getElementById('scoreDailyContent').innerHTML = tblHtml;
+  } else {
+    document.getElementById('scoreDailyPnlChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:300px;color:var(--muted)">No resolved trades yet</div>';
+    document.getElementById('scoreDailyCryptoPnlChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:300px;color:var(--muted)">No resolved trades yet</div>';
+    document.getElementById('scoreDailyContent').innerHTML = '';
   }
 
   // Recent decisions table
