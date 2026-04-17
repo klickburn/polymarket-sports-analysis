@@ -267,29 +267,23 @@
 
   <div class="grid-2">
     <div class="card">
-      <h3>Combined Cumulative P&L</h3>
-      <div class="chart-container tall"><canvas id="overviewPnlChart"></canvas></div>
+      <h3>Account Summary</h3>
+      <div id="overviewAccountSummary"></div>
     </div>
     <div class="card">
-      <h3>P&L by Strategy</h3>
-      <div class="chart-container tall"><canvas id="overviewStratChart"></canvas></div>
+      <h3>Trading Activity</h3>
+      <div id="overviewTradingActivity"></div>
     </div>
   </div>
 
   <hr class="section-divider">
   <div class="section-header">
-    <h2>Strategy Breakdown</h2>
-  </div>
-  <div id="overviewStratContent"></div>
-
-  <hr class="section-divider">
-  <div class="section-header">
-    <h2>Recent Activity</h2>
+    <h2>All Fills History</h2>
   </div>
   <div class="card" style="margin-bottom:24px">
     <div class="scroll-table">
       <table>
-        <thead><tr><th>Date</th><th>Type</th><th>Asset/Event</th><th>Side</th><th>Price</th><th>Amount</th><th>P&L</th><th>Status</th></tr></thead>
+        <thead><tr><th>Date</th><th>Type</th><th>Ticker</th><th>Side</th><th>Contracts</th><th>Price</th><th>Amount</th><th>P&L</th><th>Status</th></tr></thead>
         <tbody id="overviewRecentBody"></tbody>
       </table>
     </div>
@@ -1067,7 +1061,7 @@ window.filterCryptoTable = function(f, el) {
 renderCryptoTable('all');
 
 // ═══════════════════════════════════════════════════════════════
-// OVERVIEW — Combined P&L & Insights
+// OVERVIEW — Account Summary & General Data
 // ═══════════════════════════════════════════════════════════════
 
 const allBets = [
@@ -1081,133 +1075,92 @@ const totalPnl = allResolved.reduce((s, b) => s + (b.pnl || 0), 0);
 const totalFees = (SR.total_fees || 0) + (CR.total_fees || 0);
 const totalWagered = allBets.reduce((s, b) => s + (b.bet_amount || 0), 0);
 const allOpen = allBets.filter(b => b.result === 'open');
-const totalRoi = totalWagered > 0 ? (totalPnl / totalWagered * 100).toFixed(1) : '0';
 const totalWinRate = allResolved.length > 0 ? (allWins.length / allResolved.length * 100).toFixed(1) : '0';
-
-// Best/worst trades (like kalshi-dash)
-const bestTrade = allResolved.length > 0 ? allResolved.reduce((a, b) => (b.pnl || 0) > (a.pnl || 0) ? b : a) : null;
-const worstTrade = allResolved.length > 0 ? allResolved.reduce((a, b) => (b.pnl || 0) < (a.pnl || 0) ? b : a) : null;
-const resolvedWagered = allResolved.reduce((s, b) => s + (b.bet_amount || 0), 0);
-const pnlPerDollar = resolvedWagered > 0 ? (totalPnl / resolvedWagered) : 0;
+const balance = SR.balance || CR.balance || 0;
+const portfolioValue = SR.portfolio_value || CR.portfolio_value || 0;
+const openRisk = allOpen.reduce((s,b) => s + (b.bet_amount||0), 0);
 const totalMaker = (SR.maker_fills || 0) + (CR.maker_fills || 0);
 const totalTaker = (SR.taker_fills || 0) + (CR.taker_fills || 0);
-const makerPct = (totalMaker + totalTaker) > 0 ? (totalMaker / (totalMaker + totalTaker) * 100).toFixed(0) : '0';
 
 // KPIs
 const overviewKpis = [
-  { label: 'Account Balance', value: SR.balance > 0 ? `$${SR.balance.toFixed(2)}` : '--', cls: 'cyan', sub: SR.portfolio_value > 0 ? `$${SR.portfolio_value.toFixed(2)} portfolio` : '' },
+  { label: 'Account Balance', value: balance > 0 ? `$${balance.toFixed(2)}` : '--', cls: 'cyan', sub: portfolioValue > 0 ? `$${portfolioValue.toFixed(2)} portfolio` : '' },
   { label: 'Total P&L', value: `$${totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}`, cls: totalPnl >= 0 ? 'green' : 'red', sub: `fees: $${totalFees.toFixed(2)}` },
   { label: 'Win Rate', value: `${totalWinRate}%`, cls: parseFloat(totalWinRate) >= 50 ? 'green' : 'red', sub: `${allWins.length}W - ${allLosses.length}L` },
-  { label: 'P&L / $ Risked', value: `$${pnlPerDollar >= 0 ? '+' : ''}${pnlPerDollar.toFixed(3)}`, cls: pnlPerDollar >= 0 ? 'green' : 'red', sub: `$${totalWagered.toFixed(2)} wagered` },
-  { label: 'Maker/Taker', value: `${makerPct}% maker`, cls: 'purple', sub: `${totalMaker} maker / ${totalTaker} taker` },
-  { label: 'Open Positions', value: allOpen.length, cls: 'orange', sub: `$${allOpen.reduce((s,b) => s + (b.bet_amount||0), 0).toFixed(2)} at risk` },
+  { label: 'Total Wagered', value: `$${totalWagered.toFixed(2)}`, cls: 'purple', sub: `${allBets.length} total bets` },
+  { label: 'Open Positions', value: allOpen.length, cls: 'orange', sub: `$${openRisk.toFixed(2)} at risk` },
+  { label: 'Total Fills', value: totalMaker + totalTaker, cls: 'cyan', sub: `${totalMaker} maker / ${totalTaker} taker` },
 ];
 document.getElementById('overviewKpis').innerHTML = overviewKpis.map(k =>
   `<div class="kpi"><div class="label">${k.label}</div><div class="value ${k.cls}">${k.value}</div><div class="sub">${k.sub}</div></div>`
 ).join('');
 
-// Notable trades (like kalshi-dash Overview)
-if (bestTrade || worstTrade) {
-  let ntHtml = '<div class="card" style="margin-bottom:20px;padding:16px"><h3 style="margin-bottom:12px;font-size:14px;color:var(--muted)">Notable Trades</h3><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px">';
-  if (bestTrade) ntHtml += `<div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);border-radius:8px;padding:12px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase">Best Trade</div><div style="font-size:20px;font-weight:700;color:var(--green)">$${(bestTrade.pnl||0) >= 0 ? '+' : ''}${(bestTrade.pnl||0).toFixed(2)}</div><div style="font-size:12px;color:var(--muted)">${bestTrade.ticker || ''}</div></div>`;
-  if (worstTrade) ntHtml += `<div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:8px;padding:12px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase">Worst Trade</div><div style="font-size:20px;font-weight:700;color:var(--red)">$${(worstTrade.pnl||0) >= 0 ? '+' : ''}${(worstTrade.pnl||0).toFixed(2)}</div><div style="font-size:12px;color:var(--muted)">${worstTrade.ticker || ''}</div></div>`;
-  const bestRoi = allResolved.filter(b => (b.roi||0) !== 0).sort((a,b) => (b.roi||0) - (a.roi||0))[0];
-  if (bestRoi) ntHtml += `<div style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.2);border-radius:8px;padding:12px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase">Best ROI</div><div style="font-size:20px;font-weight:700;color:var(--blue)">${(bestRoi.roi||0).toFixed(1)}%</div><div style="font-size:12px;color:var(--muted)">${bestRoi.ticker || ''}</div></div>`;
-  ntHtml += '</div></div>';
-  document.getElementById('overviewKpis').insertAdjacentHTML('afterend', ntHtml);
+// Account Summary card
+{
+  const estimatedDeposit = balance + portfolioValue - totalPnl + totalFees;
+  let html = '<div style="display:flex;flex-direction:column;gap:12px">';
+  html += `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)"><span style="color:var(--muted)">Cash Balance</span><span style="font-weight:600">$${balance.toFixed(2)}</span></div>`;
+  html += `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)"><span style="color:var(--muted)">Portfolio Value</span><span style="font-weight:600">$${portfolioValue.toFixed(2)}</span></div>`;
+  html += `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)"><span style="color:var(--muted)">Total Account Value</span><span style="font-weight:700;color:var(--cyan)">$${(balance + portfolioValue).toFixed(2)}</span></div>`;
+  html += `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)"><span style="color:var(--muted)">Est. Total Deposited</span><span style="font-weight:600">$${estimatedDeposit > 0 ? estimatedDeposit.toFixed(2) : '--'}</span></div>`;
+  html += `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)"><span style="color:var(--muted)">Net P&L (all time)</span><span style="font-weight:700;color:${totalPnl >= 0 ? 'var(--green)' : 'var(--red)'}">$${totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}</span></div>`;
+  html += `<div style="display:flex;justify-content:space-between;padding:8px 0"><span style="color:var(--muted)">Total Fees Paid</span><span style="font-weight:600;color:var(--red)">-$${totalFees.toFixed(2)}</span></div>`;
+  html += '</div>';
+  document.getElementById('overviewAccountSummary').innerHTML = html;
 }
 
-// Combined cumulative P&L chart
-if (allResolved.length > 0) {
-  const sorted = allResolved.sort((a, b) => (a.timestamp || '').localeCompare(b.timestamp || ''));
-  let cum = 0;
-  const cumData = sorted.map(b => {
-    cum += (b.pnl || 0);
-    return { x: getDate(b.timestamp), y: parseFloat(cum.toFixed(2)), type: b._type };
+// Trading Activity card
+{
+  const stratStats = {};
+  CRYPTO_BETS.forEach(b => {
+    const k = 'Crypto 15m';
+    if (!stratStats[k]) stratStats[k] = { bets: 0, wins: 0, losses: 0, pnl: 0, wagered: 0 };
+    stratStats[k].bets++;
+    stratStats[k].wagered += b.bet_amount || 0;
+    if (b.result === 'win') { stratStats[k].wins++; stratStats[k].pnl += (b.pnl || 0); }
+    else if (b.result === 'loss') { stratStats[k].losses++; stratStats[k].pnl += (b.pnl || 0); }
   });
-  new Chart(document.getElementById('overviewPnlChart'), {
-    type: 'line',
-    data: { labels: cumData.map(d => d.x), datasets: [{ data: cumData.map(d => d.y), borderColor: '#06b6d4', backgroundColor: 'rgba(6,182,212,0.1)', fill: true, tension: 0.3, pointRadius: 3, borderWidth: 2, pointBackgroundColor: cumData.map(d => d.type === 'Crypto' ? '#f59e0b' : '#14b8a6') }] },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => { const d = cumData[ctx.dataIndex]; return [`P&L: $${d.y.toFixed(2)}`, d.type]; } } } }, scales: { x: { display: false }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3', callback: v => '$' + v } } } }
+  SPORTS_BETS.forEach(b => {
+    const k = 'Sports: ' + (b.league || 'Other');
+    if (!stratStats[k]) stratStats[k] = { bets: 0, wins: 0, losses: 0, pnl: 0, wagered: 0 };
+    stratStats[k].bets++;
+    stratStats[k].wagered += b.bet_amount || 0;
+    if (b.result === 'win') { stratStats[k].wins++; stratStats[k].pnl += (b.pnl || 0); }
+    else if (b.result === 'loss') { stratStats[k].losses++; stratStats[k].pnl += (b.pnl || 0); }
   });
-} else {
-  document.getElementById('overviewPnlChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:300px;color:var(--muted)">No resolved trades yet</div>';
-}
-
-// Strategy P&L chart — Crypto vs Sports breakdown
-const oStratStats = {};
-oStratStats['Crypto 15m'] = { pnl: 0, wins: 0, losses: 0, bets: 0, fees: 0, wagered: 0 };
-CRYPTO_BETS.forEach(b => {
-  oStratStats['Crypto 15m'].bets++;
-  oStratStats['Crypto 15m'].wagered += b.bet_amount || 0;
-  oStratStats['Crypto 15m'].fees += b.fee || 0;
-  if (b.result === 'win') { oStratStats['Crypto 15m'].wins++; oStratStats['Crypto 15m'].pnl += (b.pnl || 0); }
-  else if (b.result === 'loss') { oStratStats['Crypto 15m'].losses++; oStratStats['Crypto 15m'].pnl += (b.pnl || 0); }
-});
-// Group sports by league
-SPORTS_BETS.forEach(b => {
-  const name = 'Sports: ' + (b.league || 'Other');
-  if (!oStratStats[name]) oStratStats[name] = { pnl: 0, wins: 0, losses: 0, bets: 0, fees: 0, wagered: 0 };
-  oStratStats[name].bets++;
-  oStratStats[name].wagered += b.bet_amount || 0;
-  oStratStats[name].fees += b.fee || 0;
-  if (b.result === 'win') { oStratStats[name].wins++; oStratStats[name].pnl += (b.pnl || 0); }
-  else if (b.result === 'loss') { oStratStats[name].losses++; oStratStats[name].pnl += (b.pnl || 0); }
-});
-const oStratNames = Object.keys(oStratStats).filter(s => oStratStats[s].bets > 0);
-if (oStratNames.length > 0 && allResolved.length > 0) {
-  new Chart(document.getElementById('overviewStratChart'), {
-    type: 'bar',
-    data: { labels: oStratNames, datasets: [{ data: oStratNames.map(s => parseFloat(oStratStats[s].pnl.toFixed(2))), backgroundColor: oStratNames.map(s => oStratStats[s].pnl >= 0 ? 'rgba(34,197,94,0.7)' : 'rgba(239,68,68,0.7)'), borderRadius: 4 }] },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { color: '#8b8fa3', font: { size: 11 } } }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3', callback: v => '$' + v } } } }
-  });
-} else {
-  document.getElementById('overviewStratChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:300px;color:var(--muted)">No data</div>';
-}
-
-// Strategy breakdown table
-const oStratEl = document.getElementById('overviewStratContent');
-if (oStratNames.length > 0) {
-  let html = '<div class="card" style="margin-bottom:20px"><div class="scroll-table"><table><thead><tr><th>Category</th><th>Bets</th><th>W-L</th><th>Win Rate</th><th>P&L (net)</th><th>Fees</th><th>Wagered</th><th>ROI</th></tr></thead><tbody>';
-  for (const name of oStratNames) {
-    const s = oStratStats[name];
-    const resolved = s.wins + s.losses;
-    const wr = resolved > 0 ? (s.wins / resolved * 100).toFixed(1) + '%' : '--';
-    const roi = s.wagered > 0 ? (s.pnl / s.wagered * 100).toFixed(1) + '%' : '--';
-    const pc = s.pnl >= 0 ? 'var(--green)' : 'var(--red)';
-    html += `<tr><td style="font-weight:600">${name}</td><td>${s.bets}</td><td>${s.wins}W-${s.losses}L</td><td>${wr}</td><td style="color:${pc}">$${s.pnl >= 0 ? '+' : ''}${s.pnl.toFixed(2)}</td><td>$${s.fees.toFixed(2)}</td><td>$${s.wagered.toFixed(2)}</td><td style="color:${pc}">${roi}</td></tr>`;
+  const names = Object.keys(stratStats).filter(k => stratStats[k].bets > 0);
+  let html = '';
+  if (names.length > 0) {
+    html = '<div class="scroll-table"><table><thead><tr><th>Strategy</th><th>Bets</th><th>W-L</th><th>Win Rate</th><th>P&L</th><th>Wagered</th></tr></thead><tbody>';
+    for (const name of names) {
+      const s = stratStats[name];
+      const resolved = s.wins + s.losses;
+      const wr = resolved > 0 ? (s.wins / resolved * 100).toFixed(1) + '%' : '--';
+      const pc = s.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+      html += `<tr><td style="font-weight:600">${name}</td><td>${s.bets}</td><td>${s.wins}W-${s.losses}L</td><td>${wr}</td><td style="color:${pc}">$${s.pnl >= 0 ? '+' : ''}${s.pnl.toFixed(2)}</td><td>$${s.wagered.toFixed(2)}</td></tr>`;
+    }
+    html += '</tbody></table></div>';
+  } else {
+    html = '<div style="color:var(--muted);text-align:center;padding:20px">No trades recorded yet</div>';
   }
-  // Totals
-  const totW = oStratNames.reduce((s, n) => s + oStratStats[n].wins, 0);
-  const totL = oStratNames.reduce((s, n) => s + oStratStats[n].losses, 0);
-  const totB = oStratNames.reduce((s, n) => s + oStratStats[n].bets, 0);
-  const totP = oStratNames.reduce((s, n) => s + oStratStats[n].pnl, 0);
-  const totF = oStratNames.reduce((s, n) => s + oStratStats[n].fees, 0);
-  const totWg = oStratNames.reduce((s, n) => s + oStratStats[n].wagered, 0);
-  const totWr = (totW + totL) > 0 ? (totW / (totW + totL) * 100).toFixed(1) + '%' : '--';
-  const totRoi = totWg > 0 ? (totP / totWg * 100).toFixed(1) + '%' : '--';
-  const tpc = totP >= 0 ? 'var(--green)' : 'var(--red)';
-  html += `<tr style="border-top:2px solid var(--border);font-weight:700"><td>TOTAL</td><td>${totB}</td><td>${totW}W-${totL}L</td><td>${totWr}</td><td style="color:${tpc}">$${totP >= 0 ? '+' : ''}${totP.toFixed(2)}</td><td>$${totF.toFixed(2)}</td><td>$${totWg.toFixed(2)}</td><td style="color:${tpc}">${totRoi}</td></tr>`;
-  html += '</tbody></table></div></div>';
-  oStratEl.innerHTML = html;
-} else {
-  oStratEl.innerHTML = '<div class="card"><div class="empty-state"><div class="msg">No trades yet</div></div></div>';
+  document.getElementById('overviewTradingActivity').innerHTML = html;
 }
 
-// Recent activity — last 20 trades across all types
+// All Fills History — ALL trades across all types
 const recentAll = allBets.map(b => ({
-  date: b.timestamp, type: b._type, asset: b._asset,
+  date: b.timestamp, type: b._type, asset: b._asset, ticker: b.ticker || '',
   side: b.side || b.label || '?', price: b.price || 0,
-  amount: b.bet_amount || 0, pnl: b.pnl || null, result: b.result || 'pending',
-})).sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 30);
+  contracts: b.count || 1, amount: b.bet_amount || 0, pnl: b.pnl || null, result: b.result || 'pending',
+})).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
 document.getElementById('overviewRecentBody').innerHTML = recentAll.map(r => {
   const typeTag = r.type === 'Crypto' ? `<span style="color:var(--orange);font-weight:600">${r.type}</span>` : `<span style="color:var(--teal);font-weight:600">${r.type}</span>`;
   return `<tr>
     <td>${r.date ? getDate(r.date) : '-'}</td>
     <td>${typeTag}</td>
-    <td>${r.asset}</td>
+    <td>${r.ticker || r.asset}</td>
     <td>${(r.side || '').toUpperCase()}</td>
+    <td>${r.contracts}</td>
     <td>${(r.price * 100).toFixed(1)}c</td>
     <td>$${r.amount.toFixed(2)}</td>
     <td>${r.result === 'win' || r.result === 'loss' ? pnlHtml(r.pnl) : '-'}</td>
