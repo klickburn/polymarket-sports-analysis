@@ -573,9 +573,9 @@ const agoText = ago < 1 ? 'just now' : ago < 60 ? `${ago}m ago` : `${Math.round(
 document.getElementById('lastUpdated').textContent = refreshDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) + ` (${agoText})`;
 
 // ═══════════════════════════════════════════════════════════════
-// SPORTS
+// SPORTS (tabs removed — skip rendering if elements missing)
 // ═══════════════════════════════════════════════════════════════
-
+if (document.getElementById('sportsKpis')) {
 // Sports KPIs
 const sRoi = SR.total_wagered > 0 ? (SR.total_pnl / SR.total_wagered * 100).toFixed(1) : '0';
 const sMaker = SR.maker_fills || 0;
@@ -726,12 +726,12 @@ window.filterSportsTable = function(f, el) {
   renderSportsTable(f);
 };
 renderSportsTable('all');
-
+} // end sports guard
 
 // ═══════════════════════════════════════════════════════════════
-// CRYPTO
+// CRYPTO (tabs removed — skip rendering if elements missing)
 // ═══════════════════════════════════════════════════════════════
-
+if (document.getElementById('cryptoKpis')) {
 // Crypto KPIs
 const cRoi = CR.total_wagered > 0 ? (CR.total_pnl / CR.total_wagered * 100).toFixed(1) : '0';
 const cMaker = CR.maker_fills || 0;
@@ -1059,6 +1059,7 @@ window.filterCryptoTable = function(f, el) {
   renderCryptoTable(f);
 };
 renderCryptoTable('all');
+} // end crypto guard
 
 // ═══════════════════════════════════════════════════════════════
 // OVERVIEW — Account Summary & General Data
