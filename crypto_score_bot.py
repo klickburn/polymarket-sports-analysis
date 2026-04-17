@@ -217,10 +217,6 @@ def compute_score(sym, side, price, indicators):
     elif rsi < 25 and side == "no":
         s -= 3; reasons.append(("RSI", f"{rsi:.0f}+NO", "-3"))
 
-    # Saturday penalty
-    if now.weekday() == 5:
-        s -= 1; reasons.append(("Day", "Saturday", "-1"))
-
     # Stochastic
     stoch = ind["stoch"]
     if stoch > 80 and side == "yes":
