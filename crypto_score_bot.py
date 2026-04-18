@@ -184,14 +184,14 @@ def compute_score(sym, side, price, indicators):
     elif sym == "DOGE":
         s += 1; reasons.append(("Crypto", "DOGE", "+1"))
     elif sym == "ETH":
-        s += 1; reasons.append(("Crypto", "ETH", "+1"))
+        s += 2; reasons.append(("Crypto", "ETH", "+2"))
 
     # Momentum vs side
     ret = ind["ret_1h"]
     if ret > 0.6 and side == "no":
-        s -= 2; reasons.append(("Momentum", f"UP {ret:+.2f}% vs NO", "-2"))
+        s -= 1; reasons.append(("Momentum", f"UP {ret:+.2f}% vs NO", "-1"))
     elif ret < -0.6 and side == "yes":
-        s -= 2; reasons.append(("Momentum", f"DOWN {ret:+.2f}% vs YES", "-2"))
+        s -= 1; reasons.append(("Momentum", f"DOWN {ret:+.2f}% vs YES", "-1"))
 
     # BTC correlation
     btc_ret = indicators.get("BTC", {}).get("ret_1h", 0)
@@ -205,9 +205,9 @@ def compute_score(sym, side, price, indicators):
     vol = ind["vol_6h"]
     if vol > 1.0:
         s -= 1; reasons.append(("Vol", "high", "-1"))
-    elif vol < 0.3 and side == "no":
-        pass  # vol_calm_no: removed penalty (was -1)
-    elif vol < 0.3 and side == "yes":
+    elif vol < 0.2 and side == "no":
+        pass  # vol_calm_no: removed penalty
+    elif vol < 0.2 and side == "yes":
         s -= 1; reasons.append(("Vol", "calm+YES", "-1"))
 
     # RSI
@@ -219,18 +219,18 @@ def compute_score(sym, side, price, indicators):
 
     # Stochastic
     stoch = ind["stoch"]
-    if stoch > 80 and side == "yes":
+    if stoch > 90 and side == "yes":
         s -= 3; reasons.append(("Stoch", f"{stoch:.0f}+YES", "-3"))
-    elif stoch < 10 and side == "no":
+    elif stoch < 30 and side == "no":
         s -= 3; reasons.append(("Stoch", f"{stoch:.0f}+NO", "-3"))
 
     # Pack agreement
     pa = ind["pack_agreement"]
-    if pa > 0.8:
+    if pa > 0.5:
         if ind["ret_1h"] > 0 and side == "no":
-            s -= 1; reasons.append(("Pack", "up vs NO", "-1"))
+            s -= 2; reasons.append(("Pack", "up vs NO", "-2"))
         elif ind["ret_1h"] < 0 and side == "yes":
-            s -= 1; reasons.append(("Pack", "down vs YES", "-1"))
+            s -= 2; reasons.append(("Pack", "down vs YES", "-2"))
 
     # 3h big move
     if abs(ind["ret_3h"]) > 1.5:
