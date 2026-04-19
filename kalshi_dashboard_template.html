@@ -1281,21 +1281,27 @@ function renderScoreBot() {
   const indicators = d.indicators || {};
   const indSyms = Object.keys(indicators);
   if (indSyms.length > 0) {
-    let html = '<table><thead><tr><th>Crypto</th><th>Price</th><th>1h Return</th><th>3h Return</th><th>RSI</th><th>Stoch</th><th>Volatility</th><th>Pack Agree</th></tr></thead><tbody>';
+    let html = '<table><thead><tr><th>Crypto</th><th>Price</th><th>1h Return</th><th>3h Return</th><th>6h Vol</th><th>Filters</th></tr></thead><tbody>';
+    const btcRet = (indicators['BTC'] || {}).ret_1h || 0;
     indSyms.forEach(sym => {
       const ind = indicators[sym];
       const retCls = ind.ret_1h >= 0 ? 'pnl-pos' : 'pnl-neg';
       const ret3Cls = ind.ret_3h >= 0 ? 'pnl-pos' : 'pnl-neg';
-      const rsiCls = ind.rsi > 70 ? 'color:var(--red)' : ind.rsi < 30 ? 'color:var(--green)' : '';
+      const volWarn = ind.vol_6h > 0.6 ? 'color:var(--red);font-weight:600' : '';
+      const ext3hWarn = Math.abs(ind.ret_3h) > 2.0 ? 'color:var(--red);font-weight:600' : '';
+      // Count active filters
+      let filters = [];
+      if (sym !== 'BTC' && ((btcRet > 0.3) || (btcRet < -0.3))) filters.push('BTC');
+      if (Math.abs(ind.ret_3h) > 2.0) filters.push('3h Ext');
+      if (ind.vol_6h > 0.6) filters.push('High Vol');
+      const filterStr = filters.length === 0 ? '<span style="color:var(--green)">CLEAR</span>' : '<span style="color:var(--red)">' + filters.join(', ') + '</span>';
       html += `<tr>
         <td>${cryptoTag(sym)}</td>
         <td>$${ind.price ? ind.price.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}) : '--'}</td>
         <td><span class="${retCls}">${ind.ret_1h >= 0 ? '+' : ''}${ind.ret_1h.toFixed(2)}%</span></td>
-        <td><span class="${ret3Cls}">${ind.ret_3h >= 0 ? '+' : ''}${ind.ret_3h.toFixed(2)}%</span></td>
-        <td style="${rsiCls}">${ind.rsi.toFixed(0)}</td>
-        <td>${ind.stoch.toFixed(0)}</td>
-        <td>${ind.vol_6h.toFixed(3)}</td>
-        <td>${(ind.pack_agreement * 100).toFixed(0)}%</td>
+        <td style="${ext3hWarn}"><span class="${ret3Cls}">${ind.ret_3h >= 0 ? '+' : ''}${ind.ret_3h.toFixed(2)}%</span></td>
+        <td style="${volWarn}">${ind.vol_6h.toFixed(3)}</td>
+        <td>${filterStr}</td>
       </tr>`;
     });
     html += '</tbody></table>';

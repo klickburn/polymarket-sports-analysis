@@ -1,14 +1,14 @@
 """
-Kalshi 15-Minute Crypto Score Bot
-==================================
+Kalshi 15-Minute Crypto Score Bot (v4)
+=======================================
 Trades all 7 cryptos on Kalshi's 15-min prediction markets using a
-CoinGecko-powered scoring engine.
+3-filter hard-kill scoring engine.
 
-Strategy: "Score-Based Late Entry"
+Strategy: "v4 Hard Filter"
   - In the last 4 minutes of each 15-min window (minute 11+)
-  - Check which side is >75¢ (dominant side)
-  - Compute score using RSI, stochastic, momentum, volatility, BTC correlation
-  - Only bet if score >= 0
+  - Check which side is ≥78¢ (dominant side)
+  - 3 hard filters: BTC Against (±0.3%), 3h Extended (>2%), High Vol (>0.6)
+  - Score = 0 → GO, Score < 0 → SKIP
 
 Usage:
     python3 crypto_score_bot.py              # Dry run
@@ -35,9 +35,9 @@ BET_AMOUNT = float(os.environ.get("SCORE_BET_AMOUNT", "0.10"))
 CONTRACT_COUNT = int(os.environ.get("SCORE_CONTRACT_COUNT", "1"))
 ENTRY_AFTER_MINUTES = int(os.environ.get("SCORE_ENTRY_MINUTES", "11"))
 POLL_INTERVAL = int(os.environ.get("SCORE_POLL_INTERVAL", "5"))
-MIN_PRICE = 0.75
+MIN_PRICE = 0.78
 MAX_PRICE = 0.99
-MIN_SCORE = int(os.environ.get("SCORE_MIN_SCORE", "-2"))
+MIN_SCORE = int(os.environ.get("SCORE_MIN_SCORE", "0"))
 
 DATA_DIR = os.environ.get("SCORE_DATA_DIR", "/data")
 if not os.path.isdir(DATA_DIR):
@@ -154,87 +154,33 @@ def compute_indicators(crypto_data):
     return indicators
 
 
-# ── Scoring engine ──────────────────────────────────────────────────────
+# ── Scoring engine (v4 — 3 hard filters) ───────────────────────────────
 def compute_score(sym, side, price, indicators):
-    """Score a potential trade. Returns (score, reasons_list)."""
+    """Score a potential trade using v4 hard-filter model.
+    Score = 0 → GO, Score < 0 → SKIP (one or more kills triggered).
+    """
     if sym not in indicators:
         return None, []
     ind = indicators[sym]
-    now = datetime.now(timezone(timedelta(hours=-5)))
     s = 0
     reasons = []
 
-    # Price penalty
-    if price >= 0.97:
-        s -= 2; reasons.append(("Price", f"{price:.0%}", "-2"))
-    elif price >= 0.95:
-        s -= 2; reasons.append(("Price", f"{price:.0%}", "-2"))
-    elif price >= 0.93:
-        s -= 2; reasons.append(("Price", f"{price:.0%}", "-2"))
-    elif price < 0.70:
-        s -= 1; reasons.append(("Price", f"{price:.0%}", "-1"))
-
-    # Crypto bonus/penalty
-    if sym == "HYPE":
-        s -= 2; reasons.append(("Crypto", "HYPE", "-2"))
-    elif sym == "BNB":
-        s -= 1; reasons.append(("Crypto", "BNB", "-1"))
-    elif sym == "XRP":
-        s -= 1; reasons.append(("Crypto", "XRP", "-1"))
-    elif sym == "DOGE":
-        s += 1; reasons.append(("Crypto", "DOGE", "+1"))
-    elif sym == "ETH":
-        s += 2; reasons.append(("Crypto", "ETH", "+2"))
-
-    # Momentum vs side
-    ret = ind["ret_1h"]
-    if ret > 0.6 and side == "no":
-        s -= 1; reasons.append(("Momentum", f"UP {ret:+.2f}% vs NO", "-1"))
-    elif ret < -0.6 and side == "yes":
-        s -= 1; reasons.append(("Momentum", f"DOWN {ret:+.2f}% vs YES", "-1"))
-
-    # BTC correlation
+    # Filter 1: BTC Against (±0.3%) — alt going opposite to BTC
     btc_ret = indicators.get("BTC", {}).get("ret_1h", 0)
     if sym != "BTC":
         if btc_ret > 0.3 and side == "no":
-            s -= 3; reasons.append(("BTC", "UP vs NO", "-3"))
+            s -= 1; reasons.append(("BTC Against", f"BTC UP {btc_ret:+.2f}% vs NO", "-1"))
         elif btc_ret < -0.3 and side == "yes":
-            s -= 3; reasons.append(("BTC", "DOWN vs YES", "-3"))
+            s -= 1; reasons.append(("BTC Against", f"BTC DOWN {btc_ret:+.2f}% vs YES", "-1"))
 
-    # Volatility
+    # Filter 2: 3h Extended (>2.0%) — big 3h move in either direction
+    if abs(ind["ret_3h"]) > 2.0:
+        s -= 1; reasons.append(("3h Extended", f"{ind['ret_3h']:+.1f}%", "-1"))
+
+    # Filter 3: High Vol (>0.6) — 6h volatility too high
     vol = ind["vol_6h"]
-    if vol > 1.0:
-        s -= 1; reasons.append(("Vol", "high", "-1"))
-    elif vol < 0.2 and side == "no":
-        pass  # vol_calm_no: removed penalty
-    elif vol < 0.2 and side == "yes":
-        s -= 1; reasons.append(("Vol", "calm+YES", "-1"))
-
-    # RSI
-    rsi = ind["rsi"]
-    if rsi > 65 and side == "yes":
-        s -= 3; reasons.append(("RSI", f"{rsi:.0f}+YES", "-3"))
-    elif rsi < 25 and side == "no":
-        s -= 3; reasons.append(("RSI", f"{rsi:.0f}+NO", "-3"))
-
-    # Stochastic
-    stoch = ind["stoch"]
-    if stoch > 90 and side == "yes":
-        s -= 3; reasons.append(("Stoch", f"{stoch:.0f}+YES", "-3"))
-    elif stoch < 30 and side == "no":
-        s -= 3; reasons.append(("Stoch", f"{stoch:.0f}+NO", "-3"))
-
-    # Pack agreement
-    pa = ind["pack_agreement"]
-    if pa > 0.5:
-        if ind["ret_1h"] > 0 and side == "no":
-            s -= 2; reasons.append(("Pack", "up vs NO", "-2"))
-        elif ind["ret_1h"] < 0 and side == "yes":
-            s -= 2; reasons.append(("Pack", "down vs YES", "-2"))
-
-    # 3h big move
-    if abs(ind["ret_3h"]) > 1.5:
-        pass  # ext_3h: tightened threshold but removed penalty (was -1)
+    if vol > 0.6:
+        s -= 1; reasons.append(("High Vol", f"{vol:.2f}", "-1"))
 
     return s, reasons
 
