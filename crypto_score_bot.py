@@ -203,6 +203,42 @@ def save_status(status):
         json.dump(status, f, indent=2, default=str)
 
 
+# ── Git backup ─────────────────────────────────────────────────────────
+GIT_BETS_FILE = os.path.join(os.path.dirname(__file__) or ".", "crypto_score_bets.json")
+_last_git_backup = 0
+GIT_BACKUP_INTERVAL = 900  # 15 min
+
+def git_backup_bets(bets):
+    """Save bets to repo and push to git for optimizer/strategy use."""
+    global _last_git_backup
+    now = time.time()
+    if now - _last_git_backup < GIT_BACKUP_INTERVAL:
+        return
+    _last_git_backup = now
+    try:
+        import subprocess
+        repo_dir = os.path.dirname(__file__) or "."
+        # Write bets to repo file
+        with open(GIT_BETS_FILE, "w") as f:
+            json.dump(bets, f, indent=2, default=str)
+        # Git add, commit, push
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        subprocess.run(["git", "add", "crypto_score_bets.json"], cwd=repo_dir,
+                       capture_output=True, timeout=30)
+        result = subprocess.run(
+            ["git", "commit", "-m", f"data: score bot bets {ts}"],
+            cwd=repo_dir, capture_output=True, timeout=30)
+        if result.returncode == 0:
+            # Pull rebase then push (handle concurrent bot commits)
+            subprocess.run(["git", "pull", "--rebase"], cwd=repo_dir,
+                           capture_output=True, timeout=60)
+            subprocess.run(["git", "push"], cwd=repo_dir,
+                           capture_output=True, timeout=60)
+            P(f"  [GIT] Backed up {len(bets)} bets to repo")
+    except Exception as e:
+        P(f"  [GIT] Backup failed: {e}")
+
+
 # ── Main loop ───────────────────────────────────────────────────────────
 def run(live=False):
     P("=" * 65)
@@ -397,6 +433,9 @@ def run(live=False):
                     save_bets(bets)
                     total_new += 1
                     placed_this_window.add(crypto)
+
+            # Periodic git backup
+            git_backup_bets(bets)
 
             time.sleep(POLL_INTERVAL)
 
