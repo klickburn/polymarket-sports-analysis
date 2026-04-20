@@ -38,6 +38,7 @@ POLL_INTERVAL = int(os.environ.get("SCORE_POLL_INTERVAL", "5"))
 MIN_PRICE = float(os.environ.get("SCORE_MIN_PRICE", "0.78"))
 MAX_PRICE = float(os.environ.get("SCORE_MAX_PRICE", "0.99"))
 MIN_SCORE = int(os.environ.get("SCORE_MIN_SCORE", "0"))
+SCORE_VERSION = os.environ.get("SCORE_VERSION", "v4")
 
 DATA_DIR = os.environ.get("SCORE_DATA_DIR", "/data")
 if not os.path.isdir(DATA_DIR):
@@ -154,18 +155,231 @@ def compute_indicators(crypto_data):
     return indicators
 
 
-# ── Scoring engine (v4 — 3 hard filters) ───────────────────────────────
-def compute_score(sym, side, price, indicators):
-    """Score a potential trade using v4 hard-filter model.
-    Score = 0 → GO, Score < 0 → SKIP (one or more kills triggered).
-    """
+# ── Scoring engines ────────────────────────────────────────────────────
+
+def compute_score_v1(sym, side, price, indicators):
+    """v1 — Original scoring engine. MIN_SCORE=0."""
+    if sym not in indicators:
+        return None, []
+    ind = indicators[sym]
+    now = datetime.now(timezone(timedelta(hours=-5)))
+    s = 0
+    reasons = []
+
+    if price >= 0.97:
+        s -= 3; reasons.append(("Price", f"{price:.0%}", "-3"))
+    elif price >= 0.95:
+        s -= 2; reasons.append(("Price", f"{price:.0%}", "-2"))
+    elif price >= 0.93:
+        s -= 1; reasons.append(("Price", f"{price:.0%}", "-1"))
+    elif price < 0.70:
+        s -= 1; reasons.append(("Price", f"{price:.0%}", "-1"))
+
+    if sym == "HYPE":
+        s -= 2; reasons.append(("Crypto", "HYPE", "-2"))
+    elif sym == "BNB":
+        s -= 1; reasons.append(("Crypto", "BNB", "-1"))
+    elif sym == "XRP":
+        s -= 1; reasons.append(("Crypto", "XRP", "-1"))
+    elif sym == "ETH":
+        s += 1; reasons.append(("Crypto", "ETH", "+1"))
+
+    ret = ind["ret_1h"]
+    if ret > 0.5 and side == "no":
+        s -= 2; reasons.append(("Momentum", f"UP {ret:+.2f}% vs NO", "-2"))
+    elif ret < -0.5 and side == "yes":
+        s -= 2; reasons.append(("Momentum", f"DOWN {ret:+.2f}% vs YES", "-2"))
+
+    btc_ret = indicators.get("BTC", {}).get("ret_1h", 0)
+    if sym != "BTC":
+        if btc_ret > 0.3 and side == "no":
+            s -= 2; reasons.append(("BTC", "UP vs NO", "-2"))
+        elif btc_ret < -0.3 and side == "yes":
+            s -= 2; reasons.append(("BTC", "DOWN vs YES", "-2"))
+
+    vol = ind["vol_6h"]
+    if vol > 1.0:
+        s -= 1; reasons.append(("Vol", "high", "-1"))
+    elif vol < 0.3 and side == "no":
+        s -= 1; reasons.append(("Vol", "calm+NO", "-1"))
+    elif vol < 0.3 and side == "yes":
+        s += 1; reasons.append(("Vol", "calm+YES", "+1"))
+
+    rsi = ind["rsi"]
+    if rsi > 70 and side == "yes":
+        s -= 1; reasons.append(("RSI", f"{rsi:.0f}+YES", "-1"))
+    elif rsi < 30 and side == "no":
+        s -= 1; reasons.append(("RSI", f"{rsi:.0f}+NO", "-1"))
+
+    if now.weekday() == 5:
+        s -= 1; reasons.append(("Day", "Saturday", "-1"))
+
+    stoch = ind["stoch"]
+    if stoch > 80 and side == "yes":
+        s -= 1; reasons.append(("Stoch", f"{stoch:.0f}+YES", "-1"))
+    elif stoch < 20 and side == "no":
+        s -= 1; reasons.append(("Stoch", f"{stoch:.0f}+NO", "-1"))
+
+    pa = ind["pack_agreement"]
+    if pa > 0.7:
+        if ind["ret_1h"] > 0 and side == "no":
+            s -= 1; reasons.append(("Pack", "up vs NO", "-1"))
+        elif ind["ret_1h"] < 0 and side == "yes":
+            s -= 1; reasons.append(("Pack", "down vs YES", "-1"))
+
+    if abs(ind["ret_3h"]) > 2.0:
+        s -= 1; reasons.append(("3h", f"{ind['ret_3h']:+.1f}%", "-1"))
+
+    return s, reasons
+
+
+def compute_score_v2(sym, side, price, indicators):
+    """v2 — Safe mode weights. MIN_SCORE=-2."""
+    if sym not in indicators:
+        return None, []
+    ind = indicators[sym]
+    now = datetime.now(timezone(timedelta(hours=-5)))
+    s = 0
+    reasons = []
+
+    if price >= 0.97:
+        s -= 2; reasons.append(("Price", f"{price:.0%}", "-2"))
+    elif price >= 0.95:
+        s -= 2; reasons.append(("Price", f"{price:.0%}", "-2"))
+    elif price >= 0.93:
+        s -= 2; reasons.append(("Price", f"{price:.0%}", "-2"))
+    elif price < 0.70:
+        s -= 1; reasons.append(("Price", f"{price:.0%}", "-1"))
+
+    if sym == "HYPE":
+        s -= 2; reasons.append(("Crypto", "HYPE", "-2"))
+    elif sym == "BNB":
+        s -= 1; reasons.append(("Crypto", "BNB", "-1"))
+    elif sym == "XRP":
+        s -= 1; reasons.append(("Crypto", "XRP", "-1"))
+    elif sym == "DOGE":
+        s += 1; reasons.append(("Crypto", "DOGE", "+1"))
+    elif sym == "ETH":
+        s += 1; reasons.append(("Crypto", "ETH", "+1"))
+
+    ret = ind["ret_1h"]
+    if ret > 0.6 and side == "no":
+        s -= 2; reasons.append(("Momentum", f"UP {ret:+.2f}% vs NO", "-2"))
+    elif ret < -0.6 and side == "yes":
+        s -= 2; reasons.append(("Momentum", f"DOWN {ret:+.2f}% vs YES", "-2"))
+
+    btc_ret = indicators.get("BTC", {}).get("ret_1h", 0)
+    if sym != "BTC":
+        if btc_ret > 0.3 and side == "no":
+            s -= 3; reasons.append(("BTC", "UP vs NO", "-3"))
+        elif btc_ret < -0.3 and side == "yes":
+            s -= 3; reasons.append(("BTC", "DOWN vs YES", "-3"))
+
+    vol = ind["vol_6h"]
+    if vol > 1.0:
+        s -= 1; reasons.append(("Vol", "high", "-1"))
+    elif vol < 0.3 and side == "yes":
+        s -= 1; reasons.append(("Vol", "calm+YES", "-1"))
+
+    rsi = ind["rsi"]
+    if rsi > 65 and side == "yes":
+        s -= 3; reasons.append(("RSI", f"{rsi:.0f}+YES", "-3"))
+    elif rsi < 25 and side == "no":
+        s -= 3; reasons.append(("RSI", f"{rsi:.0f}+NO", "-3"))
+
+    stoch = ind["stoch"]
+    if stoch > 80 and side == "yes":
+        s -= 3; reasons.append(("Stoch", f"{stoch:.0f}+YES", "-3"))
+    elif stoch < 10 and side == "no":
+        s -= 3; reasons.append(("Stoch", f"{stoch:.0f}+NO", "-3"))
+
+    pa = ind["pack_agreement"]
+    if pa > 0.8:
+        if ind["ret_1h"] > 0 and side == "no":
+            s -= 1; reasons.append(("Pack", "up vs NO", "-1"))
+        elif ind["ret_1h"] < 0 and side == "yes":
+            s -= 1; reasons.append(("Pack", "down vs YES", "-1"))
+
+    return s, reasons
+
+
+def compute_score_v3(sym, side, price, indicators):
+    """v3 — Optimizer weights round 2. MIN_SCORE=-2."""
     if sym not in indicators:
         return None, []
     ind = indicators[sym]
     s = 0
     reasons = []
 
-    # Filter 1: BTC Against (±0.3%) — alt going opposite to BTC
+    if price >= 0.97:
+        s -= 2; reasons.append(("Price", f"{price:.0%}", "-2"))
+    elif price >= 0.95:
+        s -= 2; reasons.append(("Price", f"{price:.0%}", "-2"))
+    elif price >= 0.93:
+        s -= 2; reasons.append(("Price", f"{price:.0%}", "-2"))
+    elif price < 0.70:
+        s -= 1; reasons.append(("Price", f"{price:.0%}", "-1"))
+
+    if sym == "HYPE":
+        s -= 2; reasons.append(("Crypto", "HYPE", "-2"))
+    elif sym == "BNB":
+        s -= 1; reasons.append(("Crypto", "BNB", "-1"))
+    elif sym == "XRP":
+        s -= 1; reasons.append(("Crypto", "XRP", "-1"))
+    elif sym == "DOGE":
+        s += 1; reasons.append(("Crypto", "DOGE", "+1"))
+    elif sym == "ETH":
+        s += 2; reasons.append(("Crypto", "ETH", "+2"))
+
+    ret = ind["ret_1h"]
+    if ret > 0.6 and side == "no":
+        s -= 1; reasons.append(("Momentum", f"UP {ret:+.2f}% vs NO", "-1"))
+    elif ret < -0.6 and side == "yes":
+        s -= 1; reasons.append(("Momentum", f"DOWN {ret:+.2f}% vs YES", "-1"))
+
+    btc_ret = indicators.get("BTC", {}).get("ret_1h", 0)
+    if sym != "BTC":
+        if btc_ret > 0.3 and side == "no":
+            s -= 3; reasons.append(("BTC", "UP vs NO", "-3"))
+        elif btc_ret < -0.3 and side == "yes":
+            s -= 3; reasons.append(("BTC", "DOWN vs YES", "-3"))
+
+    vol = ind["vol_6h"]
+    if vol > 1.0:
+        s -= 1; reasons.append(("Vol", "high", "-1"))
+    elif vol < 0.2 and side == "yes":
+        s -= 1; reasons.append(("Vol", "calm+YES", "-1"))
+
+    rsi = ind["rsi"]
+    if rsi > 65 and side == "yes":
+        s -= 3; reasons.append(("RSI", f"{rsi:.0f}+YES", "-3"))
+    elif rsi < 25 and side == "no":
+        s -= 3; reasons.append(("RSI", f"{rsi:.0f}+NO", "-3"))
+
+    stoch = ind["stoch"]
+    if stoch > 90 and side == "yes":
+        s -= 3; reasons.append(("Stoch", f"{stoch:.0f}+YES", "-3"))
+    elif stoch < 30 and side == "no":
+        s -= 3; reasons.append(("Stoch", f"{stoch:.0f}+NO", "-3"))
+
+    pa = ind["pack_agreement"]
+    if pa > 0.5:
+        if ind["ret_1h"] > 0 and side == "no":
+            s -= 2; reasons.append(("Pack", "up vs NO", "-2"))
+        elif ind["ret_1h"] < 0 and side == "yes":
+            s -= 2; reasons.append(("Pack", "down vs YES", "-2"))
+
+    return s, reasons
+
+
+def compute_score_v4(sym, side, price, indicators):
+    """v4 — 3 hard filters. MIN_SCORE=0. Score=0→GO, <0→SKIP."""
+    if sym not in indicators:
+        return None, []
+    ind = indicators[sym]
+    s = 0
+    reasons = []
+
     btc_ret = indicators.get("BTC", {}).get("ret_1h", 0)
     if sym != "BTC":
         if btc_ret > 0.3 and side == "no":
@@ -173,16 +387,23 @@ def compute_score(sym, side, price, indicators):
         elif btc_ret < -0.3 and side == "yes":
             s -= 1; reasons.append(("BTC Against", f"BTC DOWN {btc_ret:+.2f}% vs YES", "-1"))
 
-    # Filter 2: 3h Extended (>2.0%) — big 3h move in either direction
     if abs(ind["ret_3h"]) > 2.0:
         s -= 1; reasons.append(("3h Extended", f"{ind['ret_3h']:+.1f}%", "-1"))
 
-    # Filter 3: High Vol (>0.6) — 6h volatility too high
     vol = ind["vol_6h"]
     if vol > 0.6:
         s -= 1; reasons.append(("High Vol", f"{vol:.2f}", "-1"))
 
     return s, reasons
+
+
+# ── Version dispatcher ─────────────────────────────────────────────────
+SCORE_VERSIONS = {"v1": compute_score_v1, "v2": compute_score_v2,
+                  "v3": compute_score_v3, "v4": compute_score_v4}
+
+def compute_score(sym, side, price, indicators):
+    fn = SCORE_VERSIONS.get(SCORE_VERSION, compute_score_v4)
+    return fn(sym, side, price, indicators)
 
 
 # ── Load/save bets ──────────────────────────────────────────────────────
@@ -242,9 +463,9 @@ def git_backup_bets(bets):
 # ── Main loop ───────────────────────────────────────────────────────────
 def run(live=False):
     P("=" * 65)
-    P("  CRYPTO SCORE BOT — CoinGecko Scoring Engine")
+    P(f"  CRYPTO SCORE BOT — {SCORE_VERSION.upper()} Scoring Engine")
     P(f"  Mode: {'LIVE' if live else 'DRY RUN'}")
-    P(f"  Entry: minute {ENTRY_AFTER_MINUTES}+ | Min score: {MIN_SCORE}")
+    P(f"  Strategy: {SCORE_VERSION} | Entry: minute {ENTRY_AFTER_MINUTES}+ | Min score: {MIN_SCORE}")
     P(f"  Price range: {MIN_PRICE*100:.0f}-{MAX_PRICE*100:.0f}c | {CONTRACT_COUNT} contracts")
     P(f"  Cryptos: {', '.join(CRYPTOS.keys())}")
     P("=" * 65)
@@ -400,6 +621,7 @@ def run(live=False):
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                     "window_end": window_end.isoformat(),
                     "result": "open",
+                    "strategy_version": SCORE_VERSION,
                 }
 
                 if score < MIN_SCORE:
