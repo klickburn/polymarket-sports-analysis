@@ -20,6 +20,7 @@ import sys
 import json
 import time
 import math
+import uuid
 import urllib.request
 from datetime import datetime, timezone, timedelta
 
@@ -38,6 +39,7 @@ POLL_INTERVAL = int(os.environ.get("SCORE_POLL_INTERVAL", "5"))
 MIN_PRICE = float(os.environ.get("SCORE_MIN_PRICE", "0.78"))
 MAX_PRICE = float(os.environ.get("SCORE_MAX_PRICE", "0.99"))
 MIN_SCORE = int(os.environ.get("SCORE_MIN_SCORE", "0"))
+TAKE_PROFIT_PRICE = float(os.environ.get("SCORE_TAKE_PROFIT", "0.95"))
 SCORE_VERSION = os.environ.get("SCORE_VERSION", "v4")
 
 DATA_DIR = os.environ.get("SCORE_DATA_DIR", "/data")
@@ -406,6 +408,36 @@ def compute_score(sym, side, price, indicators):
     return fn(sym, side, price, indicators)
 
 
+# ── Take profit ────────────────────────────────────────────────────────
+def place_take_profit(ticker, side, count):
+    """Place a limit sell order at TAKE_PROFIT_PRICE to lock in gains."""
+    if TAKE_PROFIT_PRICE <= 0:
+        return None
+    tp_cents = int(round(TAKE_PROFIT_PRICE * 100))
+    order = {
+        "ticker": ticker,
+        "action": "sell",
+        "side": side,
+        "type": "limit",
+        "count": count,
+        "client_order_id": str(uuid.uuid4()),
+    }
+    if side == "yes":
+        order["yes_price"] = tp_cents
+    else:
+        order["no_price"] = tp_cents
+    try:
+        P(f"    Take-profit: SELL {count} @ {tp_cents}c ({side.upper()})")
+        result = auth_post("/portfolio/orders", data=order)
+        order_data = result.get("order", {})
+        status = order_data.get("status", "unknown")
+        P(f"    TP order status: {status}")
+        return result
+    except Exception as e:
+        P(f"    TP ORDER FAILED: {e}")
+        return None
+
+
 # ── Load/save bets ──────────────────────────────────────────────────────
 def load_bets():
     if os.path.exists(BETS_FILE):
@@ -466,7 +498,8 @@ def run(live=False):
     P(f"  CRYPTO SCORE BOT — {SCORE_VERSION.upper()} Scoring Engine")
     P(f"  Mode: {'LIVE' if live else 'DRY RUN'}")
     P(f"  Strategy: {SCORE_VERSION} | Entry: minute {ENTRY_AFTER_MINUTES}+ | Min score: {MIN_SCORE}")
-    P(f"  Price range: {MIN_PRICE*100:.0f}-{MAX_PRICE*100:.0f}c | {CONTRACT_COUNT} contracts")
+    tp_str = f"{TAKE_PROFIT_PRICE*100:.0f}c" if TAKE_PROFIT_PRICE > 0 else "OFF"
+    P(f"  Price range: {MIN_PRICE*100:.0f}-{MAX_PRICE*100:.0f}c | {CONTRACT_COUNT} contracts | TP: {tp_str}")
     P(f"  Cryptos: {', '.join(CRYPTOS.keys())}")
     P("=" * 65)
 
@@ -641,11 +674,20 @@ def run(live=False):
                         bet_record["order_id"] = order.get("order_id", "")
                         bet_record["status"] = order.get("status", "")
                         bet_record["fill_price"] = order.get("avg_price", price)
+                        # Place take-profit sell order
+                        if TAKE_PROFIT_PRICE > 0 and price < TAKE_PROFIT_PRICE:
+                            time.sleep(1)
+                            tp_result = place_take_profit(ticker, side, CONTRACT_COUNT)
+                            if tp_result:
+                                tp_order = tp_result.get("order", {})
+                                bet_record["tp_order_id"] = tp_order.get("order_id", "")
+                                bet_record["tp_price"] = TAKE_PROFIT_PRICE
                         bets.append(bet_record)
                         save_bets(bets)
                         total_new += 1
                         placed_this_window.add(crypto)
-                        P(f"    {crypto}: BET PLACED | {side.upper()} @ {price:.2f} | Score {score:+d}")
+                        tp_str = f" | TP @ {TAKE_PROFIT_PRICE*100:.0f}c" if TAKE_PROFIT_PRICE > 0 else ""
+                        P(f"    {crypto}: BET PLACED | {side.upper()} @ {price:.2f} | Score {score:+d}{tp_str}")
                     else:
                         P(f"    {crypto}: Order failed")
                 else:
