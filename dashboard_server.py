@@ -484,6 +484,7 @@ def _build_score_report(bets, status):
         "indicators": status.get("indicators", {}),
         "last_indicator_update": status.get("last_update", ""),
         "recent_bets": bets,
+        "strategy_version": os.environ.get("SCORE_VERSION", "v4"),
     }
 
 
