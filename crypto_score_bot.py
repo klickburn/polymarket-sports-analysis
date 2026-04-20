@@ -35,8 +35,8 @@ BET_AMOUNT = float(os.environ.get("SCORE_BET_AMOUNT", "0.10"))
 CONTRACT_COUNT = int(os.environ.get("SCORE_CONTRACT_COUNT", "1"))
 ENTRY_AFTER_MINUTES = int(os.environ.get("SCORE_ENTRY_MINUTES", "11"))
 POLL_INTERVAL = int(os.environ.get("SCORE_POLL_INTERVAL", "5"))
-MIN_PRICE = 0.78
-MAX_PRICE = 0.99
+MIN_PRICE = float(os.environ.get("SCORE_MIN_PRICE", "0.78"))
+MAX_PRICE = float(os.environ.get("SCORE_MAX_PRICE", "0.99"))
 MIN_SCORE = int(os.environ.get("SCORE_MIN_SCORE", "0"))
 
 DATA_DIR = os.environ.get("SCORE_DATA_DIR", "/data")
