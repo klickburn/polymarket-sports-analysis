@@ -410,7 +410,6 @@ def compute_score_v5(sym, side, price, indicators):
     Filters:
       1. Stoch < 30 (oversold confirmation)
       2. All cryptos in window agree on direction (same side)
-      3. BTC move < 0.15% (inherited from v4)
     """
     if sym not in indicators:
         return None, []
@@ -434,13 +433,6 @@ def compute_score_v5(sym, side, price, indicators):
             s -= 1; reasons.append(("No Consensus", f"{window_sides}", "-1"))
         elif sides:
             reasons.append(("Consensus", f"all {sides[0].upper()}", "pass"))
-
-    # Filter 3: BTC absolute move < 0.15%
-    btc_abs = abs(indicators.get("BTC", {}).get("ret_1h", 0))
-    if btc_abs > 0.15:
-        s -= 1; reasons.append(("BTC Move", f"|ret_1h|={btc_abs:.2f}% >0.15%", "-1"))
-    else:
-        reasons.append(("BTC OK", f"|ret_1h|={btc_abs:.2f}%", "pass"))
 
     return s, reasons
 
