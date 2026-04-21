@@ -40,8 +40,9 @@ BANKROLL_PCT_T1 = 0.015      # 1.5% for T1 (Polymarket-specific, unconfirmed on 
 MIN_BET = 1.00               # Minimum bet size
 MAX_BET = 500.00             # Safety cap per bet
 
-LEAGUES = ["nba", "cbb", "nhl"]
-NEW_LEAGUES = {"nhl"}  # Leagues without backtest data — use reduced sizing
+LEAGUES = ["nba", "cbb", "nhl", "mlb", "epl", "dota2"]
+NEW_LEAGUES = {"nhl", "mlb", "epl", "dota2"}  # Leagues without backtest data — use reduced sizing
+BET_WINDOW_HOURS = 2  # Only bet within this many hours before game start (all leagues)
 # In T2 coin flips: these leagues bet UNDERDOG (Kalshi-validated), rest bet FAVORITE
 T2_UNDERDOG_LEAGUES = {"cbb", "nhl"}
 SCAN_INTERVAL = 300           # 5 minutes between scans in monitor mode
@@ -53,6 +54,7 @@ TIER_NAMES = {
     6: "T2: Coin flip dog",
     3: "T3: CBB B dog 50-55%",
     4: "T4: NBA 50/50",
+    7: "T7: 60%+ fav",
 }
 
 LOG_FILE = "trading_bot.log"
@@ -222,23 +224,27 @@ def is_draw_market(market):
 def parse_market_from_event(market, league=None):
     """Parse a market from the league events endpoint. Only pre-game markets."""
     market_type = market.get("sportsMarketType", market.get("marketType", ""))
-    # For EPL: only pick the draw market (drawable_outcome with -draw in slug)
-    if league == "epl":
-        if market_type != "drawable_outcome" or not is_draw_market(market):
-            return None
+    # Allow moneyline for all leagues, plus drawable_outcome for draw markets
+    if market_type == "moneyline":
+        pass  # Always allowed
+    elif market_type == "drawable_outcome" and is_draw_market(market):
+        pass  # Draw markets allowed
     else:
-        if market_type != "moneyline":
-            return None
+        return None
     if not market.get("active", False) or market.get("closed", False):
         return None
 
-    # Skip live/in-progress games — only bet pre-game
+    # Skip live/in-progress games AND only bet within 2h of game start
     game_start = market.get("gameStartTime") or market.get("endDate")
     if game_start:
         try:
             start_dt = datetime.fromisoformat(game_start.replace("Z", "+00:00"))
-            if datetime.now(timezone.utc) >= start_dt:
+            now = datetime.now(timezone.utc)
+            if now >= start_dt:
                 return None  # Game already started
+            hours_until = (start_dt - now).total_seconds() / 3600
+            if hours_until > BET_WINDOW_HOURS:
+                return None  # Too far from game start
         except (ValueError, TypeError):
             pass
 
@@ -311,13 +317,9 @@ def assign_tier(parsed, league):
             return 6, TIER_NAMES[6]  # Bet underdog
         return 2, TIER_NAMES[2]  # Bet favorite
 
-    # Tier 5: EPL Draw — draw market priced under 35% (Yes price)
-    if league == "epl" and parsed.get("is_draw"):
-        # For draw markets: outcomes=['Yes','No'], price_a=Yes, price_b=No
-        # The Yes price is the draw probability — always the smaller one
-        draw_price = min(price_a, price_b)
-        if 0.24 <= draw_price < 0.35:
-            return 5, TIER_NAMES[5]
+    # Tier 7: Dota2/EPL/MLB — bet whichever side is 60%+ (moneyline only)
+    if league in ("dota2", "epl", "mlb") and not parsed.get("is_draw") and fav_price >= 0.60:
+        return 7, TIER_NAMES[7]
 
     return 0, None
 
@@ -454,8 +456,8 @@ def scan_markets(live=False):
                     else:
                         bet_price = parsed["price_b"]
                         bet_label = parsed["team_b"]
-                elif tier == 2:
-                    # T2: Coin flip favorite (NBA/NFL/MLB) — bet the pricier side
+                elif tier in (2, 7):
+                    # T2: Coin flip favorite / T7: 60%+ favorite — bet the pricier side
                     if parsed["price_a"] >= parsed["price_b"]:
                         bet_price = parsed["price_a"]
                         bet_label = parsed["team_a"]
@@ -531,7 +533,7 @@ def scan_markets(live=False):
                     bet_price = min(fresh_a, fresh_b)
                 elif fresh_tier == 6:
                     bet_price = min(fresh_a, fresh_b)  # underdog = cheaper side
-                elif fresh_tier == 2:
+                elif fresh_tier in (2, 7):
                     bet_price = max(fresh_a, fresh_b)  # favorite = pricier side
                 else:
                     bet_price = fresh_b
@@ -543,7 +545,7 @@ def scan_markets(live=False):
             # T1/T3/default Team B: buy NO (short) on Team A
             if is_draw:
                 buy_yes = True
-            elif mkt["tier"] in (2, 6) and mkt["bet_label"] == mkt["team_a"]:
+            elif mkt["tier"] in (2, 6, 7) and mkt["bet_label"] == mkt["team_a"]:
                 buy_yes = True  # Betting on Team A = buy YES
             else:
                 buy_yes = False  # Betting on Team B = buy NO
@@ -629,13 +631,14 @@ if __name__ == "__main__":
     monitor = "--monitor" in sys.argv
 
     P("=" * 65)
-    P("  POLYMARKET — HYBRID 5-TIER BOT")
+    P("  POLYMARKET — MULTI-TIER BOT")
     P(f"  Mode: {'LIVE' if live else 'DRY RUN'} | Sizing: {BANKROLL_PCT*100:.0f}% of bankroll")
-    P(f"  Leagues: {', '.join(LEAGUES)}")
-    P(f"  Sizing: 3% (NBA/CBB/EPL) | 2% (NHL/MLB)")
-    P(f"  Tiers: T1=B fav 75-90% | T2=Coin flip")
+    P(f"  Leagues: {', '.join(l.upper() for l in LEAGUES)}")
+    P(f"  Bet window: {BET_WINDOW_HOURS}h before game start")
+    P(f"  Sizing: 3% (NBA/CBB) | 2% (NHL/MLB/EPL/DOTA2)")
+    P(f"  Tiers: T1=B fav 75-90% | T2=Coin flip fav | T6=Coin flip dog")
     P(f"         T3=CBB B dog 50-55% | T4=NBA 50/50")
-    P(f"         T5=EPL Draw <35%")
+    P(f"         T7=60%+ fav (DOTA2/EPL/MLB)")
     P("=" * 65)
     P()
 
