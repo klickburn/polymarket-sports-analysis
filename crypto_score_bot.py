@@ -399,6 +399,8 @@ def compute_score_v4(sym, side, price, indicators):
     btc_abs = abs(indicators.get("BTC", {}).get("ret_1h", 0))
     if btc_abs > 0.15:
         s -= 1; reasons.append(("BTC Move", f"|ret_1h|={btc_abs:.2f}% >0.15%", "-1"))
+    else:
+        reasons.append(("BTC OK", f"|ret_1h|={btc_abs:.2f}%", "pass"))
 
     return s, reasons
 
