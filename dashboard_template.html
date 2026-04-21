@@ -615,15 +615,17 @@ if (days.length > 0) {
     }
   });
 
-  // Daily table
+  // Daily table (reverse chronological, newest first)
   let cumDaily = 0;
+  const dayCum = {};
+  days.forEach(d => { cumDaily += dailyData[d].pnl; dayCum[d] = cumDaily; });
+  const reverseDays = [...days].reverse();
   let tableHtml = '<div class="card"><h3>Daily Breakdown</h3><div class="scroll-table"><table><thead><tr><th>Date</th><th>Trades</th><th>W-L</th><th>Win Rate</th><th>P&L</th><th>Cumulative</th></tr></thead><tbody>';
-  days.forEach(d => {
+  reverseDays.forEach(d => {
     const dd = dailyData[d];
-    cumDaily += dd.pnl;
     const wr = dd.trades > 0 ? (dd.wins / dd.trades * 100).toFixed(0) + '%' : '--';
     const dayStr = new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-    tableHtml += `<tr><td>${dayStr}</td><td>${dd.trades}</td><td>${dd.wins}W-${dd.losses}L</td><td>${wr}</td><td>${pnlHtml(dd.pnl)}</td><td>${pnlHtml(cumDaily)}</td></tr>`;
+    tableHtml += `<tr><td>${dayStr}</td><td>${dd.trades}</td><td>${dd.wins}W-${dd.losses}L</td><td>${wr}</td><td>${pnlHtml(dd.pnl)}</td><td>${pnlHtml(dayCum[d])}</td></tr>`;
   });
   tableHtml += '</tbody></table></div></div>';
   document.getElementById('dailyContent').innerHTML = tableHtml;
