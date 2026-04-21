@@ -405,9 +405,50 @@ def compute_score_v4(sym, side, price, indicators):
     return s, reasons
 
 
+def compute_score_v5(sym, side, price, indicators):
+    """v5 — Stoch + consensus filter. Score=0→GO, <0→SKIP.
+    Filters:
+      1. Stoch < 30 (oversold confirmation)
+      2. All cryptos in window agree on direction (same side)
+      3. BTC move < 0.15% (inherited from v4)
+    """
+    if sym not in indicators:
+        return None, []
+    ind = indicators[sym]
+    s = 0
+    reasons = []
+
+    # Filter 1: Stoch must be < 30
+    stoch = ind["stoch"]
+    if stoch >= 30:
+        s -= 1; reasons.append(("Stoch High", f"{stoch:.1f} ≥30", "-1"))
+    else:
+        reasons.append(("Stoch OK", f"{stoch:.1f}", "pass"))
+
+    # Filter 2: All cryptos must agree on direction (same side)
+    # window_sides is injected into indicators by the trading loop
+    window_sides = indicators.get("_window_sides", {})
+    if window_sides:
+        sides = [s for s in window_sides.values() if s]
+        if sides and not all(s == sides[0] for s in sides):
+            s -= 1; reasons.append(("No Consensus", f"{window_sides}", "-1"))
+        elif sides:
+            reasons.append(("Consensus", f"all {sides[0].upper()}", "pass"))
+
+    # Filter 3: BTC absolute move < 0.15%
+    btc_abs = abs(indicators.get("BTC", {}).get("ret_1h", 0))
+    if btc_abs > 0.15:
+        s -= 1; reasons.append(("BTC Move", f"|ret_1h|={btc_abs:.2f}% >0.15%", "-1"))
+    else:
+        reasons.append(("BTC OK", f"|ret_1h|={btc_abs:.2f}%", "pass"))
+
+    return s, reasons
+
+
 # ── Version dispatcher ─────────────────────────────────────────────────
 SCORE_VERSIONS = {"v1": compute_score_v1, "v2": compute_score_v2,
-                  "v3": compute_score_v3, "v4": compute_score_v4}
+                  "v3": compute_score_v3, "v4": compute_score_v4,
+                  "v5": compute_score_v5}
 
 def compute_score(sym, side, price, indicators):
     fn = SCORE_VERSIONS.get(SCORE_VERSION, compute_score_v4)
@@ -594,6 +635,21 @@ def run(live=False):
             if not indicators:
                 time.sleep(POLL_INTERVAL)
                 continue
+
+            # Pre-scan: collect dominant sides for all cryptos (needed for v5 consensus)
+            if SCORE_VERSION == "v5":
+                window_sides = {}
+                for c, cfg2 in CRYPTOS.items():
+                    mkt2, _ = find_current_market(cfg2["series"])
+                    if mkt2:
+                        time.sleep(0.5)
+                        s2, p2 = get_dominant_side(mkt2["ticker"])
+                        if s2 and p2 and MIN_PRICE <= p2 <= MAX_PRICE:
+                            window_sides[c] = s2
+                        time.sleep(0.5)
+                indicators["_window_sides"] = window_sides
+                side_summary = {k: v for k, v in window_sides.items()}
+                P(f"  Window sides: {side_summary}")
 
             # Check each crypto — 1.5s between each to avoid 429
             for crypto, cfg in CRYPTOS.items():
