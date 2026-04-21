@@ -622,6 +622,17 @@ def run(live=False):
                 if price < MIN_PRICE or price > MAX_PRICE:
                     continue
 
+                # Re-fetch BTC from CoinGecko for fresh ret_1h before each trade
+                btc_url = f"{COINGECKO}/coins/bitcoin/market_chart?vs_currency=usd&days=1"
+                btc_data = fetch_coingecko(btc_url)
+                if btc_data and "prices" in btc_data:
+                    btc_prices = [p[1] for p in sorted(btc_data["prices"], key=lambda x: x[0])]
+                    if len(btc_prices) >= 24:
+                        old_btc = indicators.get("BTC", {})
+                        fresh_ind = compute_indicators({"BTC": btc_prices})
+                        if "BTC" in fresh_ind:
+                            indicators["BTC"] = fresh_ind["BTC"]
+
                 # Compute score
                 score, reasons = compute_score(crypto, side, price, indicators)
                 if score is None:
