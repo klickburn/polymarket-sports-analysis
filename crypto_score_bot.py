@@ -524,7 +524,7 @@ def run(live=False):
     indicators = {}
     checked_positions = False
     fetched_indicators = False
-    PREFETCH_MINUTE = ENTRY_AFTER_MINUTES - 1  # Fetch CoinGecko 1 min before entry
+    PREFETCH_MINUTE = ENTRY_AFTER_MINUTES  # Fetch CoinGecko right at entry time
 
     P(f"\n  Running continuously — polling every {POLL_INTERVAL}s...")
 
@@ -547,7 +547,7 @@ def run(live=False):
                 time.sleep(POLL_INTERVAL)
                 continue
 
-            # Fetch CoinGecko 1 min before entry (minute 10)
+            # Fetch CoinGecko right before trading
             if not fetched_indicators:
                 P("  Fetching CoinGecko data...")
                 crypto_data = fetch_crypto_prices()
