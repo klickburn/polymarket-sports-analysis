@@ -149,9 +149,10 @@
   .tag.nba { background: rgba(239,68,68,0.15); color: var(--red); }
   .tag.cbb { background: rgba(59,130,246,0.15); color: var(--blue); }
   .tag.nhl { background: rgba(6,182,212,0.15); color: var(--cyan); }
-  .tag.ucl { background: rgba(168,85,247,0.15); color: var(--purple); }
   .tag.epl { background: rgba(245,158,11,0.15); color: var(--orange); }
   .tag.mlb { background: rgba(34,197,94,0.15); color: var(--green); }
+  .tag.atp { background: rgba(168,85,247,0.15); color: var(--purple); }
+  .tag.wta { background: rgba(236,72,153,0.15); color: #ec4899; }
   .tag.t1 { background: rgba(34,197,94,0.15); color: var(--green); }
   .tag.t2 { background: rgba(59,130,246,0.15); color: var(--blue); }
   .tag.t6 { background: rgba(234,179,8,0.15); color: #eab308; }
@@ -289,8 +290,9 @@ function getSport(slug) {
   if (slug.includes('-cbb-') || slug.startsWith('aec-cbb')) return 'CBB';
   if (slug.includes('-nhl-') || slug.startsWith('aec-nhl')) return 'NHL';
   if (slug.includes('-mlb-') || slug.startsWith('aec-mlb')) return 'MLB';
-  if (slug.includes('-ucl-') || slug.startsWith('atc-ucl')) return 'UCL';
   if (slug.includes('-epl-') || slug.startsWith('atc-epl')) return 'EPL';
+  if (slug.includes('-atp-') || slug.startsWith('aec-atp')) return 'ATP';
+  if (slug.includes('-wta-') || slug.startsWith('aec-wta')) return 'WTA';
   return 'Other';
 }
 
@@ -592,7 +594,7 @@ if (days.length > 0) {
   // Daily P&L by Sport stacked chart
   const allSports = new Set();
   days.forEach(d => Object.keys(dailyData[d].bySport).forEach(s => allSports.add(s)));
-  const sportColorMap = { NBA: '#ef4444', CBB: '#3b82f6', NHL: '#06b6d4', MLB: '#22c55e', UCL: '#a855f7', EPL: '#f59e0b', Other: '#8b8fa3' };
+  const sportColorMap = { NBA: '#ef4444', CBB: '#3b82f6', NHL: '#06b6d4', MLB: '#22c55e', EPL: '#f59e0b', ATP: '#a855f7', WTA: '#ec4899', Other: '#8b8fa3' };
   const sportDatasets = [...allSports].map(sport => ({
     label: sport,
     data: days.map(d => parseFloat((dailyData[d].bySport[sport] || 0).toFixed(2))),
