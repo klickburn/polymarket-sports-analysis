@@ -52,7 +52,7 @@ SPORTS_PREFIXES = [
 EXCLUDED_TICKERS = set(os.environ.get("EXCLUDED_TICKERS", "KXNCAAWBGAME-26MAR23UVAIOWA-UVA").split(","))
 
 ACCOUNT_NAME = os.environ.get("ACCOUNT_NAME", "Default")
-REFRESH_INTERVAL = int(os.environ.get("REFRESH_INTERVAL", "60"))
+REFRESH_INTERVAL = int(os.environ.get("REFRESH_INTERVAL", "900"))  # 15 min
 
 # ── Shared data store ──────────────────────────────────────────────────
 _data = {"result": None, "refreshing": False, "last_refresh": 0}
