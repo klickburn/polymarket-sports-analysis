@@ -632,13 +632,13 @@ def run(live=False):
             if SCORE_VERSION == "v5":
                 window_sides = {}
                 for c, cfg2 in CRYPTOS.items():
+                    time.sleep(1)
                     mkt2, _ = find_current_market(cfg2["series"])
                     if mkt2:
-                        time.sleep(0.5)
+                        time.sleep(1)
                         s2, p2 = get_dominant_side(mkt2["ticker"])
                         if s2 and p2 and MIN_PRICE <= p2 <= MAX_PRICE:
                             window_sides[c] = s2
-                        time.sleep(0.5)
                 indicators["_window_sides"] = window_sides
                 side_summary = {k: v for k, v in window_sides.items()}
                 P(f"  Window sides: {side_summary}")
@@ -693,7 +693,7 @@ def run(live=False):
                 ind = indicators.get(crypto, {})
                 score_breakdown = {}
                 for factor, detail, pts in reasons:
-                    score_breakdown[factor] = {"detail": detail, "points": int(pts)}
+                    score_breakdown[factor] = {"detail": detail, "points": int(pts) if pts not in ("pass",) else 0}
 
                 bet_record = {
                     "crypto": crypto,
