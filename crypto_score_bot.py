@@ -631,7 +631,10 @@ def run(live=False):
             # Pre-scan: collect dominant sides for all cryptos (needed for v5 consensus)
             if SCORE_VERSION == "v5":
                 window_sides = {}
+                CONSENSUS_EXCLUDE = {"BNB", "HYPE"}
                 for c, cfg2 in CRYPTOS.items():
+                    if c in CONSENSUS_EXCLUDE:
+                        continue
                     time.sleep(2)
                     mkt2, _ = find_current_market(cfg2["series"])
                     if mkt2:
