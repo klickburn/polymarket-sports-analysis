@@ -628,33 +628,37 @@ def run(live=False):
                 time.sleep(POLL_INTERVAL)
                 continue
 
-            # Pre-scan: collect dominant sides for all cryptos (needed for v5 consensus)
+            # Single pass: collect sides for consensus + evaluate trades
+            CONSENSUS_EXCLUDE = {"BNB", "HYPE"}
+            crypto_snapshots = {}
+            for c, cfg2 in CRYPTOS.items():
+                if c in placed_this_window:
+                    continue
+                time.sleep(2)
+                mkt2, ev2 = find_current_market(cfg2["series"])
+                if not mkt2:
+                    continue
+                time.sleep(2)
+                s2, p2 = get_dominant_side(mkt2["ticker"])
+                crypto_snapshots[c] = {"market": mkt2, "event": ev2, "side": s2, "price": p2}
+
+            # Build consensus from snapshots (excluding BNB/HYPE)
             if SCORE_VERSION == "v5":
                 window_sides = {}
-                CONSENSUS_EXCLUDE = {"BNB", "HYPE"}
-                for c, cfg2 in CRYPTOS.items():
+                for c, snap in crypto_snapshots.items():
                     if c in CONSENSUS_EXCLUDE:
                         continue
-                    time.sleep(2)
-                    mkt2, _ = find_current_market(cfg2["series"])
-                    if mkt2:
-                        time.sleep(2)
-                        s2, p2 = get_dominant_side(mkt2["ticker"])
-                        if s2 and p2 and MIN_PRICE <= p2 <= MAX_PRICE:
-                            window_sides[c] = s2
+                    if snap["side"] and snap["price"] and MIN_PRICE <= snap["price"] <= MAX_PRICE:
+                        window_sides[c] = snap["side"]
                 indicators["_window_sides"] = window_sides
-                side_summary = {k: v for k, v in window_sides.items()}
-                P(f"  Window sides: {side_summary}")
+                P(f"  Window sides: {window_sides}")
 
-            # Check each crypto — 2s between each to avoid 429
-            for crypto, cfg in CRYPTOS.items():
+            # Now evaluate each crypto using the collected data
+            for crypto, snap in crypto_snapshots.items():
                 if crypto in placed_this_window:
                     continue
-
-                time.sleep(2)
-                market, event = find_current_market(cfg["series"])
-                if not market:
-                    continue
+                market = snap["market"]
+                event = snap["event"]
                 ticker = market["ticker"]
 
                 if ticker in skip_tickers:
@@ -664,12 +668,11 @@ def run(live=False):
                     placed_this_window.add(crypto)
                     continue
 
-                time.sleep(2)
-                side, price = get_dominant_side(ticker)
+                side, price = snap["side"], snap["price"]
                 if not side or not price:
                     continue
 
-                # Only trade dominant side >75c
+                # Only trade dominant side in price range
                 if price < MIN_PRICE or price > MAX_PRICE:
                     continue
 
