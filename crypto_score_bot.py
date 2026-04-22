@@ -35,7 +35,7 @@ from crypto_15m_bot import (
 BET_AMOUNT = float(os.environ.get("SCORE_BET_AMOUNT", "0.10"))
 CONTRACT_COUNT = int(os.environ.get("SCORE_CONTRACT_COUNT", "1"))
 ENTRY_AFTER_MINUTES = int(os.environ.get("SCORE_ENTRY_MINUTES", "11"))
-POLL_INTERVAL = int(os.environ.get("SCORE_POLL_INTERVAL", "10"))
+POLL_INTERVAL = int(os.environ.get("SCORE_POLL_INTERVAL", "20"))
 MIN_PRICE = float(os.environ.get("SCORE_MIN_PRICE", "0.78"))
 MAX_PRICE = float(os.environ.get("SCORE_MAX_PRICE", "0.99"))
 MIN_SCORE = int(os.environ.get("SCORE_MIN_SCORE", "0"))
@@ -632,10 +632,10 @@ def run(live=False):
             if SCORE_VERSION == "v5":
                 window_sides = {}
                 for c, cfg2 in CRYPTOS.items():
-                    time.sleep(1)
+                    time.sleep(2)
                     mkt2, _ = find_current_market(cfg2["series"])
                     if mkt2:
-                        time.sleep(1)
+                        time.sleep(2)
                         s2, p2 = get_dominant_side(mkt2["ticker"])
                         if s2 and p2 and MIN_PRICE <= p2 <= MAX_PRICE:
                             window_sides[c] = s2
@@ -643,12 +643,12 @@ def run(live=False):
                 side_summary = {k: v for k, v in window_sides.items()}
                 P(f"  Window sides: {side_summary}")
 
-            # Check each crypto — 1.5s between each to avoid 429
+            # Check each crypto — 2s between each to avoid 429
             for crypto, cfg in CRYPTOS.items():
                 if crypto in placed_this_window:
                     continue
 
-                time.sleep(1.5)
+                time.sleep(2)
                 market, event = find_current_market(cfg["series"])
                 if not market:
                     continue
@@ -661,7 +661,7 @@ def run(live=False):
                     placed_this_window.add(crypto)
                     continue
 
-                time.sleep(1.5)
+                time.sleep(2)
                 side, price = get_dominant_side(ticker)
                 if not side or not price:
                     continue
