@@ -730,10 +730,10 @@ def run(live=False):
                 if price < MIN_PRICE or price > MAX_PRICE:
                     continue
 
-                # Lock direction after first trade — skip opposite side
-                if locked_side and side != locked_side:
-                    P(f"    {crypto}: SKIP (side {side.upper()} != locked {locked_side.upper()})")
-                    continue
+                # # Lock direction after first trade — skip opposite side (disabled for testing)
+                # if locked_side and side != locked_side:
+                #     P(f"    {crypto}: SKIP (side {side.upper()} != locked {locked_side.upper()})")
+                #     continue
 
                 # Re-fetch BTC from CoinGecko for fresh ret_1h before each trade
                 btc_url = f"{COINGECKO}/coins/bitcoin/market_chart?vs_currency=usd&days=1"
@@ -816,7 +816,7 @@ def run(live=False):
                         save_bets(bets)
                         total_new += 1
                         placed_this_window.add(crypto)
-                        locked_side = side  # Lock direction for rest of window
+                        # locked_side = side  # Lock direction disabled for testing
                         tp_str = f" | TP @ {TAKE_PROFIT_PRICE*100:.0f}c" if TAKE_PROFIT_PRICE > 0 else ""
                         P(f"    {crypto}: BET PLACED | {side.upper()} @ {price:.2f} | Score {score:+d}{tp_str}")
                     else:
