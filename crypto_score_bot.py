@@ -649,7 +649,7 @@ def run(live=False):
                 for c, snap in crypto_snapshots.items():
                     if c in CONSENSUS_EXCLUDE:
                         continue
-                    if snap["side"] and snap["price"] and MIN_PRICE <= snap["price"] <= MAX_PRICE:
+                    if snap["side"] and snap["price"] and snap["price"] >= 0.60:
                         window_sides[c] = snap["side"]
                 indicators["_window_sides"] = window_sides
                 P(f"  Window sides: {window_sides}")
