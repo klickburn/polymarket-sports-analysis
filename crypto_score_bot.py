@@ -419,8 +419,8 @@ def compute_score_v5(sym, side, price, indicators):
 
     # Filter 1: Stoch must be < 30
     stoch = ind["stoch"]
-    if stoch >= 30:
-        s -= 1; reasons.append(("Stoch High", f"{stoch:.1f} ≥30", "-1"))
+    if stoch >= 20:
+        s -= 1; reasons.append(("Stoch High", f"{stoch:.1f} ≥20", "-1"))
     else:
         reasons.append(("Stoch OK", f"{stoch:.1f}", "pass"))
 
