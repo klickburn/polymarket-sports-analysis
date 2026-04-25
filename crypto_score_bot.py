@@ -437,10 +437,63 @@ def compute_score_v5(sym, side, price, indicators):
     return s, reasons
 
 
+def compute_score_v6(sym, side, price, indicators):
+    """v6 — Calm Overbought. Complementary to v5.
+    When market is calm and price is extended, dominant side holds.
+    Filters:
+      1. Stoch > 85 (overbought — price near top of range)
+      2. Vol < 0.4 (calm market)
+      3. Price > 82c (strong conviction)
+    """
+    if sym not in indicators:
+        return None, []
+    ind = indicators[sym]
+    s = 0
+    reasons = []
+
+    stoch = ind["stoch"]
+    if stoch <= 85:
+        s -= 1; reasons.append(("Stoch Low", f"{stoch:.1f} ≤85", "-1"))
+    else:
+        reasons.append(("Stoch OB", f"{stoch:.1f}", "pass"))
+
+    vol = ind["vol_6h"]
+    if vol >= 0.4:
+        s -= 1; reasons.append(("Vol High", f"{vol:.2f} ≥0.4", "-1"))
+    else:
+        reasons.append(("Vol Calm", f"{vol:.2f}", "pass"))
+
+    if price <= 0.82:
+        s -= 1; reasons.append(("Price Low", f"{price:.2f} ≤82c", "-1"))
+    else:
+        reasons.append(("Price OK", f"{price:.2f}", "pass"))
+
+    return s, reasons
+
+
+def compute_score_v5v6(sym, side, price, indicators):
+    """v5+v6 — Run both strategies, trade if EITHER passes."""
+    s5, r5 = compute_score_v5(sym, side, price, indicators)
+    s6, r6 = compute_score_v6(sym, side, price, indicators)
+
+    if s5 is not None and s5 >= 0:
+        return s5, [("Strategy", "v5", "pass")] + r5
+    if s6 is not None and s6 >= 0:
+        return s6, [("Strategy", "v6", "pass")] + r6
+
+    # Both failed — return the one that was closer to passing
+    if s5 is not None and s6 is not None:
+        if s5 >= s6:
+            return s5, [("Strategy", "v5 (best)", "pass")] + r5
+        return s6, [("Strategy", "v6 (best)", "pass")] + r6
+    return s5 or s6, r5 or r6
+
+
 # ── Version dispatcher ─────────────────────────────────────────────────
 SCORE_VERSIONS = {"v1": compute_score_v1, "v2": compute_score_v2,
                   "v3": compute_score_v3, "v4": compute_score_v4,
-                  "v5": compute_score_v5}
+                  "v5": compute_score_v5, "v6": compute_score_v6,
+                  "v5v6": compute_score_v5v6}
 
 def compute_score(sym, side, price, indicators):
     fn = SCORE_VERSIONS.get(SCORE_VERSION, compute_score_v4)
@@ -644,7 +697,7 @@ def run(live=False):
                 crypto_snapshots[c] = {"market": mkt2, "event": ev2, "side": s2, "price": p2}
 
             # Build consensus from snapshots (excluding BNB/HYPE)
-            if SCORE_VERSION == "v5":
+            if SCORE_VERSION in ("v5", "v5v6"):
                 window_sides = {}
                 for c, snap in crypto_snapshots.items():
                     if c in CONSENSUS_EXCLUDE:
