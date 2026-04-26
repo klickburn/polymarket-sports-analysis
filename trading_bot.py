@@ -40,8 +40,8 @@ BANKROLL_PCT_T1 = 0.015      # 1.5% for T1 (Polymarket-specific, unconfirmed on 
 MIN_BET = 1.00               # Minimum bet size
 MAX_BET = 500.00             # Safety cap per bet
 
-LEAGUES = ["nba", "cbb", "nhl", "mlb", "epl", "dota2"]
-NEW_LEAGUES = {"nhl", "mlb", "epl", "dota2"}  # Leagues without backtest data — use reduced sizing
+LEAGUES = ["nba", "cbb", "nhl"]
+NEW_LEAGUES = {"nhl"}  # Leagues without backtest data — use reduced sizing
 BET_WINDOW_HOURS = 2  # Only bet within this many hours before game start (all leagues)
 # In T2 coin flips: these leagues bet UNDERDOG (Kalshi-validated), rest bet FAVORITE
 T2_UNDERDOG_LEAGUES = {"cbb", "nhl"}
@@ -312,14 +312,10 @@ def assign_tier(parsed, league):
 
     # Tier 2/6: Coin flips — both teams in reasonable range
     # T2 = bet favorite (NBA/NFL/MLB/ATP/WTA), T6 = bet underdog (CBB/NHL) — Kalshi-validated
-    if league in ("cbb", "nba", "nhl", "mlb", "atp", "wta") and is_coin_flip and min(price_a, price_b) >= 0.30:
+    if league in ("cbb", "nba", "nhl") and is_coin_flip and min(price_a, price_b) >= 0.30:
         if league in T2_UNDERDOG_LEAGUES:
             return 6, TIER_NAMES[6]  # Bet underdog
         return 2, TIER_NAMES[2]  # Bet favorite
-
-    # Tier 7: Dota2/EPL/MLB — bet whichever side is 60%+ (moneyline only)
-    if league in ("dota2", "epl", "mlb") and not parsed.get("is_draw") and fav_price >= 0.60:
-        return 7, TIER_NAMES[7]
 
     return 0, None
 
