@@ -80,16 +80,29 @@ def fetch_coingecko(url, retries=2):
                 return None
 
 
+def aggregate_to_15m(prices_with_ts):
+    """Aggregate ~5-min CoinGecko data into 15-min candle closes."""
+    if not prices_with_ts:
+        return []
+    # Group by 15-min bucket, take last price in each bucket as close
+    buckets = {}
+    for ts_ms, price in prices_with_ts:
+        bucket = (ts_ms // (15 * 60 * 1000)) * (15 * 60 * 1000)
+        buckets[bucket] = price  # last price in bucket = close
+    return [buckets[k] for k in sorted(buckets)]
+
+
 def fetch_crypto_prices():
-    """Fetch 24h price data from CoinGecko for all cryptos."""
+    """Fetch 24h price data from CoinGecko, aggregated to 15-min candles."""
     crypto_data = {}
     for sym, cid in COIN_IDS.items():
         url = f"{COINGECKO}/coins/{cid}/market_chart?vs_currency=usd&days=1"
         data = fetch_coingecko(url)
         if data and "prices" in data:
-            prices = [p[1] for p in sorted(data["prices"], key=lambda x: x[0])]
-            if len(prices) >= 24:
-                crypto_data[sym] = prices
+            raw = sorted(data["prices"], key=lambda x: x[0])
+            candles = aggregate_to_15m(raw)
+            if len(candles) >= 8:
+                crypto_data[sym] = candles
         time.sleep(0.4)
     return crypto_data
 
@@ -120,27 +133,29 @@ def calc_stoch(prices, period=14):
 
 
 def compute_indicators(crypto_data):
-    """Compute RSI, stochastic, momentum, volatility for all cryptos."""
+    """Compute RSI, stochastic, momentum, volatility on 15-min candles."""
     indicators = {}
     for sym in CRYPTOS:
         if sym not in crypto_data:
             continue
-        pr = crypto_data[sym]
+        pr = crypto_data[sym]  # 15-min candle closes
+        # 4 candles = 1h, 12 candles = 3h
+        n4 = min(4, len(pr) - 1)
         n12 = min(12, len(pr) - 1)
-        n36 = min(36, len(pr) - 1)
-        ret_1h = (pr[-1] - pr[-n12]) / pr[-n12] * 100 if pr[-n12] else 0
-        ret_3h = (pr[-1] - pr[-n36]) / pr[-n36] * 100 if pr[-n36] else 0
+        ret_1h = (pr[-1] - pr[-n4]) / pr[-n4] * 100 if pr[-n4] else 0
+        ret_3h = (pr[-1] - pr[-n12]) / pr[-n12] * 100 if pr[-n12] else 0
 
+        # vol_6h: avg absolute hourly returns over last 6h (6 hourly windows, each = 4 candles)
         hourly_rets = []
-        for i in range(12, min(72, len(pr)), 12):
+        for i in range(4, min(24, len(pr)), 4):
             idx = len(pr) - 1 - i
-            idx_prev = len(pr) - 1 - i - 12
+            idx_prev = len(pr) - 1 - i - 4
             if idx_prev >= 0 and pr[idx_prev]:
                 hourly_rets.append(abs((pr[idx] - pr[idx_prev]) / pr[idx_prev] * 100))
 
         vol_6h = sum(hourly_rets) / len(hourly_rets) if hourly_rets else 0.5
-        rsi = calc_rsi(pr[-min(100, len(pr)):], 14)
-        stoch = calc_stoch(pr[-min(70, len(pr)):], 14)
+        rsi = calc_rsi(pr[-min(60, len(pr)):], 14)     # RSI-14 on 15-min candles (~3.5h lookback)
+        stoch = calc_stoch(pr[-min(30, len(pr)):], 14)  # Stoch-14 on 15-min candles (~3.5h lookback)
         indicators[sym] = {
             "ret_1h": ret_1h, "ret_3h": ret_3h,
             "vol_6h": vol_6h, "rsi": rsi, "stoch": stoch,
@@ -835,10 +850,10 @@ def run(live=False):
                 btc_url = f"{COINGECKO}/coins/bitcoin/market_chart?vs_currency=usd&days=1"
                 btc_data = fetch_coingecko(btc_url)
                 if btc_data and "prices" in btc_data:
-                    btc_prices = [p[1] for p in sorted(btc_data["prices"], key=lambda x: x[0])]
-                    if len(btc_prices) >= 24:
-                        old_btc = indicators.get("BTC", {})
-                        fresh_ind = compute_indicators({"BTC": btc_prices})
+                    raw = sorted(btc_data["prices"], key=lambda x: x[0])
+                    btc_candles = aggregate_to_15m(raw)
+                    if len(btc_candles) >= 8:
+                        fresh_ind = compute_indicators({"BTC": btc_candles})
                         if "BTC" in fresh_ind:
                             indicators["BTC"] = fresh_ind["BTC"]
 
