@@ -249,9 +249,12 @@
     <h1>Kalshi Dashboard <span id="accountBadge" style="font-size:14px;background:rgba(99,102,241,0.2);color:#818cf8;padding:3px 10px;border-radius:6px;vertical-align:middle"></span></h1>
     <div class="subtitle">Sports + Crypto Automated Trading</div>
   </div>
-  <div style="text-align:right">
-    <div style="color:var(--muted);font-size:12px">Data refreshed</div>
-    <div style="font-size:14px;font-weight:600" id="lastUpdated"></div>
+  <div style="text-align:right;display:flex;align-items:center;gap:12px">
+    <button onclick="resetScoreData()" style="padding:6px 14px;border-radius:6px;border:1px solid var(--red);background:transparent;color:var(--red);font-size:12px;font-weight:600;cursor:pointer">Reset Data</button>
+    <div>
+      <div style="color:var(--muted);font-size:12px">Data refreshed</div>
+      <div style="font-size:14px;font-weight:600" id="lastUpdated"></div>
+    </div>
   </div>
 </div>
 
@@ -555,6 +558,14 @@ const stratColors = { S1: '#3b82f6', S2: '#eab308', S3: '#a855f7', S4: '#06b6d4'
 const cryptoColors = { BTC: '#f7931a', ETH: '#627eea', SOL: '#00ffa3', XRP: '#00a2e0', DOGE: '#c4b040', HYPE: '#00ced1', BNB: '#f3ba2f' };
 
 // ═══ Mode switching ═══
+function resetScoreData() {
+  if (!confirm('Clear all crypto score bot trade history? This cannot be undone.')) return;
+  fetch('/api/score-reset', { method: 'POST' })
+    .then(r => r.json())
+    .then(d => { alert(d.message || 'Done'); window._scoreLoaded = false; loadScoreData(); })
+    .catch(e => alert('Reset failed: ' + e));
+}
+
 function switchMode(mode) {
   document.getElementById('sectionOverview').classList.toggle('active', mode === 'overview');
   document.getElementById('sectionScore').classList.toggle('active', mode === 'score');
@@ -1224,7 +1235,7 @@ function renderScoreBot() {
   const skipResolved = d.skip_resolved || 0;
   const ver = (d.strategy_version || 'v4').toUpperCase();
   const kpis = [
-    { label: 'Strategy', value: ver, cls: 'blue', sub: ver === 'V4' ? '3 Hard Filters' : ver === 'V3' ? 'Optimizer R2' : ver === 'V2' ? 'Safe Mode' : 'Original' },
+    { label: 'Strategy', value: ver, cls: 'blue', sub: ver === 'V7' ? 'Signal Score 3+' : ver === 'V5' ? 'Stoch+Consensus' : ver === 'V4' ? '3 Hard Filters' : ver === 'V3' ? 'Optimizer R2' : ver === 'V2' ? 'Safe Mode' : 'Original' },
     { label: 'Score Bot P&L', value: `$${d.total_pnl >= 0 ? '+' : ''}${d.total_pnl.toFixed(2)}`, cls: d.total_pnl >= 0 ? 'green' : 'red', sub: `${d.resolved} resolved` },
     { label: 'Win Rate', value: d.resolved > 0 ? `${wr}%` : '--', cls: wr >= 50 ? 'green' : 'red', sub: `${d.wins}W - ${d.losses}L` },
     { label: 'Losses Saved', value: `$${lossesSaved.toFixed(2)}`, cls: 'green', sub: `${skipWouldLost} bad trades filtered` },

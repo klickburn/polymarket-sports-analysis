@@ -534,6 +534,22 @@ def get_score_data():
     return JSONResponse(_build_score_report(bets, status))
 
 
+@app.post("/api/score-reset")
+def reset_score_data():
+    """Clear all score bot trade history."""
+    try:
+        with open(SCORE_BETS_FILE, "w") as f:
+            json.dump([], f)
+        with open(SCORE_STATUS_FILE, "w") as f:
+            json.dump({}, f)
+        with _score_lock:
+            _score_cache["result"] = None
+        P("  [SCORE] Trade history reset")
+        return JSONResponse({"status": "ok", "message": "Trade history cleared"})
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+
+
 # ── Background threads ─────────────────────────────────────────────────
 def bot_thread():
     while True:
