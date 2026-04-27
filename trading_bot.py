@@ -1,14 +1,13 @@
 """
 Polymarket Trading Bot — Hybrid 5-Tier Strategy (Kalshi-validated)
 =======================================================
-Scans NBA, CBB, EPL, NHL, MLB, ATP, WTA markets.
+Scans NBA, CBB, NHL markets.
 
 Strategy (validated against 1500+ Kalshi games):
   T1: Team B fav @ 75-90%             → 1.5% sizing (Polymarket-specific edge, unconfirmed on Kalshi)
-  T2: Coin flip (fav 40-60%)          → Bet FAVORITE for NBA/NFL/MLB/ATP/WTA, UNDERDOG for CBB/NHL
+  T2: Coin flip (fav 40-60%)          → Bet FAVORITE for NBA, UNDERDOG for CBB/NHL
   T3: CBB Team B underdog (fav 50-55%) → 65.8% WR, +34.9% ROI (CBB) — confirmed on Kalshi
   T4: NBA exact 50/50 (fav <50.6%)    → 61.3% WR, +22.8% ROI (NBA) — confirmed on Kalshi
-  T5: EPL Draw (draw priced <35%)     → 33.3% WR, +48.5% ROI (EPL)
 
 Sizing: 3% proven, 2% new leagues, 1.5% T1 (reduced confidence)
 Uses Polymarket US API (api.polymarket.us / gateway.polymarket.us)
@@ -49,12 +48,10 @@ SCAN_INTERVAL = 300           # 5 minutes between scans in monitor mode
 
 TIER_NAMES = {
     1: "T1: B fav 75-90%",
-    5: "T5: EPL Draw 24-35%",
     2: "T2: Coin flip fav",
     6: "T2: Coin flip dog",
     3: "T3: CBB B dog 50-55%",
     4: "T4: NBA 50/50",
-    7: "T7: 60%+ fav",
 }
 
 LOG_FILE = "trading_bot.log"

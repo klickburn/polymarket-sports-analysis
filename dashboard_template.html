@@ -155,7 +155,6 @@
   .tag.t6 { background: rgba(234,179,8,0.15); color: #eab308; }
   .tag.t3 { background: rgba(168,85,247,0.15); color: var(--purple); }
   .tag.t4 { background: rgba(245,158,11,0.15); color: var(--orange); }
-  .tag.t5 { background: rgba(6,182,212,0.15); color: var(--cyan); }
   .tag.bot { background: rgba(168,85,247,0.15); color: var(--purple); }
 
   .pnl-pos { color: var(--green); font-weight: 600; }
@@ -459,11 +458,11 @@ if (BOT_BETS.length === 0) {
     } else { tierStats[t].open++; }
   });
 
-  const tierNames = { 1: 'B Fav 75-90%', 2: 'Coin Flip Fav', 6: 'Coin Flip Dog', 3: 'CBB B Dog', 4: 'NBA 50/50', 5: 'EPL Draw' };
-  const tierWrs = { 1: '87.6%', 2: '60.6%', 6: '55%', 3: '65.8%', 4: '61.3%', 5: '33.3%' };
+  const tierNames = { 1: 'B Fav 75-90%', 2: 'Coin Flip Fav', 6: 'Coin Flip Dog', 3: 'CBB B Dog', 4: 'NBA 50/50' };
+  const tierWrs = { 1: '87.6%', 2: '60.6%', 6: '55%', 3: '65.8%', 4: '61.3%' };
 
   let html = '<div class="card bot-card" style="margin-bottom:20px"><h3>Strategy Performance (by Tier)</h3><div class="scroll-table"><table><thead><tr><th>Tier</th><th>Strategy</th><th>Bets</th><th>W-L</th><th>Win Rate</th><th>P&L</th><th>Open</th><th>Backtest</th></tr></thead><tbody>';
-  for (const t of [1, 2, 6, 3, 4, 5]) {
+  for (const t of [1, 2, 6, 3, 4]) {
     const s = tierStats[t] || { bets: 0, wins: 0, losses: 0, pnl: 0, open: 0 };
     if (s.bets === 0) continue;
     const wr = (s.wins + s.losses) > 0 ? (s.wins / (s.wins + s.losses) * 100).toFixed(1) + '%' : '--';
@@ -529,7 +528,7 @@ if (BOT_BETS.length === 0) {
 
   // Render bot charts
   if (botCumData.length > 1) {
-    const tierColorMap = { 1: '#22c55e', 2: '#3b82f6', 6: '#eab308', 3: '#a855f7', 4: '#f59e0b', 5: '#06b6d4', 0: '#8b8fa3' };
+    const tierColorMap = { 1: '#22c55e', 2: '#3b82f6', 6: '#eab308', 3: '#a855f7', 4: '#f59e0b', 0: '#8b8fa3' };
     new Chart(document.getElementById('botPnlChart'), {
       type: 'line',
       data: { labels: botCumData.map(d => d.x), datasets: [{ data: botCumData.map(d => d.y), borderColor: '#a855f7', backgroundColor: 'rgba(168,85,247,0.1)', fill: true, tension: 0.3, pointRadius: 3, borderWidth: 2, pointBackgroundColor: botCumData.map(d => tierColorMap[d.tier] || '#a855f7') }] },
@@ -537,7 +536,7 @@ if (BOT_BETS.length === 0) {
     });
     new Chart(document.getElementById('botTierChart'), {
       type: 'bar',
-      data: { labels: [1,2,6,3,4,5].filter(t => tierStats[t]).map(t => `T${t}`), datasets: [{ data: [1,2,6,3,4,5].filter(t => tierStats[t]).map(t => parseFloat((tierStats[t].pnl || 0).toFixed(2))), backgroundColor: [1,2,6,3,4,5].filter(t => tierStats[t]).map(t => tierStats[t].pnl >= 0 ? 'rgba(34,197,94,0.7)' : 'rgba(239,68,68,0.7)'), borderRadius: 4 }] },
+      data: { labels: [1,2,6,3,4].filter(t => tierStats[t]).map(t => `T${t}`), datasets: [{ data: [1,2,6,3,4].filter(t => tierStats[t]).map(t => parseFloat((tierStats[t].pnl || 0).toFixed(2))), backgroundColor: [1,2,6,3,4].filter(t => tierStats[t]).map(t => tierStats[t].pnl >= 0 ? 'rgba(34,197,94,0.7)' : 'rgba(239,68,68,0.7)'), borderRadius: 4 }] },
       options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { color: '#8b8fa3' } }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8b8fa3', callback: v => '$' + v } } } }
     });
   }
