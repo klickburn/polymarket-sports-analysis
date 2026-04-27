@@ -731,14 +731,15 @@ def run(live=False):
             mins_left = minutes_until_strike()
             mins_in = 15 - mins_left
 
-            # New window? Reset
+            # New window? Reset and re-read bets from disk (respects external resets)
             if window_end != last_window_end:
                 last_window_end = window_end
                 placed_this_window = set()
                 locked_side = None  # Lock direction after first trade
                 checked_positions = False
                 fetched_indicators = False
-                P(f"\n  -- Window {window_start.strftime('%H:%M')}-{window_end.strftime('%H:%M')} UTC --")
+                bets = load_bets()
+                P(f"\n  -- Window {window_start.strftime('%H:%M')}-{window_end.strftime('%H:%M')} UTC ({len(bets)} bets on file) --")
 
             # Too early — sleep until prefetch time
             if mins_in < PREFETCH_MINUTE:
