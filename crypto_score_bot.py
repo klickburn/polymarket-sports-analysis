@@ -490,6 +490,83 @@ def compute_score_v6(sym, side, price, indicators):
     return s, reasons
 
 
+def compute_score_v7(sym, side, price, indicators):
+    """v7 — Signal Score: mean reversion with confirmation.
+    6 independent checks, max 8 points. Need 3+ to trade.
+    Signals:
+      RSI Aligned (+2):      YES+RSI<50 or NO+RSI>50
+      RSI Strong (+1 bonus): YES+RSI<35 or NO+RSI>65
+      1h Mean Rev (+1):      YES+ret_1h<0 or NO+ret_1h>0
+      Strong Mean Rev (+1):  same but |ret_1h|>0.3%
+      BTC Against Side (+1): YES+btc_ret_1h<0 or NO+btc_ret_1h>0
+      High Vol (+1 bonus):   vol_6h >= 0.3
+      Consensus (+1):        pack_agreement = 1.0
+      Stoch Oversold (+1):   stoch < 30
+    """
+    if sym not in indicators:
+        return None, []
+    ind = indicators[sym]
+    pts = 0
+    reasons = []
+
+    rsi = ind.get("rsi")
+    ret_1h = ind.get("ret_1h", 0)
+    btc_ret_1h = ind.get("btc_ret_1h", 0)
+    vol = ind.get("vol_6h", 0)
+    stoch = ind.get("stoch", 50)
+    pack = ind.get("pack_agreement", 0)
+
+    # 1. RSI Aligned (+2)
+    if (side == "yes" and rsi is not None and rsi < 50) or (side == "no" and rsi is not None and rsi > 50):
+        pts += 2; reasons.append(("RSI Aligned", f"{side.upper()} RSI={rsi:.1f}", "+2"))
+    else:
+        reasons.append(("RSI Misalign", f"{side.upper()} RSI={rsi:.1f}" if rsi else "no RSI", "0"))
+
+    # 2. RSI Strong (+1 bonus) — only if aligned
+    if rsi is not None:
+        if (side == "yes" and rsi < 35) or (side == "no" and rsi > 65):
+            pts += 1; reasons.append(("RSI Strong", f"{rsi:.1f}", "+1"))
+
+    # 3. 1h Mean Reversion (+1)
+    if (side == "yes" and ret_1h < 0) or (side == "no" and ret_1h > 0):
+        pts += 1; reasons.append(("1h MeanRev", f"ret={ret_1h:+.2f}%", "+1"))
+    else:
+        reasons.append(("1h NoRev", f"ret={ret_1h:+.2f}%", "0"))
+
+    # 4. Strong Mean Rev (+1 bonus) — only if mean rev triggered and |ret_1h| > 0.3%
+    if ((side == "yes" and ret_1h < 0) or (side == "no" and ret_1h > 0)) and abs(ret_1h) > 0.3:
+        pts += 1; reasons.append(("Strong MR", f"|{ret_1h:+.2f}%|>0.3%", "+1"))
+
+    # 5. BTC Against Side (+1)
+    if (side == "yes" and btc_ret_1h < 0) or (side == "no" and btc_ret_1h > 0):
+        pts += 1; reasons.append(("BTC Against", f"btc={btc_ret_1h:+.2f}%", "+1"))
+    else:
+        reasons.append(("BTC Same", f"btc={btc_ret_1h:+.2f}%", "0"))
+
+    # 6. High Volatility (+1 bonus)
+    if vol >= 0.3:
+        pts += 1; reasons.append(("High Vol", f"{vol:.2f}≥0.3", "+1"))
+
+    # 7. Consensus (+1)
+    window_sides = indicators.get("_window_sides", {})
+    if window_sides:
+        sides_list = [s for s in window_sides.values() if s]
+        if sides_list and all(s == sides_list[0] for s in sides_list):
+            pts += 1; reasons.append(("Consensus", f"all {sides_list[0].upper()}", "+1"))
+        else:
+            reasons.append(("No Consensus", f"{window_sides}", "0"))
+
+    # 8. Stoch Oversold (+1)
+    if stoch < 30:
+        pts += 1; reasons.append(("Stoch OS", f"{stoch:.1f}<30", "+1"))
+    else:
+        reasons.append(("Stoch High", f"{stoch:.1f}", "0"))
+
+    # Need 3+ to trade — return pts-3 so >=0 means GO
+    reasons.insert(0, ("Signal Score", f"{pts}/8", f"{pts}"))
+    return pts - 3, reasons
+
+
 def compute_score_v5v6(sym, side, price, indicators):
     """v5+v6 — Run both strategies, trade if EITHER passes."""
     s5, r5 = compute_score_v5(sym, side, price, indicators)
@@ -512,7 +589,7 @@ def compute_score_v5v6(sym, side, price, indicators):
 SCORE_VERSIONS = {"v1": compute_score_v1, "v2": compute_score_v2,
                   "v3": compute_score_v3, "v4": compute_score_v4,
                   "v5": compute_score_v5, "v6": compute_score_v6,
-                  "v5v6": compute_score_v5v6}
+                  "v5v6": compute_score_v5v6, "v7": compute_score_v7}
 
 def compute_score(sym, side, price, indicators):
     fn = SCORE_VERSIONS.get(SCORE_VERSION, compute_score_v4)
