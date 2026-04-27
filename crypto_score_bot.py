@@ -406,10 +406,12 @@ def compute_score_v4(sym, side, price, indicators):
 
 
 def compute_score_v5(sym, side, price, indicators):
-    """v5 — Stoch + consensus filter. Score=0→GO, <0→SKIP.
+    """v5 — Stoch + consensus + RSI alignment + vol filter. Score=0→GO, <0→SKIP.
     Filters:
-      1. Stoch < 30 (oversold confirmation)
+      1. Stoch < 20 (oversold confirmation)
       2. All cryptos in window agree on direction (same side)
+      3. RSI alignment: YES→RSI<50, NO→RSI>50
+      4. vol_6h >= 0.2
     """
     if sym not in indicators:
         return None, []
@@ -417,7 +419,7 @@ def compute_score_v5(sym, side, price, indicators):
     s = 0
     reasons = []
 
-    # Filter 1: Stoch must be < 30
+    # Filter 1: Stoch must be < 20
     stoch = ind["stoch"]
     if stoch >= 20:
         s -= 1; reasons.append(("Stoch High", f"{stoch:.1f} ≥20", "-1"))
@@ -433,6 +435,23 @@ def compute_score_v5(sym, side, price, indicators):
             s -= 1; reasons.append(("No Consensus", f"{window_sides}", "-1"))
         elif sides:
             reasons.append(("Consensus", f"all {sides[0].upper()}", "pass"))
+
+    # Filter 3: RSI alignment — YES needs RSI<50, NO needs RSI>50
+    rsi = ind.get("rsi")
+    if rsi is not None:
+        if side == "yes" and rsi >= 50:
+            s -= 1; reasons.append(("RSI Misalign", f"YES but RSI={rsi:.1f}≥50", "-1"))
+        elif side == "no" and rsi <= 50:
+            s -= 1; reasons.append(("RSI Misalign", f"NO but RSI={rsi:.1f}≤50", "-1"))
+        else:
+            reasons.append(("RSI Aligned", f"{side.upper()} RSI={rsi:.1f}", "pass"))
+
+    # Filter 4: vol_6h must be >= 0.2
+    vol = ind.get("vol_6h", 0)
+    if vol < 0.2:
+        s -= 1; reasons.append(("Vol Low", f"{vol:.2f} <0.2", "-1"))
+    else:
+        reasons.append(("Vol OK", f"{vol:.2f}", "pass"))
 
     return s, reasons
 
