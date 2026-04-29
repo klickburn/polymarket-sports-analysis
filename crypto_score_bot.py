@@ -25,7 +25,7 @@ import urllib.request
 from datetime import datetime, timezone, timedelta
 
 from crypto_15m_bot import (
-    auth_get, auth_post, public_get,
+    auth_get, auth_post, auth_delete, public_get,
     get_balance, get_existing_positions, get_open_orders,
     place_order, get_current_window, minutes_until_strike,
     find_current_market, get_dominant_side, P,
@@ -910,18 +910,80 @@ def run(live=False):
                 bet_record["action"] = "trade"
 
                 if live:
-                    result = place_order(ticker, side, price, BET_AMOUNT, count=CONTRACT_COUNT)
-                    if result:
+                    MAX_RETRIES = 2
+                    order_filled = False
+                    current_price = price
+
+                    for attempt in range(1, MAX_RETRIES + 1):
+                        result = place_order(ticker, side, current_price, BET_AMOUNT, count=CONTRACT_COUNT)
+                        if not result:
+                            P(f"    {crypto}: Order failed (attempt {attempt})")
+                            break
+
                         order = result.get("order", {})
-                        bet_record["order_id"] = order.get("order_id", "")
-                        bet_record["status"] = order.get("status", "")
-                        avg_p = order.get("avg_price", None)
-                        # Kalshi returns avg_price in cents — normalize to dollars
-                        if avg_p is not None and avg_p > 1:
-                            avg_p = avg_p / 100
-                        bet_record["fill_price"] = avg_p if avg_p else price
+                        order_id = order.get("order_id", "")
+                        order_status = order.get("status", "")
+
+                        # If immediately filled, we're done
+                        if order_status == "executed":
+                            bet_record["order_id"] = order_id
+                            bet_record["status"] = order_status
+                            avg_p = order.get("avg_price", None)
+                            if avg_p is not None and avg_p > 1:
+                                avg_p = avg_p / 100
+                            bet_record["fill_price"] = avg_p if avg_p else current_price
+                            order_filled = True
+                            break
+
+                        # Order is resting — wait and check
+                        P(f"    {crypto}: Order resting, waiting 20s... (attempt {attempt})")
+                        time.sleep(20)
+
+                        # Check if it filled while we waited
+                        try:
+                            check = auth_get(f"/portfolio/orders/{order_id}")
+                            check_order = check.get("order", check)
+                            check_status = check_order.get("status", "")
+                            remaining = check_order.get("remaining_count", 0)
+                            total_count = check_order.get("count", CONTRACT_COUNT)
+                            filled_count = total_count - remaining
+
+                            if filled_count > 0:
+                                # Partially or fully filled
+                                bet_record["order_id"] = order_id
+                                bet_record["status"] = check_status
+                                avg_p = check_order.get("avg_price", None)
+                                if avg_p is not None and avg_p > 1:
+                                    avg_p = avg_p / 100
+                                bet_record["fill_price"] = avg_p if avg_p else current_price
+                                bet_record["filled_count"] = filled_count
+                                order_filled = True
+                                P(f"    {crypto}: Filled {filled_count}/{total_count} contracts")
+                                break
+
+                            # Still resting with 0 fills — cancel and retry
+                            P(f"    {crypto}: Unfilled, canceling order...")
+                            try:
+                                auth_delete(f"/portfolio/orders/{order_id}")
+                            except Exception as ce:
+                                P(f"    {crypto}: Cancel error: {ce}")
+
+                            if attempt < MAX_RETRIES:
+                                # Re-fetch current market price
+                                fresh_side, fresh_price = get_dominant_side(ticker)
+                                if fresh_side and fresh_price:
+                                    current_price = fresh_price
+                                    P(f"    {crypto}: Retrying at fresh price {current_price:.2f}")
+                                else:
+                                    P(f"    {crypto}: Could not get fresh price, giving up")
+                                    break
+                        except Exception as e:
+                            P(f"    {crypto}: Order check error: {e}")
+                            break
+
+                    if order_filled:
                         # Place take-profit sell order
-                        if TAKE_PROFIT_PRICE > 0 and price < TAKE_PROFIT_PRICE:
+                        if TAKE_PROFIT_PRICE > 0 and current_price < TAKE_PROFIT_PRICE:
                             time.sleep(1)
                             tp_result = place_take_profit(ticker, side, CONTRACT_COUNT)
                             if tp_result:
@@ -932,11 +994,15 @@ def run(live=False):
                         save_bets(bets)
                         total_new += 1
                         placed_this_window.add(crypto)
-                        # locked_side = side  # Lock direction disabled for testing
                         tp_str = f" | TP @ {TAKE_PROFIT_PRICE*100:.0f}c" if TAKE_PROFIT_PRICE > 0 else ""
-                        P(f"    {crypto}: BET PLACED | {side.upper()} @ {price:.2f} | Score {score:+d}{tp_str}")
+                        P(f"    {crypto}: BET PLACED | {side.upper()} @ {bet_record.get('fill_price', current_price):.2f} | Score {score:+d}{tp_str}")
                     else:
-                        P(f"    {crypto}: Order failed")
+                        bet_record["action"] = "unfilled"
+                        bet_record["status"] = "canceled"
+                        bets.append(bet_record)
+                        save_bets(bets)
+                        placed_this_window.add(crypto)
+                        P(f"    {crypto}: Order unfilled after {MAX_RETRIES} attempts")
                 else:
                     P(f"    {crypto}: [DRY RUN] {side.upper()} @ {price:.2f} | Score {score:+d}")
                     bet_record["status"] = "dry_run"

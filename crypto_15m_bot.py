@@ -198,6 +198,15 @@ def auth_post(path, data=None):
     return r.json()
 
 
+def auth_delete(path):
+    url = f"{API_BASE}{path}"
+    full_path = f"/trade-api/v2{path}"
+    headers = auth_headers("DELETE", full_path)
+    r = session.delete(url, headers=headers, timeout=30)
+    r.raise_for_status()
+    return r.json()
+
+
 def public_get(path, params=None):
     url = f"{API_BASE}{path}"
     r = session.get(url, params=params, timeout=30)
