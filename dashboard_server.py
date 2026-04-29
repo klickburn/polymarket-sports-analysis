@@ -430,7 +430,32 @@ def _resolve_score_bets():
 
     changed = False
 
-    # Fix: normalize fill_price from cents to dollars if needed, recalculate P&L
+    # Fix: fetch actual fill prices from Kalshi for old resolved trades missing fill_price
+    for bet in bets:
+        if bet.get("action") == "trade" and bet.get("result") in ("win", "loss") and not bet.get("fill_price") and bet.get("order_id"):
+            try:
+                order_resp = auth_get(f"/portfolio/orders/{bet['order_id']}")
+                order_data = order_resp.get("order", {})
+                avg_p = order_data.get("avg_price", 0)
+                if avg_p > 0:
+                    bet["fill_price"] = avg_p / 100 if avg_p > 1 else avg_p
+                remaining = order_data.get("remaining_count", 0)
+                total_count = order_data.get("count", 0)
+                filled_count = total_count - remaining
+                if filled_count > 0:
+                    bet["filled_count"] = filled_count
+                # Check if order was never actually filled
+                order_status = order_data.get("status", "")
+                if order_status in ("canceled", "expired") and filled_count == 0:
+                    bet["result"] = "unfilled"
+                    if "pnl" in bet:
+                        del bet["pnl"]
+                changed = True
+                time.sleep(0.3)
+            except Exception:
+                pass
+
+    # Normalize fill_price from cents to dollars if needed, recalculate P&L
     for bet in bets:
         fp = bet.get("fill_price")
         if fp is not None and fp > 1:
