@@ -1346,7 +1346,8 @@ document.getElementById('overviewKpis').innerHTML = overviewKpis.map(k =>
 
 // Account Summary card — styled stat rows
 {
-  const estimatedDeposit = balance + portfolioValue - totalPnl + totalFees;
+  const ACTUAL_DEPOSIT = 900;  // Hardcoded — actual total deposited to Kalshi
+  const estimatedDeposit = ACTUAL_DEPOSIT;
   const rows = [
     { label: 'Cash Balance', value: `$${balance.toFixed(2)}`, color: '' },
     { label: 'Portfolio Value', value: `$${portfolioValue.toFixed(2)}`, color: '' },
