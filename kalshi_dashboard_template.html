@@ -377,15 +377,26 @@
       <div id="overviewAccountSummary"></div>
     </div>
     <div class="card">
-      <h3>Trading Activity</h3>
-      <div id="overviewTradingActivity"></div>
+      <h3>P&L Breakdown</h3>
+      <div style="display:flex;gap:20px;align-items:center">
+        <div style="width:45%"><canvas id="overviewPnlDoughnut"></canvas></div>
+        <div id="overviewPnlStats" style="flex:1"></div>
+      </div>
     </div>
   </div>
 
   <hr class="section-divider">
-  <div class="section-header">
-    <h2>All Fills History</h2>
+  <div class="section-header"><h2>Strategy Performance</h2><span class="badge" style="background:rgba(6,182,212,0.2);color:var(--cyan)">All Strategies</span></div>
+  <div id="overviewStratCards" class="analytics-signal-grid"></div>
+
+  <hr class="section-divider">
+  <div class="section-header"><h2>Cumulative P&L</h2></div>
+  <div class="card">
+    <div class="chart-container tall"><canvas id="overviewCumPnlChart"></canvas></div>
   </div>
+
+  <hr class="section-divider">
+  <div class="section-header"><h2>All Fills History</h2><span class="badge" style="background:rgba(59,130,246,0.2);color:var(--blue)">Full Log</span></div>
   <div class="card" style="margin-bottom:24px">
     <div class="scroll-table">
       <table>
@@ -540,32 +551,25 @@
 <div class="mode-section active" id="sectionScore">
   <div class="kpi-row" id="scoreKpis"></div>
 
+  <!-- Hero charts -->
   <div class="grid-2">
     <div class="card">
       <h3>Cumulative P&L</h3>
       <div class="chart-container tall"><canvas id="scorePnlChart"></canvas></div>
     </div>
     <div class="card">
-      <h3>Score Distribution (Trades vs Skips)</h3>
-      <div class="chart-container tall"><canvas id="scoreDistChart"></canvas></div>
+      <h3>Win Rate & P&L by Score</h3>
+      <div class="chart-container tall"><canvas id="scoreWinRateChart"></canvas></div>
     </div>
   </div>
 
   <hr class="section-divider">
-  <div class="section-header">
-    <h2>Live Indicators</h2>
-    <span class="badge badge-strat">CoinGecko</span>
-  </div>
-  <div class="card" style="margin-bottom:24px">
-    <div id="scoreIndicatorsContent"></div>
-  </div>
+  <div class="section-header"><h2>Live Indicators</h2><span class="badge" style="background:rgba(168,85,247,0.2);color:var(--purple)">CoinGecko</span></div>
+  <div id="scoreIndicatorsContent"></div>
 
   <hr class="section-divider">
-  <div class="section-header">
-    <h2>Performance by Crypto</h2>
-    <span class="badge badge-crypto">7 Assets</span>
-  </div>
-  <div id="scoreCryptoContent"></div>
+  <div class="section-header"><h2>Crypto Performance</h2><span class="badge badge-crypto">Per Asset</span></div>
+  <div id="scoreCryptoCards" class="analytics-signal-grid"></div>
 
   <div class="grid-2" style="margin-top:20px">
     <div class="card">
@@ -573,8 +577,8 @@
       <div class="chart-container med"><canvas id="scoreCryptoPnlChart"></canvas></div>
     </div>
     <div class="card">
-      <h3>Win Rate by Signal Score</h3>
-      <div class="chart-container med"><canvas id="scoreWinRateChart"></canvas></div>
+      <h3>Score Distribution</h3>
+      <div class="chart-container med"><canvas id="scoreDistChart"></canvas></div>
     </div>
   </div>
 
@@ -590,10 +594,23 @@
   </div>
 
   <hr class="section-divider">
-  <div class="section-header">
-    <h2>Daily P&L</h2>
-    <span class="badge badge-bot">Per Day</span>
+  <div class="section-header"><h2>Skip Analysis</h2><span class="badge" style="background:rgba(234,179,8,0.2);color:var(--yellow)">Filter Value</span></div>
+  <div class="grid-2">
+    <div class="card">
+      <h3>Trade vs Skip Outcomes</h3>
+      <div style="display:flex;gap:20px;align-items:center">
+        <div style="width:45%"><canvas id="scoreSkipDoughnut"></canvas></div>
+        <div id="scoreSkipStats" style="flex:1"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Skip Accuracy Over Time</h3>
+      <div id="scoreSkipBreakdown"></div>
+    </div>
   </div>
+
+  <hr class="section-divider">
+  <div class="section-header"><h2>Daily P&L</h2><span class="badge" style="background:rgba(168,85,247,0.2);color:var(--purple)">Per Day</span></div>
   <div class="grid-2">
     <div class="card">
       <h3>Daily P&L</h3>
@@ -607,16 +624,16 @@
   <div id="scoreDailyContent" style="margin-top:20px"></div>
 
   <hr class="section-divider">
-  <div class="section-header"><h2>Recent Decisions</h2></div>
+  <div class="section-header"><h2>Recent Decisions</h2><span class="badge" style="background:rgba(59,130,246,0.2);color:var(--blue)">Trade Log</span></div>
   <div class="card" style="margin-bottom:24px">
-    <div class="tabs" id="scoreTabs">
-      <div class="tab active" onclick="filterScoreTable('all',this)">All</div>
-      <div class="tab" onclick="filterScoreTable('trades',this)">Trades</div>
-      <div class="tab" onclick="filterScoreTable('skips',this)">Skips</div>
-      <div class="tab" onclick="filterScoreTable('wins',this)">Wins</div>
-      <div class="tab" onclick="filterScoreTable('losses',this)">Losses</div>
+    <div class="analytics-indicator-tabs" id="scoreTabs">
+      <button class="a-tab active" onclick="filterScoreTable('all',this)">All</button>
+      <button class="a-tab" onclick="filterScoreTable('trades',this)">Trades</button>
+      <button class="a-tab" onclick="filterScoreTable('skips',this)">Skips</button>
+      <button class="a-tab" onclick="filterScoreTable('wins',this)">Wins</button>
+      <button class="a-tab" onclick="filterScoreTable('losses',this)">Losses</button>
     </div>
-    <div class="scroll-table">
+    <div class="scroll-table" style="margin-top:12px">
       <table>
         <thead><tr><th>Date</th><th>Ver</th><th>Crypto</th><th>Side</th><th>Price</th><th>Score</th><th>Reasons</th><th>Action</th><th>P&L</th><th>Status</th></tr></thead>
         <tbody id="scoreBetsBody"></tbody>
@@ -1313,68 +1330,128 @@ const openRisk = allOpen.reduce((s,b) => s + (b.bet_amount||0), 0);
 const totalMaker = (SR.maker_fills || 0) + (CR.maker_fills || 0);
 const totalTaker = (SR.taker_fills || 0) + (CR.taker_fills || 0);
 
-// KPIs
+// KPIs — enhanced
+const roi = totalWagered > 0 ? (totalPnl / totalWagered * 100).toFixed(1) : '0';
 const overviewKpis = [
-  { label: 'Account Balance', value: balance > 0 ? `$${balance.toFixed(2)}` : '--', cls: 'cyan', sub: portfolioValue > 0 ? `$${portfolioValue.toFixed(2)} portfolio` : '' },
-  { label: 'Total P&L', value: `$${totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}`, cls: totalPnl >= 0 ? 'green' : 'red', sub: `fees: $${totalFees.toFixed(2)}` },
-  { label: 'Win Rate', value: `${totalWinRate}%`, cls: parseFloat(totalWinRate) >= 50 ? 'green' : 'red', sub: `${allWins.length}W - ${allLosses.length}L` },
+  { label: 'Account Value', value: (balance + portfolioValue) > 0 ? `$${(balance + portfolioValue).toFixed(2)}` : '--', cls: 'cyan', sub: `$${balance.toFixed(2)} cash + $${portfolioValue.toFixed(2)} portfolio` },
+  { label: 'Total P&L', value: `$${totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}`, cls: totalPnl >= 0 ? 'green' : 'red', sub: `ROI: ${roi}%` },
+  { label: 'Win Rate', value: `${totalWinRate}%`, cls: parseFloat(totalWinRate) >= 55 ? 'green' : parseFloat(totalWinRate) >= 45 ? 'orange' : 'red', sub: `${allWins.length}W - ${allLosses.length}L` },
   { label: 'Total Wagered', value: `$${totalWagered.toFixed(2)}`, cls: 'purple', sub: `${allBets.length} total bets` },
   { label: 'Open Positions', value: allOpen.length, cls: 'orange', sub: `$${openRisk.toFixed(2)} at risk` },
-  { label: 'Total Fills', value: totalMaker + totalTaker, cls: 'cyan', sub: `${totalMaker} maker / ${totalTaker} taker` },
+  { label: 'Fees Paid', value: `-$${totalFees.toFixed(2)}`, cls: 'red', sub: `${totalMaker} maker / ${totalTaker} taker` },
 ];
 document.getElementById('overviewKpis').innerHTML = overviewKpis.map(k =>
   `<div class="kpi"><div class="label">${k.label}</div><div class="value ${k.cls}">${k.value}</div><div class="sub">${k.sub}</div></div>`
 ).join('');
 
-// Account Summary card
+// Account Summary card — styled stat rows
 {
   const estimatedDeposit = balance + portfolioValue - totalPnl + totalFees;
-  let html = '<div style="display:flex;flex-direction:column;gap:12px">';
-  html += `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)"><span style="color:var(--muted)">Cash Balance</span><span style="font-weight:600">$${balance.toFixed(2)}</span></div>`;
-  html += `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)"><span style="color:var(--muted)">Portfolio Value</span><span style="font-weight:600">$${portfolioValue.toFixed(2)}</span></div>`;
-  html += `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)"><span style="color:var(--muted)">Total Account Value</span><span style="font-weight:700;color:var(--cyan)">$${(balance + portfolioValue).toFixed(2)}</span></div>`;
-  html += `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)"><span style="color:var(--muted)">Est. Total Deposited</span><span style="font-weight:600">$${estimatedDeposit > 0 ? estimatedDeposit.toFixed(2) : '--'}</span></div>`;
-  html += `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)"><span style="color:var(--muted)">Net P&L (all time)</span><span style="font-weight:700;color:${totalPnl >= 0 ? 'var(--green)' : 'var(--red)'}">$${totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}</span></div>`;
-  html += `<div style="display:flex;justify-content:space-between;padding:8px 0"><span style="color:var(--muted)">Total Fees Paid</span><span style="font-weight:600;color:var(--red)">-$${totalFees.toFixed(2)}</span></div>`;
-  html += '</div>';
-  document.getElementById('overviewAccountSummary').innerHTML = html;
+  const rows = [
+    { label: 'Cash Balance', value: `$${balance.toFixed(2)}`, color: '' },
+    { label: 'Portfolio Value', value: `$${portfolioValue.toFixed(2)}`, color: '' },
+    { label: 'Total Account Value', value: `$${(balance + portfolioValue).toFixed(2)}`, color: 'var(--cyan)', bold: true },
+    { label: 'Est. Total Deposited', value: estimatedDeposit > 0 ? `$${estimatedDeposit.toFixed(2)}` : '--', color: '' },
+    { label: 'Net P&L (all time)', value: `$${totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}`, color: totalPnl >= 0 ? 'var(--green)' : 'var(--red)', bold: true },
+    { label: 'Total Fees Paid', value: `-$${totalFees.toFixed(2)}`, color: 'var(--red)' },
+  ];
+  document.getElementById('overviewAccountSummary').innerHTML = rows.map(r =>
+    `<div class="side-stat-row"><span class="side-stat-label">${r.label}</span><span class="side-stat-value" style="${r.color ? 'color:' + r.color + ';' : ''}${r.bold ? 'font-size:16px' : ''}">${r.value}</span></div>`
+  ).join('');
 }
 
-// Trading Activity card
+// P&L Breakdown doughnut
+{
+  const sportsPnl = allResolved.filter(b => b._type === 'Sports').reduce((s,b) => s + (b.pnl||0), 0);
+  const cryptoPnl = allResolved.filter(b => b._type === 'Crypto').reduce((s,b) => s + (b.pnl||0), 0);
+  const sportsCount = allResolved.filter(b => b._type === 'Sports').length;
+  const cryptoCount = allResolved.filter(b => b._type === 'Crypto').length;
+  const sportsWins = allResolved.filter(b => b._type === 'Sports' && b.result === 'win').length;
+  const cryptoWins = allResolved.filter(b => b._type === 'Crypto' && b.result === 'win').length;
+  if (document.getElementById('overviewPnlDoughnut')) {
+    new Chart(document.getElementById('overviewPnlDoughnut'), {
+      type: 'doughnut',
+      data: { labels: ['Sports', 'Crypto'], datasets: [{ data: [Math.abs(sportsPnl) || 0.01, Math.abs(cryptoPnl) || 0.01], backgroundColor: ['#14b8a6', '#f59e0b'], borderWidth: 0, hoverOffset: 8 }] },
+      options: { responsive: true, maintainAspectRatio: true, cutout: '65%', plugins: { legend: { display: false } } }
+    });
+    const statsEl = document.getElementById('overviewPnlStats');
+    if (statsEl) {
+      const sWr = sportsCount > 0 ? (sportsWins / sportsCount * 100).toFixed(0) : 0;
+      const cWr = cryptoCount > 0 ? (cryptoWins / cryptoCount * 100).toFixed(0) : 0;
+      statsEl.innerHTML = `
+        <div class="side-stat-row"><span class="side-stat-label" style="color:var(--teal);font-weight:700">Sports</span><span class="side-stat-value">${sportsCount} trades</span></div>
+        <div class="side-stat-row"><span class="side-stat-label">Win Rate</span><span class="side-stat-value" style="color:${sWr >= 50 ? 'var(--green)' : 'var(--red)'}">${sWr}%</span></div>
+        <div class="side-stat-row"><span class="side-stat-label">P&L</span><span class="side-stat-value" style="color:${sportsPnl >= 0 ? 'var(--green)' : 'var(--red)'}">$${sportsPnl >= 0 ? '+' : ''}${sportsPnl.toFixed(2)}</span></div>
+        <div style="height:8px"></div>
+        <div class="side-stat-row"><span class="side-stat-label" style="color:var(--orange);font-weight:700">Crypto</span><span class="side-stat-value">${cryptoCount} trades</span></div>
+        <div class="side-stat-row"><span class="side-stat-label">Win Rate</span><span class="side-stat-value" style="color:${cWr >= 50 ? 'var(--green)' : 'var(--red)'}">${cWr}%</span></div>
+        <div class="side-stat-row"><span class="side-stat-label">P&L</span><span class="side-stat-value" style="color:${cryptoPnl >= 0 ? 'var(--green)' : 'var(--red)'}">$${cryptoPnl >= 0 ? '+' : ''}${cryptoPnl.toFixed(2)}</span></div>
+      `;
+    }
+  }
+}
+
+// Strategy scorecards
 {
   const stratStats = {};
   CRYPTO_BETS.forEach(b => {
     const k = 'Crypto 15m';
-    if (!stratStats[k]) stratStats[k] = { bets: 0, wins: 0, losses: 0, pnl: 0, wagered: 0 };
+    if (!stratStats[k]) stratStats[k] = { bets: 0, wins: 0, losses: 0, pnl: 0, wagered: 0, color: '#f59e0b' };
     stratStats[k].bets++;
     stratStats[k].wagered += b.bet_amount || 0;
     if (b.result === 'win') { stratStats[k].wins++; stratStats[k].pnl += (b.pnl || 0); }
     else if (b.result === 'loss') { stratStats[k].losses++; stratStats[k].pnl += (b.pnl || 0); }
   });
   SPORTS_BETS.forEach(b => {
-    const k = 'Sports: ' + (b.league || 'Other');
-    if (!stratStats[k]) stratStats[k] = { bets: 0, wins: 0, losses: 0, pnl: 0, wagered: 0 };
+    const lg = b.league || 'Other';
+    const k = lg;
+    if (!stratStats[k]) stratStats[k] = { bets: 0, wins: 0, losses: 0, pnl: 0, wagered: 0, color: '#14b8a6' };
     stratStats[k].bets++;
     stratStats[k].wagered += b.bet_amount || 0;
     if (b.result === 'win') { stratStats[k].wins++; stratStats[k].pnl += (b.pnl || 0); }
     else if (b.result === 'loss') { stratStats[k].losses++; stratStats[k].pnl += (b.pnl || 0); }
   });
-  const names = Object.keys(stratStats).filter(k => stratStats[k].bets > 0);
-  let html = '';
-  if (names.length > 0) {
-    html = '<div class="scroll-table"><table><thead><tr><th>Strategy</th><th>Bets</th><th>W-L</th><th>Win Rate</th><th>P&L</th><th>Wagered</th></tr></thead><tbody>';
-    for (const name of names) {
-      const s = stratStats[name];
-      const resolved = s.wins + s.losses;
-      const wr = resolved > 0 ? (s.wins / resolved * 100).toFixed(1) + '%' : '--';
-      const pc = s.pnl >= 0 ? 'var(--green)' : 'var(--red)';
-      html += `<tr><td style="font-weight:600">${name}</td><td>${s.bets}</td><td>${s.wins}W-${s.losses}L</td><td>${wr}</td><td style="color:${pc}">$${s.pnl >= 0 ? '+' : ''}${s.pnl.toFixed(2)}</td><td>$${s.wagered.toFixed(2)}</td></tr>`;
-    }
-    html += '</tbody></table></div>';
+  const names = Object.keys(stratStats).filter(k => stratStats[k].bets > 0).sort((a,b) => stratStats[b].pnl - stratStats[a].pnl);
+  let cardsHtml = '';
+  names.forEach(name => {
+    const s = stratStats[name];
+    const sWr = (s.wins + s.losses) > 0 ? (s.wins / (s.wins + s.losses) * 100) : 0;
+    const wrColor = sWr >= 55 ? 'var(--green)' : sWr >= 45 ? 'var(--yellow)' : 'var(--red)';
+    const pnlColor = s.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    const sRoi = s.wagered > 0 ? (s.pnl / s.wagered * 100).toFixed(1) : '0';
+    cardsHtml += `<div class="signal-card">
+      <div class="signal-glow" style="background:${s.color}"></div>
+      <div class="signal-name" style="color:${s.color}">${name}</div>
+      <div class="signal-wr" style="color:${wrColor}">${sWr.toFixed(0)}%</div>
+      <div class="signal-sub">${s.wins}W - ${s.losses}L (${s.bets} bets)</div>
+      <div class="signal-bar"><div class="signal-bar-fill" style="width:${Math.min(sWr, 100)}%;background:${s.color}"></div></div>
+      <div class="signal-pnl" style="color:${pnlColor}">$${s.pnl >= 0 ? '+' : ''}${s.pnl.toFixed(2)}</div>
+      <span class="signal-edge" style="background:rgba(${parseFloat(sRoi) >= 0 ? '34,197,94' : '239,68,68'},0.15);color:${parseFloat(sRoi) >= 0 ? 'var(--green)' : 'var(--red)'}">${sRoi}% ROI</span>
+    </div>`;
+  });
+  document.getElementById('overviewStratCards').innerHTML = cardsHtml || '<div style="color:var(--muted);padding:20px">No strategies yet</div>';
+}
+
+// Cumulative P&L chart
+{
+  const sorted = allResolved.sort((a,b) => (a.timestamp||'').localeCompare(b.timestamp||''));
+  if (sorted.length > 0) {
+    let cum = 0;
+    const labels = sorted.map(b => new Date(b.timestamp).toLocaleDateString('en-US', {month:'short',day:'numeric'}));
+    const vals = sorted.map(b => { cum += (b.pnl||0); return +cum.toFixed(2); });
+    const ptColors = sorted.map(b => b._type === 'Crypto' ? '#f59e0b' : '#14b8a6');
+    const ctx = document.getElementById('overviewCumPnlChart').getContext('2d');
+    const grad = ctx.createLinearGradient(0, 0, 0, 300);
+    grad.addColorStop(0, 'rgba(6,182,212,0.25)');
+    grad.addColorStop(1, 'rgba(6,182,212,0.01)');
+    new Chart(ctx, {
+      type: 'line',
+      data: { labels, datasets: [{ data: vals, borderColor: '#06b6d4', backgroundColor: grad, fill: true, tension: 0.3, pointRadius: 3, pointBackgroundColor: ptColors, borderWidth: 2.5 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx2 => `Cum P&L: $${ctx2.raw >= 0 ? '+' : ''}${ctx2.raw.toFixed(2)}`, afterLabel: ctx2 => sorted[ctx2.dataIndex]._type + ' | ' + sorted[ctx2.dataIndex]._asset } } }, scales: { x: { ticks: { color: '#8b8fa3', maxTicksLimit: 10 }, grid: { color: 'rgba(42,45,58,0.3)' } }, y: { ticks: { color: '#8b8fa3', callback: v => '$' + v.toFixed(2) }, grid: { color: 'rgba(42,45,58,0.3)' } } } }
+    });
   } else {
-    html = '<div style="color:var(--muted);text-align:center;padding:20px">No trades recorded yet</div>';
+    document.getElementById('overviewCumPnlChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:300px;color:var(--muted)">No resolved trades yet</div>';
   }
-  document.getElementById('overviewTradingActivity').innerHTML = html;
 }
 
 // All Fills History — ALL trades across all types
@@ -1427,39 +1504,44 @@ function renderScoreBot() {
   const d = SCORE_DATA;
   if (!d) { renderScoreEmpty(); return; }
 
-  // KPIs
+  // KPIs — enhanced with visual flair
   const wr = d.resolved > 0 ? d.win_rate : 0;
-  const skipRate = (d.total_trades + d.total_skips) > 0 ? (d.total_skips / (d.total_trades + d.total_skips) * 100).toFixed(0) : '0';
   const lossesSaved = d.skip_losses_saved || 0;
   const missedGains = d.skip_missed_gains || 0;
   const skipWouldWon = d.skip_would_won || 0;
   const skipWouldLost = d.skip_would_lost || 0;
   const skipResolved = d.skip_resolved || 0;
+  const netFilterValue = lossesSaved - missedGains;
   const ver = (d.strategy_version || 'v4').toUpperCase();
+  const avgPnl = d.resolved > 0 ? d.total_pnl / d.resolved : 0;
   const kpis = [
-    { label: 'Strategy', value: ver, cls: 'blue', sub: ver === 'V7' ? 'Signal Score 3+' : ver === 'V5' ? 'Stoch+Consensus' : ver === 'V4' ? '3 Hard Filters' : ver === 'V3' ? 'Optimizer R2' : ver === 'V2' ? 'Safe Mode' : 'Original' },
-    { label: 'Score Bot P&L', value: `$${d.total_pnl >= 0 ? '+' : ''}${d.total_pnl.toFixed(2)}`, cls: d.total_pnl >= 0 ? 'green' : 'red', sub: `${d.resolved} resolved` },
-    { label: 'Win Rate', value: d.resolved > 0 ? `${wr}%` : '--', cls: wr >= 50 ? 'green' : 'red', sub: `${d.wins}W - ${d.losses}L` },
-    { label: 'Losses Saved', value: `$${lossesSaved.toFixed(2)}`, cls: 'green', sub: `${skipWouldLost} bad trades filtered` },
-    { label: 'Missed Gains', value: `$${missedGains.toFixed(2)}`, cls: 'orange', sub: `${skipWouldWon} good trades skipped` },
-    { label: 'Skip Accuracy', value: skipResolved > 0 ? `${(skipWouldLost / skipResolved * 100).toFixed(0)}%` : '--', cls: skipWouldLost >= skipWouldWon ? 'green' : 'red', sub: `${skipWouldLost} correct / ${skipWouldWon} missed` },
-    { label: 'Total Trades', value: d.total_trades, cls: 'blue', sub: `${d.total_skips} skipped` },
+    { label: 'Strategy', value: ver, cls: 'blue', sub: ver === 'V7' ? 'Signal Score 3+' : ver === 'V5' ? 'Stoch+Consensus' : 'Filters' },
+    { label: 'Total P&L', value: `$${d.total_pnl >= 0 ? '+' : ''}${d.total_pnl.toFixed(2)}`, cls: d.total_pnl >= 0 ? 'green' : 'red', sub: `Avg $${avgPnl >= 0 ? '+' : ''}${avgPnl.toFixed(2)}/trade` },
+    { label: 'Win Rate', value: d.resolved > 0 ? `${wr}%` : '--', cls: wr >= 55 ? 'green' : wr >= 45 ? 'orange' : 'red', sub: `${d.wins}W - ${d.losses}L of ${d.resolved}` },
+    { label: 'Net Filter Value', value: `$${netFilterValue >= 0 ? '+' : ''}${netFilterValue.toFixed(2)}`, cls: netFilterValue >= 0 ? 'green' : 'red', sub: `$${lossesSaved.toFixed(2)} saved - $${missedGains.toFixed(2)} missed` },
+    { label: 'Skip Accuracy', value: skipResolved > 0 ? `${(skipWouldLost / skipResolved * 100).toFixed(0)}%` : '--', cls: skipWouldLost >= skipWouldWon ? 'green' : 'red', sub: `${skipWouldLost} correct / ${skipWouldWon} wrong` },
+    { label: 'Trades / Skips', value: `${d.total_trades} / ${d.total_skips}`, cls: 'purple', sub: `${d.total_trades + d.total_skips} total decisions` },
   ];
   document.getElementById('scoreKpis').innerHTML = kpis.map(k =>
     `<div class="kpi"><div class="label">${k.label}</div><div class="value ${k.cls}">${k.value}</div><div class="sub">${k.sub}</div></div>`
   ).join('');
 
-  // Cumulative P&L chart
+  // Cumulative P&L chart — enhanced with gradient + point colors
   const trades = (d.recent_bets || []).filter(b => b.action === 'trade' && (b.result === 'win' || b.result === 'loss'));
   if (trades.length > 0) {
     let cum = 0;
     const labels = trades.map(b => new Date(b.timestamp).toLocaleDateString('en-US', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}));
-    const vals = trades.map(b => { cum += (b.pnl || 0); return cum; });
+    const vals = trades.map(b => { cum += (b.pnl || 0); return parseFloat(cum.toFixed(2)); });
+    const ptColors = trades.map(b => b.result === 'win' ? '#22c55e' : '#ef4444');
     if (_scoreCharts.pnl) _scoreCharts.pnl.destroy();
-    _scoreCharts.pnl = new Chart(document.getElementById('scorePnlChart'), {
+    const pnlCtx = document.getElementById('scorePnlChart').getContext('2d');
+    const pnlGrad = pnlCtx.createLinearGradient(0, 0, 0, 300);
+    pnlGrad.addColorStop(0, 'rgba(168,85,247,0.3)');
+    pnlGrad.addColorStop(1, 'rgba(168,85,247,0.01)');
+    _scoreCharts.pnl = new Chart(pnlCtx, {
       type: 'line',
-      data: { labels, datasets: [{ data: vals, borderColor: '#a855f7', backgroundColor: 'rgba(168,85,247,0.1)', fill: true, tension: 0.3, pointRadius: 2 }] },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#8b8fa3', maxTicksLimit: 8 }, grid: { color: 'rgba(42,45,58,0.5)' } }, y: { ticks: { color: '#8b8fa3', callback: v => '$' + v.toFixed(2) }, grid: { color: 'rgba(42,45,58,0.5)' } } } }
+      data: { labels, datasets: [{ data: vals, borderColor: '#a855f7', backgroundColor: pnlGrad, fill: true, tension: 0.3, pointRadius: 4, pointBorderWidth: 2, pointBackgroundColor: ptColors, pointBorderColor: ptColors, borderWidth: 2.5 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `Cum P&L: $${ctx.raw >= 0 ? '+' : ''}${ctx.raw.toFixed(2)}`, afterLabel: ctx => trades[ctx.dataIndex].result.toUpperCase() + ' | ' + (trades[ctx.dataIndex].crypto || '') } } }, scales: { x: { ticks: { color: '#8b8fa3', maxTicksLimit: 8 }, grid: { color: 'rgba(42,45,58,0.3)' } }, y: { ticks: { color: '#8b8fa3', callback: v => '$' + v.toFixed(2) }, grid: { color: 'rgba(42,45,58,0.3)' } } } }
     });
   } else {
     document.getElementById('scorePnlChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:300px;color:var(--muted)">No resolved trades yet</div>';
@@ -1492,105 +1574,135 @@ function renderScoreBot() {
     document.getElementById('scoreDistChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:300px;color:var(--muted)">No decisions yet</div>';
   }
 
-  // Live indicators table
+  // Live indicators — visual cards
   const indicators = d.indicators || {};
   const indSyms = Object.keys(indicators);
   if (indSyms.length > 0) {
-    const sv = (d.strategy_version || 'v4').toLowerCase();
-    const isV4 = sv === 'v4';
-    const isV7 = sv === 'v7';
-    const showExtra = !isV4;
-    const headerExtra = showExtra ? '<th>RSI</th><th>Stoch</th><th>Pack</th>' : '';
-    const headerSignals = isV7 ? '<th>Signals</th>' : '<th>Filters</th>';
-    let html = `<table><thead><tr><th>Crypto</th><th>Price</th><th>1h Return</th><th>3h Return</th><th>6h Vol</th>${headerExtra}${headerSignals}</tr></thead><tbody>`;
-    const btcRet = (indicators['BTC'] || {}).ret_1h || 0;
+    let html = '<div class="analytics-signal-grid">';
     indSyms.forEach(sym => {
       const ind = indicators[sym];
-      const retCls = ind.ret_1h >= 0 ? 'pnl-pos' : 'pnl-neg';
-      const ret3Cls = ind.ret_3h >= 0 ? 'pnl-pos' : 'pnl-neg';
-      const volWarn = ind.vol_6h > 0.6 ? 'color:var(--red);font-weight:600' : '';
-      let filterStr = '';
-      if (isV7) {
-        // v7: show which signals would fire (assuming YES side for display)
-        let signals = [];
-        if (ind.rsi < 50) signals.push('<span style="color:var(--green)">RSI↓</span>');
-        else if (ind.rsi > 50) signals.push('<span style="color:var(--green)">RSI↑</span>');
-        if (ind.rsi < 35 || ind.rsi > 65) signals.push('<span style="color:var(--green)">RSI!</span>');
-        if (ind.stoch < 30) signals.push('<span style="color:var(--green)">Stoch</span>');
-        if (ind.vol_6h >= 0.3) signals.push('<span style="color:var(--green)">Vol</span>');
-        if (ind.pack_agreement >= 1.0) signals.push('<span style="color:var(--green)">Pack</span>');
-        if (Math.abs(ind.ret_1h) > 0) signals.push('<span style="color:var(--muted)">MR</span>');
-        filterStr = signals.length > 0 ? signals.join(' ') : '<span style="color:var(--muted)">—</span>';
-      } else if (isV4) {
-        let filters = [];
-        if (sym !== 'BTC' && ((btcRet > 0.3) || (btcRet < -0.3))) filters.push('BTC Against');
-        if (Math.abs(ind.ret_3h) > 2.0) filters.push('3h Ext');
-        if (ind.vol_6h > 0.6) filters.push('High Vol');
-        filterStr = filters.length === 0 ? '<span style="color:var(--green)">CLEAR</span>' : '<span style="color:var(--red)">' + filters.join(', ') + '</span>';
-      } else {
-        let filters = [];
-        if (sym !== 'BTC' && ((btcRet > 0.3) || (btcRet < -0.3))) filters.push('BTC');
-        if (ind.vol_6h > 1.0) filters.push('Vol');
-        if (ind.rsi > 65 || ind.rsi < 25) filters.push('RSI');
-        if (ind.stoch > 80 || ind.stoch < 20) filters.push('Stoch');
-        if (Math.abs(ind.ret_3h) > 2.0) filters.push('3h');
-        if (ind.pack_agreement > 0.7) filters.push('Pack');
-        filterStr = filters.length === 0 ? '<span style="color:var(--green)">CLEAR</span>' : '<span style="color:var(--red)">' + filters.join(', ') + '</span>';
-      }
-      const rsiCls = ind.rsi > 70 ? 'color:var(--red)' : ind.rsi < 30 ? 'color:var(--green)' : '';
-      const extraCols = showExtra ? `<td style="${rsiCls}">${ind.rsi.toFixed(0)}</td><td>${ind.stoch.toFixed(0)}</td><td>${(ind.pack_agreement * 100).toFixed(0)}%</td>` : '';
-      html += `<tr>
-        <td>${cryptoTag(sym)}</td>
-        <td>$${ind.price ? ind.price.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}) : '--'}</td>
-        <td><span class="${retCls}">${ind.ret_1h >= 0 ? '+' : ''}${ind.ret_1h.toFixed(2)}%</span></td>
-        <td><span class="${ret3Cls}">${ind.ret_3h >= 0 ? '+' : ''}${ind.ret_3h.toFixed(2)}%</span></td>
-        <td style="${volWarn}">${ind.vol_6h.toFixed(3)}</td>
-        ${extraCols}
-        <td>${filterStr}</td>
-      </tr>`;
+      const cc = cryptoColors[sym] || '#666';
+      const retColor = ind.ret_1h >= 0 ? 'var(--green)' : 'var(--red)';
+      const rsiColor = ind.rsi > 65 ? 'var(--red)' : ind.rsi < 35 ? 'var(--green)' : 'var(--muted)';
+      // Signal badges
+      let signals = [];
+      if (ind.rsi < 50) signals.push('<span style="color:var(--green);font-size:10px;background:rgba(34,197,94,0.15);padding:1px 6px;border-radius:3px">RSI↓</span>');
+      else if (ind.rsi > 50) signals.push('<span style="color:var(--green);font-size:10px;background:rgba(34,197,94,0.15);padding:1px 6px;border-radius:3px">RSI↑</span>');
+      if (ind.rsi < 35 || ind.rsi > 65) signals.push('<span style="color:var(--yellow);font-size:10px;background:rgba(234,179,8,0.15);padding:1px 6px;border-radius:3px">RSI!</span>');
+      if (ind.stoch < 30) signals.push('<span style="color:var(--cyan);font-size:10px;background:rgba(6,182,212,0.15);padding:1px 6px;border-radius:3px">Stoch</span>');
+      if (ind.vol_6h >= 0.3) signals.push('<span style="color:var(--orange);font-size:10px;background:rgba(245,158,11,0.15);padding:1px 6px;border-radius:3px">Vol</span>');
+      html += `<div class="signal-card">
+        <div class="signal-glow" style="background:${cc}"></div>
+        <div class="signal-name" style="color:${cc}">${sym}</div>
+        <div style="font-size:20px;font-weight:800;margin-bottom:2px">$${ind.price ? ind.price.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}) : '--'}</div>
+        <div style="display:flex;gap:12px;margin:6px 0;font-size:13px">
+          <span style="color:${retColor};font-weight:600">1h: ${ind.ret_1h >= 0 ? '+' : ''}${ind.ret_1h.toFixed(2)}%</span>
+          <span style="color:var(--muted)">3h: ${ind.ret_3h >= 0 ? '+' : ''}${ind.ret_3h.toFixed(2)}%</span>
+        </div>
+        <div style="display:flex;gap:10px;font-size:12px;margin-bottom:6px">
+          <span>RSI <strong style="color:${rsiColor}">${ind.rsi.toFixed(0)}</strong></span>
+          <span>Stoch <strong>${ind.stoch.toFixed(0)}</strong></span>
+          <span>Vol <strong style="${ind.vol_6h > 0.6 ? 'color:var(--red)' : ''}">${ind.vol_6h.toFixed(3)}</strong></span>
+        </div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap">${signals.join(' ') || '<span style="color:var(--muted);font-size:10px">No signals</span>'}</div>
+      </div>`;
     });
-    html += '</tbody></table>';
+    html += '</div>';
     if (d.last_indicator_update) {
       const ago = Math.round((Date.now() - new Date(d.last_indicator_update).getTime()) / 60000);
       html += `<div style="color:var(--muted);font-size:11px;margin-top:8px">Updated ${ago < 1 ? 'just now' : ago + 'm ago'}</div>`;
     }
     document.getElementById('scoreIndicatorsContent').innerHTML = html;
   } else {
-    document.getElementById('scoreIndicatorsContent').innerHTML = '<div class="empty-state"><div class="msg">Waiting for CoinGecko data...</div></div>';
+    document.getElementById('scoreIndicatorsContent').innerHTML = '<div class="card"><div class="empty-state"><div class="msg">Waiting for CoinGecko data...</div></div></div>';
   }
 
-  // Performance by Crypto table
+  // Performance by Crypto — scorecards
   const byCrypto = d.by_crypto || {};
-  const cryptoNames = Object.keys(byCrypto);
+  const cryptoNames = Object.keys(byCrypto).sort((a,b) => (byCrypto[b].pnl || 0) - (byCrypto[a].pnl || 0));
   if (cryptoNames.length > 0) {
-    let html = '<div class="card"><div class="scroll-table"><table><thead><tr><th>Crypto</th><th>Trades</th><th>Record</th><th>Win Rate</th><th>P&L</th><th>Skips</th></tr></thead><tbody>';
-    let totT=0, totW=0, totL=0, totP=0, totS=0;
-    cryptoNames.sort().forEach(c => {
+    let cardsHtml = '';
+    cryptoNames.forEach(c => {
       const s = byCrypto[c];
-      const wr = (s.wins + s.losses) > 0 ? (s.wins / (s.wins + s.losses) * 100).toFixed(1) : '--';
-      const pCls = s.pnl >= 0 ? 'pnl-pos' : 'pnl-neg';
-      html += `<tr><td>${cryptoTag(c)}</td><td>${s.trades}</td><td>${s.wins}W-${s.losses}L</td><td>${wr}%</td><td><span class="${pCls}">$${s.pnl >= 0 ? '+' : ''}${s.pnl.toFixed(2)}</span></td><td>${s.skips}</td></tr>`;
-      totT += s.trades; totW += s.wins; totL += s.losses; totP += s.pnl; totS += s.skips;
+      const cWr = (s.wins + s.losses) > 0 ? (s.wins / (s.wins + s.losses) * 100) : 0;
+      const wrColor = cWr >= 55 ? 'var(--green)' : cWr >= 45 ? 'var(--yellow)' : 'var(--red)';
+      const pnlColor = s.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+      const cc = cryptoColors[c] || '#666';
+      cardsHtml += `<div class="signal-card">
+        <div class="signal-glow" style="background:${cc}"></div>
+        <div class="signal-name" style="color:${cc}">${c}</div>
+        <div class="signal-wr" style="color:${wrColor}">${cWr.toFixed(0)}%</div>
+        <div class="signal-sub">${s.wins}W - ${s.losses}L (${s.trades} traded, ${s.skips} skipped)</div>
+        <div class="signal-bar"><div class="signal-bar-fill" style="width:${Math.min(cWr, 100)}%;background:${cc}"></div></div>
+        <div class="signal-pnl" style="color:${pnlColor}">$${s.pnl >= 0 ? '+' : ''}${s.pnl.toFixed(2)}</div>
+      </div>`;
     });
-    const totWr = (totW + totL) > 0 ? (totW / (totW + totL) * 100).toFixed(1) : '--';
-    const tpc = totP >= 0 ? 'pnl-pos' : 'pnl-neg';
-    html += `<tr style="border-top:2px solid var(--border);font-weight:700"><td>TOTAL</td><td>${totT}</td><td>${totW}W-${totL}L</td><td>${totWr}%</td><td><span class="${tpc}">$${totP >= 0 ? '+' : ''}${totP.toFixed(2)}</span></td><td>${totS}</td></tr>`;
-    html += '</tbody></table></div></div>';
-    document.getElementById('scoreCryptoContent').innerHTML = html;
+    document.getElementById('scoreCryptoCards').innerHTML = cardsHtml;
 
-    // P&L by Crypto bar chart
+    // P&L by Crypto bar chart — horizontal sorted
+    const sorted = [...cryptoNames].sort((a,b) => byCrypto[b].pnl - byCrypto[a].pnl);
     if (_scoreCharts.cryptoPnl) _scoreCharts.cryptoPnl.destroy();
     _scoreCharts.cryptoPnl = new Chart(document.getElementById('scoreCryptoPnlChart'), {
       type: 'bar',
       data: {
-        labels: cryptoNames.sort(),
-        datasets: [{ data: cryptoNames.sort().map(c => byCrypto[c].pnl), backgroundColor: cryptoNames.sort().map(c => cryptoColors[c] || '#666') }]
+        labels: sorted,
+        datasets: [{ data: sorted.map(c => +byCrypto[c].pnl.toFixed(2)), backgroundColor: sorted.map(c => cryptoColors[c] || '#666'), borderRadius: 4, borderSkipped: false }]
       },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#8b8fa3' }, grid: { color: 'rgba(42,45,58,0.5)' } }, y: { ticks: { color: '#8b8fa3', callback: v => '$' + v.toFixed(2) }, grid: { color: 'rgba(42,45,58,0.5)' } } } }
+      options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { afterLabel: ctx => { const s = byCrypto[sorted[ctx.dataIndex]]; return `${s.wins}W-${s.losses}L`; } } } }, scales: { x: { grid: { color: 'rgba(42,45,58,0.4)' }, ticks: { color: '#8b8fa3', callback: v => '$' + v } }, y: { grid: { display: false }, ticks: { color: '#e1e4eb', font: { weight: '600' } } } } }
     });
   } else {
-    document.getElementById('scoreCryptoContent').innerHTML = '<div class="card"><div class="empty-state"><div class="msg">No crypto data yet</div></div></div>';
+    document.getElementById('scoreCryptoCards').innerHTML = '<div class="signal-card"><div class="signal-sub">No crypto data yet</div></div>';
     document.getElementById('scoreCryptoPnlChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:260px;color:var(--muted)">No data</div>';
+  }
+
+  // Skip analysis doughnut + stats
+  {
+    const tradeWins = trades.filter(b => b.result === 'win').length;
+    const tradeLosses = trades.filter(b => b.result === 'loss').length;
+    const tradePnl = trades.reduce((s,b) => s + (b.pnl||0), 0);
+    if (_scoreCharts.skipDoughnut) _scoreCharts.skipDoughnut.destroy();
+    if (document.getElementById('scoreSkipDoughnut')) {
+      _scoreCharts.skipDoughnut = new Chart(document.getElementById('scoreSkipDoughnut'), {
+        type: 'doughnut',
+        data: { labels: ['Traded', 'Correct Skip', 'Wrong Skip'], datasets: [{ data: [trades.length, skipWouldLost, skipWouldWon], backgroundColor: ['#a855f7', '#22c55e', '#ef4444'], borderWidth: 0, hoverOffset: 8 }] },
+        options: { responsive: true, maintainAspectRatio: true, cutout: '65%', plugins: { legend: { display: false } } }
+      });
+      const skipStatsEl = document.getElementById('scoreSkipStats');
+      if (skipStatsEl) {
+        skipStatsEl.innerHTML = `
+          <div class="side-stat-row"><span class="side-stat-label" style="color:#a855f7;font-weight:700">Traded</span><span class="side-stat-value">${trades.length} (${tradeWins}W-${tradeLosses}L)</span></div>
+          <div class="side-stat-row"><span class="side-stat-label">Trade P&L</span><span class="side-stat-value" style="color:${tradePnl >= 0 ? 'var(--green)' : 'var(--red)'}">$${tradePnl >= 0 ? '+' : ''}${tradePnl.toFixed(2)}</span></div>
+          <div style="height:8px"></div>
+          <div class="side-stat-row"><span class="side-stat-label" style="color:#22c55e;font-weight:700">Correct Skips</span><span class="side-stat-value">${skipWouldLost}</span></div>
+          <div class="side-stat-row"><span class="side-stat-label">Losses Avoided</span><span class="side-stat-value" style="color:var(--green)">$+${lossesSaved.toFixed(2)}</span></div>
+          <div style="height:8px"></div>
+          <div class="side-stat-row"><span class="side-stat-label" style="color:#ef4444;font-weight:700">Wrong Skips</span><span class="side-stat-value">${skipWouldWon}</span></div>
+          <div class="side-stat-row"><span class="side-stat-label">Gains Missed</span><span class="side-stat-value" style="color:var(--red)">-$${missedGains.toFixed(2)}</span></div>
+        `;
+      }
+    }
+    // Skip breakdown — simple visual
+    const skipEl = document.getElementById('scoreSkipBreakdown');
+    if (skipEl) {
+      const total = skipWouldLost + skipWouldWon;
+      const correctPct = total > 0 ? (skipWouldLost / total * 100).toFixed(0) : 0;
+      skipEl.innerHTML = `
+        <div style="text-align:center;padding:20px 0">
+          <div style="font-size:48px;font-weight:800;color:${netFilterValue >= 0 ? 'var(--green)' : 'var(--red)'}">${netFilterValue >= 0 ? '+' : ''}$${netFilterValue.toFixed(2)}</div>
+          <div style="color:var(--muted);font-size:13px;margin-top:4px">Net value of skip filter</div>
+          <div style="margin:16px auto;max-width:300px">
+            <div class="signal-bar" style="height:12px;border-radius:6px">
+              <div class="signal-bar-fill" style="width:${correctPct}%;background:var(--green);border-radius:6px;height:100%"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:12px">
+              <span style="color:var(--green)">${correctPct}% correct</span>
+              <span style="color:var(--red)">${100 - correctPct}% wrong</span>
+            </div>
+          </div>
+          <div style="font-size:12px;color:var(--muted)">Out of ${total} resolved skips</div>
+        </div>
+      `;
+    }
   }
 
   // Win rate + PnL + count by score charts — use ALL resolved (trades+skips)
@@ -1610,15 +1722,29 @@ function renderScoreBot() {
 
   if (ssKeys.length > 0) {
     const labels = ssKeys.map(s => isV7 ? `${s}/8` : `${s >= 3 ? '+' : ''}${s-3}`);
+    const wrData = ssKeys.map(s => { const t = scoreStats[s].wins + scoreStats[s].losses; return t > 0 ? +(scoreStats[s].wins / t * 100).toFixed(1) : 0; });
+    const pnlData = ssKeys.map(s => +scoreStats[s].pnl.toFixed(2));
+    const countData = ssKeys.map(s => scoreStats[s].wins + scoreStats[s].losses);
 
     if (_scoreCharts.winRate) _scoreCharts.winRate.destroy();
     _scoreCharts.winRate = new Chart(document.getElementById('scoreWinRateChart'), {
       type: 'bar',
       data: {
         labels,
-        datasets: [{ label: 'Win Rate %', data: ssKeys.map(s => { const t = scoreStats[s].wins + scoreStats[s].losses; return t > 0 ? (scoreStats[s].wins / t * 100) : 0; }), backgroundColor: ssKeys.map(s => s >= 3 ? 'rgba(34,197,94,0.6)' : 'rgba(239,68,68,0.4)'), borderRadius: 4 }]
+        datasets: [
+          { label: 'Win Rate %', data: wrData, backgroundColor: wrData.map(v => v >= 60 ? 'rgba(34,197,94,0.8)' : v >= 45 ? 'rgba(234,179,8,0.7)' : 'rgba(239,68,68,0.7)'), borderRadius: 4, yAxisID: 'y', order: 2 },
+          { label: 'P&L $', data: pnlData, type: 'line', borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', pointBackgroundColor: pnlData.map(v => v >= 0 ? '#22c55e' : '#ef4444'), pointRadius: 5, pointBorderWidth: 2, fill: true, tension: 0.3, yAxisID: 'y1', order: 1 }
+        ]
       },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#8b8fa3' }, grid: { color: 'rgba(42,45,58,0.5)' } }, y: { ticks: { color: '#8b8fa3', callback: v => v + '%' }, grid: { color: 'rgba(42,45,58,0.5)' }, max: 100 } } }
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: '#8b8fa3', usePointStyle: true } }, tooltip: { callbacks: { afterLabel: ctx => `n=${countData[ctx.dataIndex]}` } } },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: '#e1e4eb', font: { size: 12, weight: '600' } } },
+          y: { position: 'left', grid: { color: 'rgba(42,45,58,0.4)' }, ticks: { color: '#22c55e', callback: v => v + '%' }, min: 0, max: 100, title: { display: true, text: 'Win Rate', color: '#22c55e' } },
+          y1: { position: 'right', grid: { display: false }, ticks: { color: '#3b82f6', callback: v => '$' + v.toFixed(0) }, title: { display: true, text: 'P&L', color: '#3b82f6' } }
+        }
+      }
     });
 
     if (_scoreCharts.pnlByScore) _scoreCharts.pnlByScore.destroy();
@@ -1781,7 +1907,7 @@ function renderScoreTable(bets) {
 }
 
 function filterScoreTable(filter, el) {
-  document.querySelectorAll('#scoreTabs .tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('#scoreTabs .a-tab').forEach(t => t.classList.remove('active'));
   if (el) el.classList.add('active');
   let filtered = _allScoreBets;
   if (filter === 'trades') filtered = _allScoreBets.filter(b => b.action === 'trade');
