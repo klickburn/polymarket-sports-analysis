@@ -74,51 +74,96 @@ def _is_sports(ticker):
     return any(ticker.startswith(p) for p in SPORTS_PREFIXES)
 
 
-# ── Data fetching ──────────────────────────────────────────────────────
+# ── Cached data files ─────────────────────────────────────────────────
+CACHE_DIR = os.environ.get("SCORE_DATA_DIR", "/data")
+if not os.path.isdir(CACHE_DIR):
+    CACHE_DIR = "."
+FILLS_CACHE = os.path.join(CACHE_DIR, "kalshi_fills_cache.json")
+RESULTS_CACHE = os.path.join(CACHE_DIR, "kalshi_results_cache.json")
+
+
+def _load_cache(path):
+    if os.path.exists(path):
+        try:
+            with open(path) as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+def _save_cache(path, data):
+    try:
+        with open(path, "w") as f:
+            json.dump(data, f, default=str)
+    except Exception as e:
+        P(f"  [CACHE] Save error: {e}")
+
+
+# ── Data fetching (incremental) ──────────────────────────────────────
 def _fetch_data():
-    """Fetch all dashboard data from Kalshi fills API. Called by background thread."""
+    """Fetch dashboard data incrementally — only new fills + re-check open markets."""
     P("  [DATA] Refreshing dashboard data...")
     start = time.time()
 
     balance_info = get_balance() or {}
 
-    # ── Fetch ALL fills from Kalshi API ────────────────────────────────
-    all_fills = []
+    # ── Load cached fills and results ─────────────────────────────────
+    fills_cache = _load_cache(FILLS_CACHE)  # {ticker: [fills]}
+    results_cache = _load_cache(RESULTS_CACHE)  # {ticker: {result, market_result}}
+
+    # Find latest fill timestamp to fetch only new ones
+    latest_ts = ""
+    for fills in fills_cache.values():
+        for f in fills:
+            t = f.get("created_time", "")
+            if t > latest_ts:
+                latest_ts = t
+
+    # ── Fetch only NEW fills from Kalshi API ──────────────────────────
+    new_fills = []
     cursor = None
     while True:
         params = {"limit": 200}
         if cursor:
             params["cursor"] = cursor
+        if latest_ts:
+            params["min_ts"] = int(datetime.fromisoformat(latest_ts.replace("Z", "+00:00")).timestamp()) + 1
         data = auth_get("/portfolio/fills", params=params)
         fills = data.get("fills", [])
-        all_fills.extend(fills)
+        new_fills.extend(fills)
         cursor = data.get("cursor")
         if not cursor or not fills:
             break
 
-    P(f"  [DATA] Fetched {len(all_fills)} fills")
-
-    # ── Group fills by ticker ──────────────────────────────────────────
-    fills_by_ticker = {}
-    for fill in all_fills:
+    # Merge new fills into cache
+    new_count = 0
+    for fill in new_fills:
         ticker = fill.get("ticker", "")
-        if ticker not in fills_by_ticker:
-            fills_by_ticker[ticker] = []
-        fills_by_ticker[ticker].append(fill)
+        if ticker not in fills_cache:
+            fills_cache[ticker] = []
+        # Deduplicate by trade_id
+        existing_ids = {f.get("trade_id") for f in fills_cache[ticker]}
+        if fill.get("trade_id") not in existing_ids:
+            fills_cache[ticker].append(fill)
+            new_count += 1
 
-    # ── Build bets from fills (both crypto and sports) ─────────────────
+    if new_count > 0:
+        _save_cache(FILLS_CACHE, fills_cache)
+        P(f"  [DATA] {new_count} new fills (total {sum(len(v) for v in fills_cache.values())} cached)")
+    else:
+        P(f"  [DATA] No new fills ({sum(len(v) for v in fills_cache.values())} cached)")
+
+    # ── Build bets from cached fills ──────────────────────────────────
     def build_bets_from_fills(ticker_filter):
-        """Build bet list from fills for tickers matching filter function.
-        Uses actual fee_cost and is_taker from API (like kalshi-dash)."""
         bets = []
-        for ticker, fills in fills_by_ticker.items():
+        for ticker, fills in fills_cache.items():
             if ticker in EXCLUDED_TICKERS:
                 continue
             category = ticker_filter(ticker)
             if not category:
                 continue
 
-            # Aggregate fills for this ticker
             side = fills[0].get("side", "")
             total_count = 0
             total_cost = 0
@@ -165,60 +210,69 @@ def _fetch_data():
                 "result": "open",
             }
 
-            # Add category-specific fields
             if isinstance(category, str) and category in CRYPTO_SERIES.values():
                 bet["crypto"] = category
             else:
-                # Sports — extract league from ticker
                 for prefix in SPORTS_PREFIXES:
                     if ticker.startswith(prefix):
                         bet["league"] = prefix.replace("KX", "")
                         break
 
-            # Check market outcome
-            try:
-                mkt = public_get(f"/markets/{ticker}")
-                market = mkt.get("market", {})
-                status = market.get("status", "")
-                result_val = market.get("result", "")
-                if status in ("settled", "finalized") and result_val:
-                    won = (result_val == "yes" and side == "yes") or \
-                          (result_val == "no" and side == "no")
-                    bet["result"] = "win" if won else "loss"
-                    bet["market_result"] = result_val
-                    # P&L = settlement - cost - fees (like kalshi-dash)
-                    # Settlement at $1 or $0 has no additional fee
-                    if won:
-                        bet["pnl"] = round(total_count * (1.0 - avg_price) - total_fee, 2)
-                    else:
-                        bet["pnl"] = round(-total_count * avg_price - total_fee, 2)
-                    # ROI like kalshi-dash: net_profit / entry_cost
-                    if total_cost > 0:
-                        bet["roi"] = round(bet["pnl"] / total_cost * 100, 1)
-                elif status == "open":
-                    bet["result"] = "open"
+            # Use cached result if already resolved — skip API call
+            if ticker in results_cache:
+                cached = results_cache[ticker]
+                bet["result"] = cached["result"]
+                bet["market_result"] = cached.get("market_result", "")
+                won = bet["result"] == "win"
+                if won:
+                    bet["pnl"] = round(total_count * (1.0 - avg_price) - total_fee, 2)
                 else:
-                    bet["result"] = "pending"
-            except Exception:
-                pass
+                    bet["pnl"] = round(-total_count * avg_price - total_fee, 2)
+                if total_cost > 0:
+                    bet["roi"] = round(bet["pnl"] / total_cost * 100, 1)
+            else:
+                # Only check API for unresolved markets
+                try:
+                    mkt = public_get(f"/markets/{ticker}")
+                    market = mkt.get("market", {})
+                    status = market.get("status", "")
+                    result_val = market.get("result", "")
+                    if status in ("settled", "finalized") and result_val:
+                        won = (result_val == "yes" and side == "yes") or \
+                              (result_val == "no" and side == "no")
+                        bet["result"] = "win" if won else "loss"
+                        bet["market_result"] = result_val
+                        if won:
+                            bet["pnl"] = round(total_count * (1.0 - avg_price) - total_fee, 2)
+                        else:
+                            bet["pnl"] = round(-total_count * avg_price - total_fee, 2)
+                        if total_cost > 0:
+                            bet["roi"] = round(bet["pnl"] / total_cost * 100, 1)
+                        # Cache this resolved result
+                        results_cache[ticker] = {
+                            "result": bet["result"],
+                            "market_result": result_val,
+                        }
+                    elif status == "open":
+                        bet["result"] = "open"
+                    else:
+                        bet["result"] = "pending"
+                    time.sleep(0.2)
+                except Exception:
+                    pass
 
             bets.append(bet)
 
-        # Sort by timestamp
         bets.sort(key=lambda b: b.get("timestamp", ""))
         return bets
 
-    # Build crypto bets
-    crypto_bets = build_bets_from_fills(
-        lambda t: _get_crypto_name(t)
-    )
+    crypto_bets = build_bets_from_fills(lambda t: _get_crypto_name(t))
+    sports_bets = build_bets_from_fills(lambda t: "sports" if _is_sports(t) else None)
 
-    # Build sports bets from fills
-    sports_bets = build_bets_from_fills(
-        lambda t: "sports" if _is_sports(t) else None
-    )
+    # Save results cache after resolving
+    _save_cache(RESULTS_CACHE, results_cache)
 
-    P(f"  [DATA] {len(crypto_bets)} crypto, {len(sports_bets)} sports bets from fills")
+    P(f"  [DATA] {len(crypto_bets)} crypto, {len(sports_bets)} sports bets")
 
     def build_report(bets):
         resolved = [b for b in bets if b.get("result") in ("win", "loss")]
@@ -230,14 +284,11 @@ def _fetch_data():
         total_fees = sum(b.get("fee", 0) for b in resolved)
         total_wagered = sum(b.get("bet_amount", 0) for b in bets)
         open_cost = sum(b.get("bet_amount", 0) for b in open_bets)
-        # Maker/taker stats
         total_maker = sum(b.get("maker_count", 0) for b in bets)
         total_taker = sum(b.get("taker_count", 0) for b in bets)
-        # Best/worst trade (like kalshi-dash)
         best_trade = max(resolved, key=lambda b: b.get("pnl", 0)) if resolved else None
         worst_trade = min(resolved, key=lambda b: b.get("pnl", 0)) if resolved else None
         best_roi = max(resolved, key=lambda b: b.get("roi", 0)) if resolved else None
-        # PNL per dollar risked (like kalshi-dash)
         resolved_wagered = sum(b.get("bet_amount", 0) for b in resolved)
         pnl_per_dollar = round(total_pnl / resolved_wagered, 4) if resolved_wagered > 0 else 0
         return {
