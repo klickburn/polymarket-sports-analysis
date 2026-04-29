@@ -429,6 +429,20 @@ def _resolve_score_bets():
             return
 
     changed = False
+
+    # One-time fix: recalculate P&L for traded bets that have fill_price != price
+    for bet in bets:
+        if bet.get("action") == "trade" and bet.get("result") in ("win", "loss") and bet.get("fill_price"):
+            fp = bet["fill_price"]
+            bp = bet.get("price", 0)
+            if abs(fp - bp) > 0.001:
+                contracts = bet.get("contracts", 1)
+                if bet["result"] == "win":
+                    bet["pnl"] = round(contracts * (1.0 - fp), 2)
+                else:
+                    bet["pnl"] = round(-contracts * fp, 2)
+                changed = True
+
     for bet in bets:
         if bet.get("result") == "open":
             ticker = bet.get("ticker", "")
@@ -443,7 +457,8 @@ def _resolve_score_bets():
                           (result_val == "no" and side == "no")
                     bet["result"] = "win" if won else "loss"
                     bet["market_result"] = result_val
-                    price = bet.get("price", 0)
+                    # Use actual Kalshi fill price for traded bets, bot price for skips
+                    price = bet.get("fill_price", bet.get("price", 0)) if bet.get("action") == "trade" else bet.get("price", 0)
                     contracts = bet.get("contracts", 1)
                     if won:
                         bet["pnl"] = round(contracts * (1.0 - price), 2)
