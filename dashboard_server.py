@@ -432,7 +432,7 @@ def _resolve_score_bets():
 
     # Fix: fetch actual fill prices from Kalshi for old resolved trades missing fill_price
     for bet in bets:
-        if bet.get("action") == "trade" and bet.get("result") in ("win", "loss") and not bet.get("fill_price") and bet.get("order_id"):
+        if bet.get("action") == "trade" and bet.get("result") in ("win", "loss") and not bet.get("fill_price") and bet.get("order_id") and not bet.get("fill_price_checked"):
             try:
                 order_resp = auth_get(f"/portfolio/orders/{bet['order_id']}")
                 order_data = order_resp.get("order", {})
@@ -450,6 +450,7 @@ def _resolve_score_bets():
                     bet["result"] = "unfilled"
                     if "pnl" in bet:
                         del bet["pnl"]
+                bet["fill_price_checked"] = True
                 changed = True
                 time.sleep(0.3)
             except Exception:
