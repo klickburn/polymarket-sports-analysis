@@ -430,21 +430,54 @@ def _resolve_score_bets():
 
     changed = False
 
-    # One-time fix: recalculate P&L for traded bets that have fill_price != price
+    # Fix: normalize fill_price from cents to dollars if needed, recalculate P&L
     for bet in bets:
-        if bet.get("action") == "trade" and bet.get("result") in ("win", "loss") and bet.get("fill_price"):
-            fp = bet["fill_price"]
-            bp = bet.get("price", 0)
-            if abs(fp - bp) > 0.001:
-                contracts = bet.get("contracts", 1)
-                if bet["result"] == "win":
-                    bet["pnl"] = round(contracts * (1.0 - fp), 2)
-                else:
-                    bet["pnl"] = round(-contracts * fp, 2)
+        fp = bet.get("fill_price")
+        if fp is not None and fp > 1:
+            bet["fill_price"] = fp / 100
+            changed = True
+        if bet.get("action") == "trade" and bet.get("result") in ("win", "loss"):
+            actual_price = bet.get("fill_price", bet.get("price", 0))
+            contracts = bet.get("filled_count", bet.get("contracts", 1))
+            if bet["result"] == "win":
+                correct_pnl = round(contracts * (1.0 - actual_price), 2)
+            else:
+                correct_pnl = round(-contracts * actual_price, 2)
+            if abs((bet.get("pnl", 0)) - correct_pnl) > 0.001:
+                bet["pnl"] = correct_pnl
                 changed = True
 
     for bet in bets:
         if bet.get("result") == "open":
+            # For traded bets, verify the order was actually filled before resolving
+            if bet.get("action") == "trade" and bet.get("order_id"):
+                try:
+                    order_resp = auth_get(f"/portfolio/orders/{bet['order_id']}")
+                    order_data = order_resp.get("order", {})
+                    order_status = order_data.get("status", "")
+                    remaining = order_data.get("remaining_count", 0)
+                    filled_count = order_data.get("count", 0) - remaining
+                    actual_price = order_data.get("avg_price", 0)
+
+                    if order_status in ("canceled", "expired") and filled_count == 0:
+                        # Order was never filled — mark as unfilled
+                        bet["result"] = "unfilled"
+                        bet["status"] = order_status
+                        changed = True
+                        time.sleep(0.3)
+                        continue
+                    elif order_status == "resting":
+                        # Still sitting in orderbook — skip for now
+                        time.sleep(0.3)
+                        continue
+                    elif filled_count > 0 and actual_price > 0:
+                        # Update with actual fill data
+                        bet["fill_price"] = actual_price / 100 if actual_price > 1 else actual_price
+                        bet["filled_count"] = filled_count
+                    time.sleep(0.3)
+                except Exception:
+                    pass
+
             ticker = bet.get("ticker", "")
             try:
                 mkt = public_get(f"/markets/{ticker}")
@@ -459,7 +492,7 @@ def _resolve_score_bets():
                     bet["market_result"] = result_val
                     # Use actual Kalshi fill price for traded bets, bot price for skips
                     price = bet.get("fill_price", bet.get("price", 0)) if bet.get("action") == "trade" else bet.get("price", 0)
-                    contracts = bet.get("contracts", 1)
+                    contracts = bet.get("filled_count", bet.get("contracts", 1))
                     if won:
                         bet["pnl"] = round(contracts * (1.0 - price), 2)
                     else:
@@ -485,7 +518,7 @@ def _resolve_score_bets():
 
 def _build_score_report(bets, status):
     """Build the score data report from bets — no API calls, instant."""
-    trades = [b for b in bets if b.get("action") == "trade"]
+    trades = [b for b in bets if b.get("action") == "trade" and b.get("result") != "unfilled"]
     skips = [b for b in bets if b.get("action") == "skip"]
 
     resolved = [b for b in trades if b.get("result") in ("win", "loss")]

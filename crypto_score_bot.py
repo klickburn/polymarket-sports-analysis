@@ -915,7 +915,11 @@ def run(live=False):
                         order = result.get("order", {})
                         bet_record["order_id"] = order.get("order_id", "")
                         bet_record["status"] = order.get("status", "")
-                        bet_record["fill_price"] = order.get("avg_price", price)
+                        avg_p = order.get("avg_price", None)
+                        # Kalshi returns avg_price in cents — normalize to dollars
+                        if avg_p is not None and avg_p > 1:
+                            avg_p = avg_p / 100
+                        bet_record["fill_price"] = avg_p if avg_p else price
                         # Place take-profit sell order
                         if TAKE_PROFIT_PRICE > 0 and price < TAKE_PROFIT_PRICE:
                             time.sleep(1)
