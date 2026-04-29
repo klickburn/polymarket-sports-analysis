@@ -430,26 +430,38 @@ def _resolve_score_bets():
 
     changed = False
 
-    # Fix: fetch actual fill prices from Kalshi for old resolved trades missing fill_price
+    # Fix: verify fill status for resolved trades that haven't been checked yet
+    # Catches: missing fill_price, "resting" orders that were resolved without verification
     for bet in bets:
-        if bet.get("action") == "trade" and bet.get("result") in ("win", "loss") and not bet.get("fill_price") and bet.get("order_id") and not bet.get("fill_price_checked"):
+        if bet.get("action") == "trade" and bet.get("order_id") and not bet.get("fill_price_checked"):
+            needs_check = (
+                (bet.get("result") in ("win", "loss") and not bet.get("fill_price")) or
+                (bet.get("result") in ("win", "loss") and bet.get("status") == "resting")
+            )
+            if not needs_check:
+                bet["fill_price_checked"] = True
+                changed = True
+                continue
             try:
                 order_resp = auth_get(f"/portfolio/orders/{bet['order_id']}")
                 order_data = order_resp.get("order", {})
-                avg_p = order_data.get("avg_price", 0)
-                if avg_p > 0:
-                    bet["fill_price"] = avg_p / 100 if avg_p > 1 else avg_p
                 remaining = order_data.get("remaining_count", 0)
                 total_count = order_data.get("count", 0)
                 filled_count = total_count - remaining
-                if filled_count > 0:
-                    bet["filled_count"] = filled_count
-                # Check if order was never actually filled
                 order_status = order_data.get("status", "")
-                if order_status in ("canceled", "expired") and filled_count == 0:
+                # Update the stored status from Kalshi
+                bet["status"] = order_status
+                # Order was never filled — mark as unfilled
+                if filled_count == 0:
                     bet["result"] = "unfilled"
                     if "pnl" in bet:
                         del bet["pnl"]
+                else:
+                    # Was filled — update with actual fill data
+                    avg_p = order_data.get("avg_price", 0)
+                    if avg_p > 0:
+                        bet["fill_price"] = avg_p / 100 if avg_p > 1 else avg_p
+                    bet["filled_count"] = filled_count
                 bet["fill_price_checked"] = True
                 changed = True
                 time.sleep(0.3)
