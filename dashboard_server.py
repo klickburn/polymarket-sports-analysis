@@ -451,19 +451,48 @@ def _resolve_score_bets():
                 order_status = order_data.get("status", "")
                 # Update the stored status from Kalshi
                 bet["status"] = order_status
+                # If Kalshi says executed, the order was filled — trust that
+                if order_status == "executed":
+                    avg_p = order_data.get("avg_price", 0)
+                    if avg_p > 0:
+                        bet["fill_price"] = avg_p / 100 if avg_p > 1 else avg_p
+                    if filled_count > 0:
+                        bet["filled_count"] = filled_count
                 # Order was never filled — mark as unfilled
-                if filled_count == 0:
+                elif filled_count == 0:
                     bet["result"] = "unfilled"
                     if "pnl" in bet:
                         del bet["pnl"]
                 else:
-                    # Was filled — update with actual fill data
+                    # Partially filled
                     avg_p = order_data.get("avg_price", 0)
                     if avg_p > 0:
                         bet["fill_price"] = avg_p / 100 if avg_p > 1 else avg_p
                     bet["filled_count"] = filled_count
                 bet["fill_price_checked"] = True
                 changed = True
+                time.sleep(0.3)
+            except Exception:
+                pass
+
+    # Fix: restore wrongly-unfilled bets where Kalshi status is actually "executed"
+    for bet in bets:
+        if bet.get("result") == "unfilled" and bet.get("status") == "executed":
+            # This order was filled — re-resolve it
+            ticker = bet.get("ticker", "")
+            try:
+                mkt = public_get(f"/markets/{ticker}")
+                market = mkt.get("market", {})
+                mkt_status = market.get("status", "")
+                result_val = market.get("result", "")
+                if mkt_status in ("settled", "finalized") and result_val:
+                    side = bet.get("side", "")
+                    won = (result_val == "yes" and side == "yes") or \
+                          (result_val == "no" and side == "no")
+                    bet["result"] = "win" if won else "loss"
+                    bet["market_result"] = result_val
+                    bet["action"] = "trade"
+                    changed = True
                 time.sleep(0.3)
             except Exception:
                 pass
