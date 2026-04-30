@@ -1515,8 +1515,10 @@ function renderScoreBot() {
   const netFilterValue = lossesSaved - missedGains;
   const ver = (d.strategy_version || 'v4').toUpperCase();
   const avgPnl = d.resolved > 0 ? d.total_pnl / d.resolved : 0;
+  const sBal = d.balance || 0;
+  const sPort = d.portfolio_value || 0;
   const kpis = [
-    { label: 'Strategy', value: ver, cls: 'blue', sub: ver === 'V7' ? 'Signal Score 3+' : ver === 'V5' ? 'Stoch+Consensus' : 'Filters' },
+    { label: 'Account Value', value: (sBal + sPort) > 0 ? `$${(sBal + sPort).toFixed(2)}` : '--', cls: 'cyan', sub: `$${sBal.toFixed(2)} cash + $${sPort.toFixed(2)} portfolio` },
     { label: 'Total P&L', value: `$${d.total_pnl >= 0 ? '+' : ''}${d.total_pnl.toFixed(2)}`, cls: d.total_pnl >= 0 ? 'green' : 'red', sub: `Avg $${avgPnl >= 0 ? '+' : ''}${avgPnl.toFixed(2)}/trade` },
     { label: 'Win Rate', value: d.resolved > 0 ? `${wr}%` : '--', cls: wr >= 55 ? 'green' : wr >= 45 ? 'orange' : 'red', sub: `${d.wins}W - ${d.losses}L of ${d.resolved}` },
     { label: 'Net Filter Value', value: `$${netFilterValue >= 0 ? '+' : ''}${netFilterValue.toFixed(2)}`, cls: netFilterValue >= 0 ? 'green' : 'red', sub: `$${lossesSaved.toFixed(2)} saved - $${missedGains.toFixed(2)} missed` },

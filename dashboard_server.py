@@ -583,7 +583,7 @@ def _resolve_score_bets():
     return bets
 
 
-def _build_score_report(bets, status):
+def _build_score_report(bets, status, balance_info=None):
     """Build the score data report from bets — no API calls, instant."""
     trades = [b for b in bets if b.get("action") == "trade" and b.get("result") != "unfilled"]
     skips = [b for b in bets if b.get("action") == "skip"]
@@ -651,6 +651,8 @@ def _build_score_report(bets, status):
         "last_indicator_update": status.get("last_update", ""),
         "recent_bets": bets,
         "strategy_version": os.environ.get("SCORE_VERSION", "v4"),
+        "balance": (balance_info or {}).get("balance", 0),
+        "portfolio_value": (balance_info or {}).get("portfolio_value", 0),
     }
 
 
@@ -666,7 +668,12 @@ def score_resolve_loop():
                         status = json.load(f)
                 except Exception:
                     pass
-            report = _build_score_report(bets, status)
+            balance_info = {}
+            try:
+                balance_info = get_balance() or {}
+            except Exception:
+                pass
+            report = _build_score_report(bets, status, balance_info)
             with _score_lock:
                 _score_cache["result"] = report
                 _score_cache["last_resolve"] = time.time()
