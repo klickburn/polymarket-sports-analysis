@@ -554,7 +554,15 @@
   <!-- Hero charts -->
   <div class="grid-2">
     <div class="card">
-      <h3>Cumulative P&L</h3>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <h3 style="margin:0">Cumulative P&L</h3>
+        <div class="a-tab-row" id="pnlTimeFilters">
+          <button class="a-tab active" onclick="filterScorePnl('1d')">1D</button>
+          <button class="a-tab" onclick="filterScorePnl('1w')">1W</button>
+          <button class="a-tab" onclick="filterScorePnl('1m')">1M</button>
+          <button class="a-tab" onclick="filterScorePnl('all')">All</button>
+        </div>
+      </div>
       <div class="chart-container tall"><canvas id="scorePnlChart"></canvas></div>
     </div>
     <div class="card">
@@ -1529,13 +1537,42 @@ function renderScoreBot() {
     `<div class="kpi"><div class="label">${k.label}</div><div class="value ${k.cls}">${k.value}</div><div class="sub">${k.sub}</div></div>`
   ).join('');
 
-  // Cumulative P&L chart — enhanced with gradient + point colors
-  const trades = (d.recent_bets || []).filter(b => b.action === 'trade' && (b.result === 'win' || b.result === 'loss'));
-  if (trades.length > 0) {
+  // Cumulative P&L chart — with time filters
+  const _allScoreTrades = (d.recent_bets || []).filter(b => b.action === 'trade' && (b.result === 'win' || b.result === 'loss'));
+  window._allScoreTrades = _allScoreTrades;
+  window._scorePnlFilter = '1d';
+  function filterScorePnl(period) {
+    window._scorePnlFilter = period;
+    document.querySelectorAll('#pnlTimeFilters .a-tab').forEach(t => t.classList.toggle('active', t.textContent === ({
+      '1d': '1D', '1w': '1W', '1m': '1M', 'all': 'All'
+    })[period]));
+    drawScorePnlChart();
+  }
+  window.filterScorePnl = filterScorePnl;
+  function drawScorePnlChart() {
+    const now = new Date();
+    let cutoff = null;
+    if (window._scorePnlFilter === '1d') cutoff = new Date(now - 24*60*60*1000);
+    else if (window._scorePnlFilter === '1w') cutoff = new Date(now - 7*24*60*60*1000);
+    else if (window._scorePnlFilter === '1m') cutoff = new Date(now - 30*24*60*60*1000);
+    const filtered = cutoff ? _allScoreTrades.filter(b => new Date(b.timestamp) >= cutoff) : _allScoreTrades;
+    if (filtered.length === 0) {
+      if (_scoreCharts.pnl) { _scoreCharts.pnl.destroy(); _scoreCharts.pnl = null; }
+      document.getElementById('scorePnlChart').parentElement.querySelector('canvas') ||
+        (document.getElementById('scorePnlChart').parentElement.innerHTML = '<canvas id="scorePnlChart"></canvas>');
+      document.getElementById('scorePnlChart').style.display = 'none';
+      let noData = document.getElementById('scorePnlChart').parentElement.querySelector('.no-data-msg');
+      if (!noData) { noData = document.createElement('div'); noData.className = 'no-data-msg'; noData.style.cssText = 'display:flex;align-items:center;justify-content:center;height:300px;color:var(--muted)'; document.getElementById('scorePnlChart').parentElement.appendChild(noData); }
+      noData.textContent = 'No trades in this period';
+      return;
+    }
+    document.getElementById('scorePnlChart').style.display = '';
+    const noData = document.getElementById('scorePnlChart').parentElement.querySelector('.no-data-msg');
+    if (noData) noData.remove();
     let cum = 0;
-    const labels = trades.map(b => new Date(b.timestamp).toLocaleDateString('en-US', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}));
-    const vals = trades.map(b => { cum += (b.pnl || 0); return parseFloat(cum.toFixed(2)); });
-    const ptColors = trades.map(b => b.result === 'win' ? '#22c55e' : '#ef4444');
+    const labels = filtered.map(b => new Date(b.timestamp).toLocaleDateString('en-US', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}));
+    const vals = filtered.map(b => { cum += (b.pnl || 0); return parseFloat(cum.toFixed(2)); });
+    const ptColors = filtered.map(b => b.result === 'win' ? '#22c55e' : '#ef4444');
     if (_scoreCharts.pnl) _scoreCharts.pnl.destroy();
     const pnlCtx = document.getElementById('scorePnlChart').getContext('2d');
     const pnlGrad = pnlCtx.createLinearGradient(0, 0, 0, 300);
@@ -1543,9 +1580,12 @@ function renderScoreBot() {
     pnlGrad.addColorStop(1, 'rgba(168,85,247,0.01)');
     _scoreCharts.pnl = new Chart(pnlCtx, {
       type: 'line',
-      data: { labels, datasets: [{ data: vals, borderColor: '#a855f7', backgroundColor: pnlGrad, fill: true, tension: 0.3, pointRadius: 4, pointBorderWidth: 2, pointBackgroundColor: ptColors, pointBorderColor: ptColors, borderWidth: 2.5 }] },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `Cum P&L: $${ctx.raw >= 0 ? '+' : ''}${ctx.raw.toFixed(2)}`, afterLabel: ctx => trades[ctx.dataIndex].result.toUpperCase() + ' | ' + (trades[ctx.dataIndex].crypto || '') } } }, scales: { x: { ticks: { color: '#8b8fa3', maxTicksLimit: 8 }, grid: { color: 'rgba(42,45,58,0.3)' } }, y: { ticks: { color: '#8b8fa3', callback: v => '$' + v.toFixed(2) }, grid: { color: 'rgba(42,45,58,0.3)' } } } }
+      data: { labels, datasets: [{ data: vals, borderColor: '#a855f7', backgroundColor: pnlGrad, fill: true, tension: 0.3, pointRadius: filtered.length > 100 ? 2 : 4, pointBorderWidth: filtered.length > 100 ? 1 : 2, pointBackgroundColor: ptColors, pointBorderColor: ptColors, borderWidth: 2.5 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `P&L: $${ctx.raw >= 0 ? '+' : ''}${ctx.raw.toFixed(2)}`, afterLabel: ctx => filtered[ctx.dataIndex].result.toUpperCase() + ' | ' + (filtered[ctx.dataIndex].crypto || '') } } }, scales: { x: { ticks: { color: '#8b8fa3', maxTicksLimit: 8 }, grid: { color: 'rgba(42,45,58,0.3)' } }, y: { ticks: { color: '#8b8fa3', callback: v => '$' + v.toFixed(2) }, grid: { color: 'rgba(42,45,58,0.3)' } } } }
     });
+  }
+  if (_allScoreTrades.length > 0) {
+    drawScorePnlChart();
   } else {
     document.getElementById('scorePnlChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:300px;color:var(--muted)">No resolved trades yet</div>';
   }
