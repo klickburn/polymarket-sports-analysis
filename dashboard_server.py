@@ -737,8 +737,9 @@ def bot_thread():
 def score_bot_thread():
     while True:
         try:
-            P("  [SCORE-BOT] Starting crypto score bot...")
-            run_score_bot(live=True)
+            is_live = os.environ.get("SCORE_LIVE", "true").lower() == "true"
+            P(f"  [SCORE-BOT] Starting crypto score bot... (live={is_live})")
+            run_score_bot(live=is_live)
         except Exception as e:
             P(f"  [SCORE-BOT] Crashed: {e}")
             time.sleep(30)
