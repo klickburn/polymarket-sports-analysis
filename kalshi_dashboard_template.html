@@ -1539,6 +1539,7 @@ function renderScoreBot() {
 
   // Cumulative P&L chart — with time filters
   const _allScoreTrades = (d.recent_bets || []).filter(b => b.action === 'trade' && (b.result === 'win' || b.result === 'loss'));
+  const trades = _allScoreTrades;
   window._allScoreTrades = _allScoreTrades;
   window._scorePnlFilter = '1d';
   function filterScorePnl(period) {
