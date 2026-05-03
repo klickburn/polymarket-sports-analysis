@@ -644,8 +644,30 @@ def place_take_profit(ticker, side, count):
 # ── Load/save bets ──────────────────────────────────────────────────────
 def load_bets():
     if os.path.exists(BETS_FILE):
-        with open(BETS_FILE) as f:
-            return json.load(f)
+        try:
+            with open(BETS_FILE) as f:
+                return json.load(f)
+        except json.JSONDecodeError as e:
+            P(f"  WARNING: Bets file corrupted ({e}), attempting repair...")
+            # Try to salvage by reading up to the last valid ']'
+            try:
+                with open(BETS_FILE) as f:
+                    raw = f.read()
+                last_bracket = raw.rfind(']')
+                if last_bracket > 0:
+                    repaired = json.loads(raw[:last_bracket + 1])
+                    P(f"  Repaired: recovered {len(repaired)} bets")
+                    # Save repaired version
+                    with open(BETS_FILE, "w") as f:
+                        json.dump(repaired, f, indent=2, default=str)
+                    return repaired
+            except Exception:
+                pass
+            # If repair fails, back up corrupted file and start fresh
+            backup = BETS_FILE + ".corrupted"
+            os.rename(BETS_FILE, backup)
+            P(f"  Could not repair — backed up to {backup}, starting fresh")
+            return []
     return []
 
 

@@ -425,6 +425,19 @@ def _resolve_score_bets():
         try:
             with open(SCORE_BETS_FILE) as f:
                 bets = json.load(f)
+        except json.JSONDecodeError:
+            # Try to repair corrupted JSON
+            try:
+                with open(SCORE_BETS_FILE) as f:
+                    raw = f.read()
+                last_bracket = raw.rfind(']')
+                if last_bracket > 0:
+                    bets = json.loads(raw[:last_bracket + 1])
+                    with open(SCORE_BETS_FILE, "w") as f:
+                        json.dump(bets, f, indent=2, default=str)
+                    P(f"  [SCORE-DATA] Repaired corrupted bets file: {len(bets)} bets")
+            except Exception:
+                return
         except Exception:
             return
 
