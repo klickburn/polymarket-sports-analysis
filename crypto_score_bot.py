@@ -1023,6 +1023,9 @@ def run(live=False):
                                 # Re-fetch current market price
                                 fresh_side, fresh_price = get_dominant_side(ticker)
                                 if fresh_side and fresh_price:
+                                    if fresh_price > MAX_PRICE:
+                                        P(f"    {crypto}: Fresh price {fresh_price:.2f} exceeds max {MAX_PRICE:.2f}, giving up")
+                                        break
                                     current_price = fresh_price
                                     P(f"    {crypto}: Retrying at fresh price {current_price:.2f}")
                                 else:
