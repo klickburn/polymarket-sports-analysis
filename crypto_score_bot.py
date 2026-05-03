@@ -883,7 +883,8 @@ def run(live=False):
                     if "BTC" in fresh_ind:
                         indicators["BTC"] = fresh_ind["BTC"]
 
-            # Now evaluate each crypto using the collected data
+            # ── Phase 1: Evaluate scores and build trade list ──────────
+            trade_queue = []  # [{crypto, ticker, side, price, score, bet_record}, ...]
             for crypto, snap in crypto_snapshots.items():
                 if crypto in placed_this_window:
                     continue
@@ -960,114 +961,194 @@ def run(live=False):
 
                 bet_record["action"] = "trade"
 
-                if live:
-                    MAX_RETRIES = 2
-                    order_filled = False
-                    current_price = price
-
-                    for attempt in range(1, MAX_RETRIES + 1):
-                        result = place_order(ticker, side, current_price, BET_AMOUNT, count=CONTRACT_COUNT)
-                        if not result:
-                            P(f"    {crypto}: Order failed (attempt {attempt})")
-                            break
-
-                        order = result.get("order", {})
-                        order_id = order.get("order_id", "")
-                        order_status = order.get("status", "")
-
-                        # If immediately filled, we're done
-                        if order_status == "executed":
-                            bet_record["order_id"] = order_id
-                            bet_record["status"] = order_status
-                            avg_p = order.get("avg_price", None)
-                            if avg_p is not None and avg_p > 1:
-                                avg_p = avg_p / 100
-                            bet_record["fill_price"] = avg_p if avg_p else current_price
-                            order_filled = True
-                            break
-
-                        # Order is resting — wait and check
-                        P(f"    {crypto}: Order resting, waiting 20s... (attempt {attempt})")
-                        time.sleep(20)
-
-                        # Check if it filled while we waited
-                        try:
-                            check = auth_get(f"/portfolio/orders/{order_id}")
-                            check_order = check.get("order", check)
-                            check_status = check_order.get("status", "")
-                            remaining = check_order.get("remaining_count", 0)
-                            total_count = check_order.get("count", CONTRACT_COUNT)
-                            filled_count = total_count - remaining
-
-                            if check_status == "executed" or filled_count > 0:
-                                # Filled (executed status or partial fill)
-                                bet_record["order_id"] = order_id
-                                bet_record["status"] = check_status
-                                avg_p = check_order.get("avg_price", None)
-                                if avg_p is not None and avg_p > 1:
-                                    avg_p = avg_p / 100
-                                bet_record["fill_price"] = avg_p if avg_p else current_price
-                                if filled_count > 0:
-                                    bet_record["filled_count"] = filled_count
-                                order_filled = True
-                                P(f"    {crypto}: Filled (status={check_status}, count={filled_count}/{total_count})")
-                                break
-
-                            # Still resting with 0 fills — cancel
-                            P(f"    {crypto}: Unfilled, canceling order...")
-                            try:
-                                auth_delete(f"/portfolio/orders/{order_id}")
-                            except Exception as ce:
-                                # Cancel failed — force cancel to avoid orphaned orders
-                                P(f"    {crypto}: Cancel error: {ce}, retrying cancel...")
-                                try:
-                                    time.sleep(1)
-                                    auth_delete(f"/portfolio/orders/{order_id}")
-                                except Exception:
-                                    P(f"    {crypto}: WARNING — order {order_id} may still be resting on Kalshi")
-
-                            if attempt < MAX_RETRIES:
-                                # Re-fetch current market price
-                                fresh_side, fresh_price = get_dominant_side(ticker)
-                                if fresh_side and fresh_price:
-                                    current_price = fresh_price
-                                    P(f"    {crypto}: Retrying at fresh price {current_price:.2f}")
-                                else:
-                                    P(f"    {crypto}: Could not get fresh price, giving up")
-                                    break
-                        except Exception as e:
-                            P(f"    {crypto}: Order check error: {e}")
-                            break
-
-                    if order_filled:
-                        # Place take-profit sell order
-                        if TAKE_PROFIT_PRICE > 0 and current_price < TAKE_PROFIT_PRICE:
-                            time.sleep(1)
-                            tp_result = place_take_profit(ticker, side, CONTRACT_COUNT)
-                            if tp_result:
-                                tp_order = tp_result.get("order", {})
-                                bet_record["tp_order_id"] = tp_order.get("order_id", "")
-                                bet_record["tp_price"] = TAKE_PROFIT_PRICE
-                        bets.append(bet_record)
-                        save_bets(bets)
-                        total_new += 1
-                        placed_this_window.add(crypto)
-                        tp_str = f" | TP @ {TAKE_PROFIT_PRICE*100:.0f}c" if TAKE_PROFIT_PRICE > 0 else ""
-                        P(f"    {crypto}: BET PLACED | {side.upper()} @ {bet_record.get('fill_price', current_price):.2f} | Score {score:+d}{tp_str}")
-                    else:
-                        bet_record["action"] = "unfilled"
-                        bet_record["status"] = "canceled"
-                        bets.append(bet_record)
-                        save_bets(bets)
-                        placed_this_window.add(crypto)
-                        P(f"    {crypto}: Order unfilled after {MAX_RETRIES} attempts")
-                else:
+                if not live:
                     P(f"    {crypto}: [DRY RUN] {side.upper()} @ {price:.2f} | Score {score:+d}")
                     bet_record["status"] = "dry_run"
                     bets.append(bet_record)
                     save_bets(bets)
                     total_new += 1
                     placed_this_window.add(crypto)
+                    continue
+
+                trade_queue.append({
+                    "crypto": crypto, "ticker": ticker, "side": side,
+                    "price": price, "score": score, "bet_record": bet_record,
+                })
+
+            # ── Phase 2: Fire all orders at once ──────────────────────
+            pending_orders = []  # [{crypto, ticker, side, price, order_id, bet_record}, ...]
+            for tq in trade_queue:
+                try:
+                    result = place_order(tq["ticker"], tq["side"], tq["price"], BET_AMOUNT, count=CONTRACT_COUNT)
+                    if not result:
+                        P(f"    {tq['crypto']}: Order failed")
+                        tq["bet_record"]["action"] = "unfilled"
+                        tq["bet_record"]["status"] = "failed"
+                        bets.append(tq["bet_record"])
+                        placed_this_window.add(tq["crypto"])
+                        continue
+                    order = result.get("order", {})
+                    order_id = order.get("order_id", "")
+                    order_status = order.get("status", "")
+                    tq["bet_record"]["order_id"] = order_id
+                    tq["bet_record"]["status"] = order_status
+
+                    if order_status == "executed":
+                        # Filled immediately
+                        avg_p = order.get("avg_price", None)
+                        if avg_p is not None and avg_p > 1:
+                            avg_p = avg_p / 100
+                        tq["bet_record"]["fill_price"] = avg_p if avg_p else tq["price"]
+                        bets.append(tq["bet_record"])
+                        save_bets(bets)
+                        total_new += 1
+                        placed_this_window.add(tq["crypto"])
+                        P(f"    {tq['crypto']}: FILLED INSTANTLY @ {tq['bet_record']['fill_price']:.2f}")
+                    else:
+                        # Resting — add to pending for bulk check
+                        pending_orders.append({
+                            "crypto": tq["crypto"], "ticker": tq["ticker"],
+                            "side": tq["side"], "price": tq["price"],
+                            "order_id": order_id, "bet_record": tq["bet_record"],
+                            "attempt": 1,
+                        })
+                        P(f"    {tq['crypto']}: Order placed, resting...")
+                except Exception as e:
+                    P(f"    {tq['crypto']}: Order error: {e}")
+                    tq["bet_record"]["action"] = "unfilled"
+                    tq["bet_record"]["status"] = "error"
+                    bets.append(tq["bet_record"])
+                    placed_this_window.add(tq["crypto"])
+                time.sleep(0.3)  # Small delay between orders to avoid rate limits
+
+            # ── Phase 3: Bulk check pending orders (up to 2 rounds) ──
+            MAX_RETRIES = 2
+            for check_round in range(MAX_RETRIES):
+                if not pending_orders:
+                    break
+                wait_secs = 15 if check_round == 0 else 10
+                P(f"  Waiting {wait_secs}s to check {len(pending_orders)} pending orders (round {check_round + 1})...")
+                time.sleep(wait_secs)
+
+                still_pending = []
+                for po in pending_orders:
+                    try:
+                        check = auth_get(f"/portfolio/orders/{po['order_id']}")
+                        check_order = check.get("order", check)
+                        check_status = check_order.get("status", "")
+                        remaining = check_order.get("remaining_count", 0)
+                        total_count = check_order.get("count", CONTRACT_COUNT)
+                        filled_count = total_count - remaining
+
+                        if check_status == "executed" or filled_count > 0:
+                            # Filled
+                            avg_p = check_order.get("avg_price", None)
+                            if avg_p is not None and avg_p > 1:
+                                avg_p = avg_p / 100
+                            po["bet_record"]["status"] = check_status
+                            po["bet_record"]["fill_price"] = avg_p if avg_p else po["price"]
+                            if filled_count > 0:
+                                po["bet_record"]["filled_count"] = filled_count
+                            bets.append(po["bet_record"])
+                            save_bets(bets)
+                            total_new += 1
+                            placed_this_window.add(po["crypto"])
+                            P(f"    {po['crypto']}: FILLED (status={check_status})")
+
+                            # Place take-profit
+                            if TAKE_PROFIT_PRICE > 0 and po["price"] < TAKE_PROFIT_PRICE:
+                                try:
+                                    tp_result = place_take_profit(po["ticker"], po["side"], CONTRACT_COUNT)
+                                    if tp_result:
+                                        tp_order = tp_result.get("order", {})
+                                        po["bet_record"]["tp_order_id"] = tp_order.get("order_id", "")
+                                        po["bet_record"]["tp_price"] = TAKE_PROFIT_PRICE
+                                except Exception:
+                                    pass
+                        else:
+                            # Still resting — cancel and maybe retry
+                            P(f"    {po['crypto']}: Still unfilled, canceling...")
+                            try:
+                                auth_delete(f"/portfolio/orders/{po['order_id']}")
+                            except Exception as ce:
+                                P(f"    {po['crypto']}: Cancel error: {ce}")
+                                try:
+                                    time.sleep(0.5)
+                                    auth_delete(f"/portfolio/orders/{po['order_id']}")
+                                except Exception:
+                                    P(f"    {po['crypto']}: WARNING — order may be orphaned")
+
+                            if check_round < MAX_RETRIES - 1:
+                                # Re-fetch price and resubmit
+                                fresh_side, fresh_price = get_dominant_side(po["ticker"])
+                                if fresh_side and fresh_price:
+                                    P(f"    {po['crypto']}: Retrying at fresh price {fresh_price:.2f}")
+                                    try:
+                                        retry = place_order(po["ticker"], po["side"], fresh_price, BET_AMOUNT, count=CONTRACT_COUNT)
+                                        if retry:
+                                            r_order = retry.get("order", {})
+                                            r_id = r_order.get("order_id", "")
+                                            r_status = r_order.get("status", "")
+                                            po["bet_record"]["order_id"] = r_id
+                                            po["bet_record"]["status"] = r_status
+                                            po["price"] = fresh_price
+
+                                            if r_status == "executed":
+                                                avg_p = r_order.get("avg_price", None)
+                                                if avg_p is not None and avg_p > 1:
+                                                    avg_p = avg_p / 100
+                                                po["bet_record"]["fill_price"] = avg_p if avg_p else fresh_price
+                                                bets.append(po["bet_record"])
+                                                save_bets(bets)
+                                                total_new += 1
+                                                placed_this_window.add(po["crypto"])
+                                                P(f"    {po['crypto']}: FILLED on retry @ {po['bet_record']['fill_price']:.2f}")
+                                            else:
+                                                po["order_id"] = r_id
+                                                still_pending.append(po)
+                                        else:
+                                            P(f"    {po['crypto']}: Retry order failed")
+                                            po["bet_record"]["action"] = "unfilled"
+                                            po["bet_record"]["status"] = "canceled"
+                                            bets.append(po["bet_record"])
+                                            placed_this_window.add(po["crypto"])
+                                    except Exception as e:
+                                        P(f"    {po['crypto']}: Retry error: {e}")
+                                        po["bet_record"]["action"] = "unfilled"
+                                        po["bet_record"]["status"] = "canceled"
+                                        bets.append(po["bet_record"])
+                                        placed_this_window.add(po["crypto"])
+                                else:
+                                    P(f"    {po['crypto']}: No fresh price, giving up")
+                                    po["bet_record"]["action"] = "unfilled"
+                                    po["bet_record"]["status"] = "canceled"
+                                    bets.append(po["bet_record"])
+                                    placed_this_window.add(po["crypto"])
+                            else:
+                                # Last round — mark as unfilled
+                                po["bet_record"]["action"] = "unfilled"
+                                po["bet_record"]["status"] = "canceled"
+                                bets.append(po["bet_record"])
+                                placed_this_window.add(po["crypto"])
+                                P(f"    {po['crypto']}: Unfilled after {MAX_RETRIES} rounds")
+                        time.sleep(0.3)
+                    except Exception as e:
+                        P(f"    {po['crypto']}: Check error: {e}")
+                        po["bet_record"]["action"] = "unfilled"
+                        po["bet_record"]["status"] = "error"
+                        bets.append(po["bet_record"])
+                        placed_this_window.add(po["crypto"])
+
+                pending_orders = still_pending
+
+            # Handle any remaining after all rounds
+            for po in pending_orders:
+                po["bet_record"]["action"] = "unfilled"
+                po["bet_record"]["status"] = "canceled"
+                bets.append(po["bet_record"])
+                placed_this_window.add(po["crypto"])
+            if pending_orders:
+                save_bets(bets)
 
             # Periodic git backup
             git_backup_bets(bets)
