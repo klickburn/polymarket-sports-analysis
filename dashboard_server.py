@@ -588,8 +588,16 @@ def _resolve_score_bets():
 
     if changed:
         try:
-            with open(SCORE_BETS_FILE, "w") as f:
+            # Atomic write to prevent corruption
+            tmp = SCORE_BETS_FILE + ".tmp"
+            with open(tmp, "w") as f:
                 json.dump(bets, f, indent=2, default=str)
+            if os.path.exists(SCORE_BETS_FILE):
+                try:
+                    os.replace(SCORE_BETS_FILE, SCORE_BETS_FILE + ".bak")
+                except Exception:
+                    pass
+            os.replace(tmp, SCORE_BETS_FILE)
         except Exception:
             pass
 

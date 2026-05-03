@@ -672,8 +672,18 @@ def load_bets():
 
 
 def save_bets(bets):
-    with open(BETS_FILE, "w") as f:
+    # Atomic write: write to temp file, then rename (prevents corruption on crash)
+    tmp_file = BETS_FILE + ".tmp"
+    with open(tmp_file, "w") as f:
         json.dump(bets, f, indent=2, default=str)
+    # Keep one rolling backup
+    if os.path.exists(BETS_FILE):
+        backup_file = BETS_FILE + ".bak"
+        try:
+            os.replace(BETS_FILE, backup_file)
+        except Exception:
+            pass
+    os.replace(tmp_file, BETS_FILE)
 
 
 def save_status(status):
@@ -687,32 +697,51 @@ _last_git_backup = 0
 GIT_BACKUP_INTERVAL = 900  # 15 min
 
 def git_backup_bets(bets):
-    """Save bets to repo and push to git for optimizer/strategy use."""
+    """Back up bets to GitHub repo via API (works without git CLI credentials)."""
     global _last_git_backup
     now = time.time()
     if now - _last_git_backup < GIT_BACKUP_INTERVAL:
         return
     _last_git_backup = now
+    gh_token = os.environ.get("GITHUB_TOKEN", "")
+    repo = os.environ.get("GITHUB_REPO", "klickburn/polymarket-sports-analysis")
+    if not gh_token:
+        return
     try:
-        import subprocess
-        repo_dir = os.path.dirname(__file__) or "."
-        # Write bets to repo file
-        with open(GIT_BETS_FILE, "w") as f:
-            json.dump(bets, f, indent=2, default=str)
-        # Git add, commit, push
+        import base64
+        content = json.dumps(bets, indent=2, default=str)
+        encoded = base64.b64encode(content.encode()).decode()
+        file_path = "crypto_score_bets.json"
+        api_url = f"https://api.github.com/repos/{repo}/contents/{file_path}"
+        # Get current file SHA (needed for updates)
+        req = urllib.request.Request(api_url, headers={
+            "Authorization": f"token {gh_token}",
+            "Accept": "application/vnd.github.v3+json",
+        })
+        sha = None
+        try:
+            resp = urllib.request.urlopen(req, timeout=15)
+            data = json.loads(resp.read())
+            sha = data.get("sha", "")
+        except Exception:
+            pass  # File doesn't exist yet
+        # Create/update file
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        subprocess.run(["git", "add", "crypto_score_bets.json"], cwd=repo_dir,
-                       capture_output=True, timeout=30)
-        result = subprocess.run(
-            ["git", "commit", "-m", f"data: score bot bets {ts}"],
-            cwd=repo_dir, capture_output=True, timeout=30)
-        if result.returncode == 0:
-            # Pull rebase then push (handle concurrent bot commits)
-            subprocess.run(["git", "pull", "--rebase"], cwd=repo_dir,
-                           capture_output=True, timeout=60)
-            subprocess.run(["git", "push"], cwd=repo_dir,
-                           capture_output=True, timeout=60)
-            P(f"  [GIT] Backed up {len(bets)} bets to repo")
+        payload = {
+            "message": f"data: score bot bets {ts}",
+            "content": encoded,
+            "committer": {"name": "score-bot", "email": "bot@kalshi-bot.local"},
+        }
+        if sha:
+            payload["sha"] = sha
+        body = json.dumps(payload).encode()
+        req = urllib.request.Request(api_url, data=body, method="PUT", headers={
+            "Authorization": f"token {gh_token}",
+            "Accept": "application/vnd.github.v3+json",
+            "Content-Type": "application/json",
+        })
+        urllib.request.urlopen(req, timeout=30)
+        P(f"  [GIT] Backed up {len(bets)} bets to GitHub")
     except Exception as e:
         P(f"  [GIT] Backup failed: {e}")
 
