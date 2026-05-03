@@ -687,8 +687,10 @@ def save_bets(bets):
 
 
 def save_status(status):
-    with open(STATUS_FILE, "w") as f:
+    tmp = STATUS_FILE + ".tmp"
+    with open(tmp, "w") as f:
         json.dump(status, f, indent=2, default=str)
+    os.replace(tmp, STATUS_FILE)
 
 
 # ── Git backup ─────────────────────────────────────────────────────────
@@ -860,15 +862,26 @@ def run(live=False):
                 crypto_snapshots[c] = {"market": mkt2, "event": ev2, "side": s2, "price": p2}
 
             # Build consensus from snapshots (excluding BNB/HYPE)
-            if SCORE_VERSION in ("v5", "v5v6"):
-                window_sides = {}
-                for c, snap in crypto_snapshots.items():
-                    if c in CONSENSUS_EXCLUDE:
-                        continue
-                    if snap["side"] and snap["price"] and snap["price"] >= 0.60:
-                        window_sides[c] = snap["side"]
-                indicators["_window_sides"] = window_sides
+            window_sides = {}
+            for c, snap in crypto_snapshots.items():
+                if c in CONSENSUS_EXCLUDE:
+                    continue
+                if snap["side"] and snap["price"] and snap["price"] >= 0.60:
+                    window_sides[c] = snap["side"]
+            indicators["_window_sides"] = window_sides
+            if window_sides:
                 P(f"  Window sides: {window_sides}")
+
+            # Re-fetch BTC once before evaluating trades
+            btc_url = f"{COINGECKO}/coins/bitcoin/market_chart?vs_currency=usd&days=1"
+            btc_data = fetch_coingecko(btc_url)
+            if btc_data and "prices" in btc_data:
+                raw = sorted(btc_data["prices"], key=lambda x: x[0])
+                btc_candles = aggregate_to_15m(raw)
+                if len(btc_candles) >= 8:
+                    fresh_ind = compute_indicators({"BTC": btc_candles})
+                    if "BTC" in fresh_ind:
+                        indicators["BTC"] = fresh_ind["BTC"]
 
             # Now evaluate each crypto using the collected data
             for crypto, snap in crypto_snapshots.items():
@@ -893,22 +906,6 @@ def run(live=False):
                 if price < MIN_PRICE or price > MAX_PRICE:
                     continue
 
-                # # Lock direction after first trade — skip opposite side (disabled for testing)
-                # if locked_side and side != locked_side:
-                #     P(f"    {crypto}: SKIP (side {side.upper()} != locked {locked_side.upper()})")
-                #     continue
-
-                # Re-fetch BTC from CoinGecko for fresh ret_1h before each trade
-                btc_url = f"{COINGECKO}/coins/bitcoin/market_chart?vs_currency=usd&days=1"
-                btc_data = fetch_coingecko(btc_url)
-                if btc_data and "prices" in btc_data:
-                    raw = sorted(btc_data["prices"], key=lambda x: x[0])
-                    btc_candles = aggregate_to_15m(raw)
-                    if len(btc_candles) >= 8:
-                        fresh_ind = compute_indicators({"BTC": btc_candles})
-                        if "BTC" in fresh_ind:
-                            indicators["BTC"] = fresh_ind["BTC"]
-
                 # Compute score
                 score, reasons = compute_score(crypto, side, price, indicators)
                 if score is None:
@@ -921,7 +918,10 @@ def run(live=False):
                 ind = indicators.get(crypto, {})
                 score_breakdown = {}
                 for factor, detail, pts in reasons:
-                    score_breakdown[factor] = {"detail": detail, "points": int(pts) if pts not in ("pass",) else 0}
+                    try:
+                        score_breakdown[factor] = {"detail": detail, "points": int(pts)}
+                    except (ValueError, TypeError):
+                        score_breakdown[factor] = {"detail": detail, "points": 0}
 
                 bet_record = {
                     "crypto": crypto,
@@ -999,25 +999,32 @@ def run(live=False):
                             total_count = check_order.get("count", CONTRACT_COUNT)
                             filled_count = total_count - remaining
 
-                            if filled_count > 0:
-                                # Partially or fully filled
+                            if check_status == "executed" or filled_count > 0:
+                                # Filled (executed status or partial fill)
                                 bet_record["order_id"] = order_id
                                 bet_record["status"] = check_status
                                 avg_p = check_order.get("avg_price", None)
                                 if avg_p is not None and avg_p > 1:
                                     avg_p = avg_p / 100
                                 bet_record["fill_price"] = avg_p if avg_p else current_price
-                                bet_record["filled_count"] = filled_count
+                                if filled_count > 0:
+                                    bet_record["filled_count"] = filled_count
                                 order_filled = True
-                                P(f"    {crypto}: Filled {filled_count}/{total_count} contracts")
+                                P(f"    {crypto}: Filled (status={check_status}, count={filled_count}/{total_count})")
                                 break
 
-                            # Still resting with 0 fills — cancel and retry
+                            # Still resting with 0 fills — cancel
                             P(f"    {crypto}: Unfilled, canceling order...")
                             try:
                                 auth_delete(f"/portfolio/orders/{order_id}")
                             except Exception as ce:
-                                P(f"    {crypto}: Cancel error: {ce}")
+                                # Cancel failed — force cancel to avoid orphaned orders
+                                P(f"    {crypto}: Cancel error: {ce}, retrying cancel...")
+                                try:
+                                    time.sleep(1)
+                                    auth_delete(f"/portfolio/orders/{order_id}")
+                                except Exception:
+                                    P(f"    {crypto}: WARNING — order {order_id} may still be resting on Kalshi")
 
                             if attempt < MAX_RETRIES:
                                 # Re-fetch current market price
