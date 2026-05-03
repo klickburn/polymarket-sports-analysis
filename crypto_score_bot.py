@@ -103,7 +103,7 @@ def fetch_crypto_prices():
             candles = aggregate_to_15m(raw)
             if len(candles) >= 8:
                 crypto_data[sym] = candles
-        time.sleep(0.4)
+        time.sleep(1.2)
     return crypto_data
 
 
@@ -674,23 +674,40 @@ def load_bets():
 def save_bets(bets):
     # Atomic write: write to temp file, then rename (prevents corruption on crash)
     tmp_file = BETS_FILE + ".tmp"
-    with open(tmp_file, "w") as f:
-        json.dump(bets, f, indent=2, default=str)
-    # Keep one rolling backup
-    if os.path.exists(BETS_FILE):
-        backup_file = BETS_FILE + ".bak"
-        try:
-            os.replace(BETS_FILE, backup_file)
-        except Exception:
-            pass
-    os.replace(tmp_file, BETS_FILE)
+    try:
+        with open(tmp_file, "w") as f:
+            json.dump(bets, f, indent=2, default=str)
+            f.flush()
+            os.fsync(f.fileno())
+        # Keep one rolling backup
+        if os.path.exists(BETS_FILE):
+            backup_file = BETS_FILE + ".bak"
+            try:
+                os.replace(BETS_FILE, backup_file)
+            except Exception:
+                pass
+        os.replace(tmp_file, BETS_FILE)
+    except OSError:
+        # Fallback: direct write if atomic rename fails (Railway volume issue)
+        with open(BETS_FILE, "w") as f:
+            json.dump(bets, f, indent=2, default=str)
+            f.flush()
+            os.fsync(f.fileno())
 
 
 def save_status(status):
     tmp = STATUS_FILE + ".tmp"
-    with open(tmp, "w") as f:
-        json.dump(status, f, indent=2, default=str)
-    os.replace(tmp, STATUS_FILE)
+    try:
+        with open(tmp, "w") as f:
+            json.dump(status, f, indent=2, default=str)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, STATUS_FILE)
+    except OSError:
+        with open(STATUS_FILE, "w") as f:
+            json.dump(status, f, indent=2, default=str)
+            f.flush()
+            os.fsync(f.fileno())
 
 
 # ── Git backup ─────────────────────────────────────────────────────────
@@ -823,9 +840,9 @@ def run(live=False):
                             "pack_agreement": round(ind["pack_agreement"], 2),
                         }
                     save_status(status)
+                    fetched_indicators = True
                 else:
-                    P("  WARNING: CoinGecko fetch failed")
-                fetched_indicators = True
+                    P("  WARNING: CoinGecko fetch failed, will retry next poll")
 
             # Wait until entry time (minute 11)
             if mins_in < ENTRY_AFTER_MINUTES:
