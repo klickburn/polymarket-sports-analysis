@@ -562,12 +562,12 @@ def compute_score_v7(sym, side, price, indicators):
     if vol >= 0.3:
         pts += 1; reasons.append(("High Vol", f"{vol:.2f}≥0.3", "+1"))
 
-    # 7. Consensus (+1)
+    # 7. Consensus (disabled — always 0)
     window_sides = indicators.get("_window_sides", {})
     if window_sides:
         sides_list = [s for s in window_sides.values() if s]
         if sides_list and all(s == sides_list[0] for s in sides_list):
-            pts += 1; reasons.append(("Consensus", f"all {sides_list[0].upper()}", "+1"))
+            reasons.append(("Consensus", f"all {sides_list[0].upper()}", "0"))
         else:
             reasons.append(("No Consensus", f"{window_sides}", "0"))
 
