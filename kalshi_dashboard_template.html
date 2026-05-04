@@ -69,7 +69,6 @@
   .mode-tab:hover { color: var(--text); background: rgba(255,255,255,0.05); }
   .mode-tab.active-sports { color: var(--teal); background: rgba(20,184,166,0.1); border-color: var(--teal); }
   .mode-tab.active-crypto { color: var(--orange); background: rgba(245,158,11,0.1); border-color: var(--orange); }
-  .mode-tab.active-overview { color: var(--cyan); background: rgba(6,182,212,0.1); border-color: var(--cyan); }
   .mode-tab.active-score { color: var(--purple); background: rgba(168,85,247,0.1); border-color: var(--purple); }
   .mode-tab.active-analytics { color: var(--yellow); background: rgba(234,179,8,0.1); border-color: var(--yellow); }
 
@@ -364,48 +363,9 @@
 <div class="mode-tabs">
   <div class="mode-tab active-score" id="tabScore" onclick="switchMode('score')">Score Bot</div>
   <div class="mode-tab" id="tabAnalytics" onclick="switchMode('analytics')">Analytics</div>
-  <div class="mode-tab" id="tabOverview" onclick="switchMode('overview')">Overview</div>
 </div>
 
 <!-- ═══════════════════ OVERVIEW SECTION ═══════════════════ -->
-<div class="mode-section" id="sectionOverview">
-  <div class="kpi-row" id="overviewKpis"></div>
-
-  <div class="grid-2">
-    <div class="card">
-      <h3>Account Summary</h3>
-      <div id="overviewAccountSummary"></div>
-    </div>
-    <div class="card">
-      <h3>P&L Breakdown</h3>
-      <div style="display:flex;gap:20px;align-items:center">
-        <div style="width:45%"><canvas id="overviewPnlDoughnut"></canvas></div>
-        <div id="overviewPnlStats" style="flex:1"></div>
-      </div>
-    </div>
-  </div>
-
-  <hr class="section-divider">
-  <div class="section-header"><h2>Strategy Performance</h2><span class="badge" style="background:rgba(6,182,212,0.2);color:var(--cyan)">All Strategies</span></div>
-  <div id="overviewStratCards" class="analytics-signal-grid"></div>
-
-  <hr class="section-divider">
-  <div class="section-header"><h2>Cumulative P&L</h2></div>
-  <div class="card">
-    <div class="chart-container tall"><canvas id="overviewCumPnlChart"></canvas></div>
-  </div>
-
-  <hr class="section-divider">
-  <div class="section-header"><h2>All Fills History</h2><span class="badge" style="background:rgba(59,130,246,0.2);color:var(--blue)">Full Log</span></div>
-  <div class="card" style="margin-bottom:24px">
-    <div class="scroll-table">
-      <table>
-        <thead><tr><th>Date</th><th>Type</th><th>Ticker</th><th>Side</th><th>Contracts</th><th>Price</th><th>Amount</th><th>P&L</th><th>Status</th></tr></thead>
-        <tbody id="overviewRecentBody"></tbody>
-      </table>
-    </div>
-  </div>
-</div>
 
 <!-- Sports and Crypto sections removed -->
 <!-- <div class="mode-section" id="sectionSports">
@@ -791,10 +751,8 @@ function resetScoreData() {
 }
 
 function switchMode(mode) {
-  document.getElementById('sectionOverview').classList.toggle('active', mode === 'overview');
   document.getElementById('sectionScore').classList.toggle('active', mode === 'score');
   document.getElementById('sectionAnalytics').classList.toggle('active', mode === 'analytics');
-  document.getElementById('tabOverview').className = 'mode-tab' + (mode === 'overview' ? ' active-overview' : '');
   document.getElementById('tabScore').className = 'mode-tab' + (mode === 'score' ? ' active-score' : '');
   document.getElementById('tabAnalytics').className = 'mode-tab' + (mode === 'analytics' ? ' active-analytics' : '');
   if (mode === 'score' && !window._scoreLoaded) { loadScoreData(); }
@@ -1338,152 +1296,6 @@ const openRisk = allOpen.reduce((s,b) => s + (b.bet_amount||0), 0);
 const totalMaker = (SR.maker_fills || 0) + (CR.maker_fills || 0);
 const totalTaker = (SR.taker_fills || 0) + (CR.taker_fills || 0);
 
-// KPIs — enhanced
-const roi = totalWagered > 0 ? (totalPnl / totalWagered * 100).toFixed(1) : '0';
-const overviewKpis = [
-  { label: 'Account Value', value: (balance + portfolioValue) > 0 ? `$${(balance + portfolioValue).toFixed(2)}` : '--', cls: 'cyan', sub: `$${balance.toFixed(2)} cash + $${portfolioValue.toFixed(2)} portfolio` },
-  { label: 'Total P&L', value: `$${totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}`, cls: totalPnl >= 0 ? 'green' : 'red', sub: `ROI: ${roi}%` },
-  { label: 'Win Rate', value: `${totalWinRate}%`, cls: parseFloat(totalWinRate) >= 55 ? 'green' : parseFloat(totalWinRate) >= 45 ? 'orange' : 'red', sub: `${allWins.length}W - ${allLosses.length}L` },
-  { label: 'Total Wagered', value: `$${totalWagered.toFixed(2)}`, cls: 'purple', sub: `${allBets.length} total bets` },
-  { label: 'Open Positions', value: allOpen.length, cls: 'orange', sub: `$${openRisk.toFixed(2)} at risk` },
-  { label: 'Fees Paid', value: `-$${totalFees.toFixed(2)}`, cls: 'red', sub: `${totalMaker} maker / ${totalTaker} taker` },
-];
-document.getElementById('overviewKpis').innerHTML = overviewKpis.map(k =>
-  `<div class="kpi"><div class="label">${k.label}</div><div class="value ${k.cls}">${k.value}</div><div class="sub">${k.sub}</div></div>`
-).join('');
-
-// Account Summary card — styled stat rows
-{
-  const ACTUAL_DEPOSIT = 900;  // Hardcoded — actual total deposited to Kalshi
-  const estimatedDeposit = ACTUAL_DEPOSIT;
-  const rows = [
-    { label: 'Cash Balance', value: `$${balance.toFixed(2)}`, color: '' },
-    { label: 'Portfolio Value', value: `$${portfolioValue.toFixed(2)}`, color: '' },
-    { label: 'Total Account Value', value: `$${(balance + portfolioValue).toFixed(2)}`, color: 'var(--cyan)', bold: true },
-    { label: 'Est. Total Deposited', value: estimatedDeposit > 0 ? `$${estimatedDeposit.toFixed(2)}` : '--', color: '' },
-    { label: 'Net P&L (all time)', value: `$${totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}`, color: totalPnl >= 0 ? 'var(--green)' : 'var(--red)', bold: true },
-    { label: 'Total Fees Paid', value: `-$${totalFees.toFixed(2)}`, color: 'var(--red)' },
-  ];
-  document.getElementById('overviewAccountSummary').innerHTML = rows.map(r =>
-    `<div class="side-stat-row"><span class="side-stat-label">${r.label}</span><span class="side-stat-value" style="${r.color ? 'color:' + r.color + ';' : ''}${r.bold ? 'font-size:16px' : ''}">${r.value}</span></div>`
-  ).join('');
-}
-
-// P&L Breakdown doughnut
-{
-  const sportsPnl = allResolved.filter(b => b._type === 'Sports').reduce((s,b) => s + (b.pnl||0), 0);
-  const cryptoPnl = allResolved.filter(b => b._type === 'Crypto').reduce((s,b) => s + (b.pnl||0), 0);
-  const sportsCount = allResolved.filter(b => b._type === 'Sports').length;
-  const cryptoCount = allResolved.filter(b => b._type === 'Crypto').length;
-  const sportsWins = allResolved.filter(b => b._type === 'Sports' && b.result === 'win').length;
-  const cryptoWins = allResolved.filter(b => b._type === 'Crypto' && b.result === 'win').length;
-  if (document.getElementById('overviewPnlDoughnut')) {
-    new Chart(document.getElementById('overviewPnlDoughnut'), {
-      type: 'doughnut',
-      data: { labels: ['Sports', 'Crypto'], datasets: [{ data: [Math.abs(sportsPnl) || 0.01, Math.abs(cryptoPnl) || 0.01], backgroundColor: ['#14b8a6', '#f59e0b'], borderWidth: 0, hoverOffset: 8 }] },
-      options: { responsive: true, maintainAspectRatio: true, cutout: '65%', plugins: { legend: { display: false } } }
-    });
-    const statsEl = document.getElementById('overviewPnlStats');
-    if (statsEl) {
-      const sWr = sportsCount > 0 ? (sportsWins / sportsCount * 100).toFixed(0) : 0;
-      const cWr = cryptoCount > 0 ? (cryptoWins / cryptoCount * 100).toFixed(0) : 0;
-      statsEl.innerHTML = `
-        <div class="side-stat-row"><span class="side-stat-label" style="color:var(--teal);font-weight:700">Sports</span><span class="side-stat-value">${sportsCount} trades</span></div>
-        <div class="side-stat-row"><span class="side-stat-label">Win Rate</span><span class="side-stat-value" style="color:${sWr >= 50 ? 'var(--green)' : 'var(--red)'}">${sWr}%</span></div>
-        <div class="side-stat-row"><span class="side-stat-label">P&L</span><span class="side-stat-value" style="color:${sportsPnl >= 0 ? 'var(--green)' : 'var(--red)'}">$${sportsPnl >= 0 ? '+' : ''}${sportsPnl.toFixed(2)}</span></div>
-        <div style="height:8px"></div>
-        <div class="side-stat-row"><span class="side-stat-label" style="color:var(--orange);font-weight:700">Crypto</span><span class="side-stat-value">${cryptoCount} trades</span></div>
-        <div class="side-stat-row"><span class="side-stat-label">Win Rate</span><span class="side-stat-value" style="color:${cWr >= 50 ? 'var(--green)' : 'var(--red)'}">${cWr}%</span></div>
-        <div class="side-stat-row"><span class="side-stat-label">P&L</span><span class="side-stat-value" style="color:${cryptoPnl >= 0 ? 'var(--green)' : 'var(--red)'}">$${cryptoPnl >= 0 ? '+' : ''}${cryptoPnl.toFixed(2)}</span></div>
-      `;
-    }
-  }
-}
-
-// Strategy scorecards
-{
-  const stratStats = {};
-  CRYPTO_BETS.forEach(b => {
-    const k = 'Crypto 15m';
-    if (!stratStats[k]) stratStats[k] = { bets: 0, wins: 0, losses: 0, pnl: 0, wagered: 0, color: '#f59e0b' };
-    stratStats[k].bets++;
-    stratStats[k].wagered += b.bet_amount || 0;
-    if (b.result === 'win') { stratStats[k].wins++; stratStats[k].pnl += (b.pnl || 0); }
-    else if (b.result === 'loss') { stratStats[k].losses++; stratStats[k].pnl += (b.pnl || 0); }
-  });
-  SPORTS_BETS.forEach(b => {
-    const lg = b.league || 'Other';
-    const k = lg;
-    if (!stratStats[k]) stratStats[k] = { bets: 0, wins: 0, losses: 0, pnl: 0, wagered: 0, color: '#14b8a6' };
-    stratStats[k].bets++;
-    stratStats[k].wagered += b.bet_amount || 0;
-    if (b.result === 'win') { stratStats[k].wins++; stratStats[k].pnl += (b.pnl || 0); }
-    else if (b.result === 'loss') { stratStats[k].losses++; stratStats[k].pnl += (b.pnl || 0); }
-  });
-  const names = Object.keys(stratStats).filter(k => stratStats[k].bets > 0).sort((a,b) => stratStats[b].pnl - stratStats[a].pnl);
-  let cardsHtml = '';
-  names.forEach(name => {
-    const s = stratStats[name];
-    const sWr = (s.wins + s.losses) > 0 ? (s.wins / (s.wins + s.losses) * 100) : 0;
-    const wrColor = sWr >= 55 ? 'var(--green)' : sWr >= 45 ? 'var(--yellow)' : 'var(--red)';
-    const pnlColor = s.pnl >= 0 ? 'var(--green)' : 'var(--red)';
-    const sRoi = s.wagered > 0 ? (s.pnl / s.wagered * 100).toFixed(1) : '0';
-    cardsHtml += `<div class="signal-card">
-      <div class="signal-glow" style="background:${s.color}"></div>
-      <div class="signal-name" style="color:${s.color}">${name}</div>
-      <div class="signal-wr" style="color:${wrColor}">${sWr.toFixed(0)}%</div>
-      <div class="signal-sub">${s.wins}W - ${s.losses}L (${s.bets} bets)</div>
-      <div class="signal-bar"><div class="signal-bar-fill" style="width:${Math.min(sWr, 100)}%;background:${s.color}"></div></div>
-      <div class="signal-pnl" style="color:${pnlColor}">$${s.pnl >= 0 ? '+' : ''}${s.pnl.toFixed(2)}</div>
-      <span class="signal-edge" style="background:rgba(${parseFloat(sRoi) >= 0 ? '34,197,94' : '239,68,68'},0.15);color:${parseFloat(sRoi) >= 0 ? 'var(--green)' : 'var(--red)'}">${sRoi}% ROI</span>
-    </div>`;
-  });
-  document.getElementById('overviewStratCards').innerHTML = cardsHtml || '<div style="color:var(--muted);padding:20px">No strategies yet</div>';
-}
-
-// Cumulative P&L chart
-{
-  const sorted = allResolved.sort((a,b) => (a.timestamp||'').localeCompare(b.timestamp||''));
-  if (sorted.length > 0) {
-    let cum = 0;
-    const labels = sorted.map(b => new Date(b.timestamp).toLocaleDateString('en-US', {month:'short',day:'numeric'}));
-    const vals = sorted.map(b => { cum += (b.pnl||0); return +cum.toFixed(2); });
-    const ptColors = sorted.map(b => b._type === 'Crypto' ? '#f59e0b' : '#14b8a6');
-    const ctx = document.getElementById('overviewCumPnlChart').getContext('2d');
-    const grad = ctx.createLinearGradient(0, 0, 0, 300);
-    grad.addColorStop(0, 'rgba(6,182,212,0.25)');
-    grad.addColorStop(1, 'rgba(6,182,212,0.01)');
-    new Chart(ctx, {
-      type: 'line',
-      data: { labels, datasets: [{ data: vals, borderColor: '#06b6d4', backgroundColor: grad, fill: true, tension: 0.3, pointRadius: 3, pointBackgroundColor: ptColors, borderWidth: 2.5 }] },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx2 => `Cum P&L: $${ctx2.raw >= 0 ? '+' : ''}${ctx2.raw.toFixed(2)}`, afterLabel: ctx2 => sorted[ctx2.dataIndex]._type + ' | ' + sorted[ctx2.dataIndex]._asset } } }, scales: { x: { ticks: { color: '#8b8fa3', maxTicksLimit: 10 }, grid: { color: 'rgba(42,45,58,0.3)' } }, y: { ticks: { color: '#8b8fa3', callback: v => '$' + v.toFixed(2) }, grid: { color: 'rgba(42,45,58,0.3)' } } } }
-    });
-  } else {
-    document.getElementById('overviewCumPnlChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:300px;color:var(--muted)">No resolved trades yet</div>';
-  }
-}
-
-// All Fills History — ALL trades across all types
-const recentAll = allBets.map(b => ({
-  date: b.timestamp, type: b._type, asset: b._asset, ticker: b.ticker || '',
-  side: b.side || b.label || '?', price: b.price || 0,
-  contracts: b.count || 1, amount: b.bet_amount || 0, pnl: b.pnl || null, result: b.result || 'pending',
-})).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-
-document.getElementById('overviewRecentBody').innerHTML = recentAll.map(r => {
-  const typeTag = r.type === 'Crypto' ? `<span style="color:var(--orange);font-weight:600">${r.type}</span>` : `<span style="color:var(--teal);font-weight:600">${r.type}</span>`;
-  return `<tr>
-    <td>${r.date ? getDate(r.date) : '-'}</td>
-    <td>${typeTag}</td>
-    <td>${r.ticker || r.asset}</td>
-    <td>${(r.side || '').toUpperCase()}</td>
-    <td>${r.contracts}</td>
-    <td>${(r.price * 100).toFixed(1)}c</td>
-    <td>$${r.amount.toFixed(2)}</td>
-    <td>${r.result === 'win' || r.result === 'loss' ? pnlHtml(r.pnl) : '-'}</td>
-    <td><span class="tag ${r.result}">${r.result.toUpperCase()}</span></td>
-  </tr>`;
-}).join('');
 
 } // end renderAll()
 
