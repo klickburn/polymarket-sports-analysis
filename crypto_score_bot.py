@@ -39,6 +39,7 @@ POLL_INTERVAL = int(os.environ.get("SCORE_POLL_INTERVAL", "20"))
 MIN_PRICE = float(os.environ.get("SCORE_MIN_PRICE", "0.78"))
 MAX_PRICE = float(os.environ.get("SCORE_MAX_PRICE", "0.99"))
 MIN_SCORE = int(os.environ.get("SCORE_MIN_SCORE", "0"))
+MAX_SCORE = int(os.environ.get("SCORE_MAX_SCORE", "2"))  # Signal count 5 = pts-3 = 2
 TAKE_PROFIT_PRICE = float(os.environ.get("SCORE_TAKE_PROFIT", "0.95"))
 SCORE_VERSION = os.environ.get("SCORE_VERSION", "v4")
 
@@ -54,14 +55,11 @@ CRYPTOS = {
     "SOL":  {"series": "KXSOL15M"},
     "XRP":  {"series": "KXXRP15M"},
     "DOGE": {"series": "KXDOGE15M"},
-    "BNB":  {"series": "KXBNB15M"},
-    "HYPE": {"series": "KXHYPE15M"},
 }
 
 COIN_IDS = {
     "BTC": "bitcoin", "ETH": "ethereum", "SOL": "solana",
-    "XRP": "ripple", "DOGE": "dogecoin", "BNB": "binancecoin",
-    "HYPE": "hyperliquid",
+    "XRP": "ripple", "DOGE": "dogecoin",
 }
 
 COINGECKO = "https://api.coingecko.com/api/v3"
@@ -770,7 +768,7 @@ def run(live=False):
     P("=" * 65)
     P(f"  CRYPTO SCORE BOT — {SCORE_VERSION.upper()} Scoring Engine")
     P(f"  Mode: {'LIVE' if live else 'DRY RUN'}")
-    P(f"  Strategy: {SCORE_VERSION} | Entry: minute {ENTRY_AFTER_MINUTES}+ | Min score: {MIN_SCORE}")
+    P(f"  Strategy: {SCORE_VERSION} | Entry: minute {ENTRY_AFTER_MINUTES}+ | Signal count: {MIN_SCORE+3}-{MAX_SCORE+3}")
     tp_str = f"{TAKE_PROFIT_PRICE*100:.0f}c" if TAKE_PROFIT_PRICE > 0 else "OFF"
     P(f"  Price range: {MIN_PRICE*100:.0f}-{MAX_PRICE*100:.0f}c | {CONTRACT_COUNT} contracts | TP: {tp_str}")
     P(f"  Cryptos: {', '.join(CRYPTOS.keys())}")
@@ -970,6 +968,14 @@ def run(live=False):
 
                 if score < MIN_SCORE:
                     P(f"    {crypto}: SKIP (score {score:+d} < {MIN_SCORE})")
+                    bet_record["action"] = "skip"
+                    bets.append(bet_record)
+                    save_bets(bets)
+                    placed_this_window.add(crypto)
+                    continue
+
+                if score > MAX_SCORE:
+                    P(f"    {crypto}: SKIP (score {score:+d} > {MAX_SCORE}, signal count {score+3} > {MAX_SCORE+3})")
                     bet_record["action"] = "skip"
                     bets.append(bet_record)
                     save_bets(bets)
