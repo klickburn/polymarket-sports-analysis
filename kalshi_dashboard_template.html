@@ -1757,7 +1757,8 @@ function renderScoreBot() {
     const raw = (b.score || 0) + 3;  // signal count
     if (!scoreStats[raw]) scoreStats[raw] = { wins: 0, losses: 0, pnl: 0 };
     const price = b.fill_price || b.price || 0;
-    const pnl = b.result === 'win' ? (1.0 - price) : -price;
+    const contracts = b.filled_count || b.contracts || 1;
+    const pnl = b.result === 'win' ? contracts * (1.0 - price) : -contracts * price;
     scoreStats[raw].pnl += pnl;
     if (b.result === 'win') scoreStats[raw].wins++;
     else scoreStats[raw].losses++;
