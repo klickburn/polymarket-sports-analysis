@@ -1044,16 +1044,11 @@ def run(live=False):
                     placed_this_window.add(tq["crypto"])
                 time.sleep(0.3)  # Small delay between orders to avoid rate limits
 
-            # ── Phase 3: Bulk check pending orders (up to 2 rounds) ──
-            MAX_RETRIES = 2
-            for check_round in range(MAX_RETRIES):
-                if not pending_orders:
-                    break
-                wait_secs = 15 if check_round == 0 else 10
-                P(f"  Waiting {wait_secs}s to check {len(pending_orders)} pending orders (round {check_round + 1})...")
-                time.sleep(wait_secs)
+            # ── Phase 3: Check pending orders once, cancel unfilled ──
+            if pending_orders:
+                P(f"  Waiting 15s to check {len(pending_orders)} pending orders...")
+                time.sleep(15)
 
-                still_pending = []
                 for po in pending_orders:
                     try:
                         check = auth_get(f"/portfolio/orders/{po['order_id']}")
@@ -1089,8 +1084,8 @@ def run(live=False):
                                 except Exception:
                                     pass
                         else:
-                            # Still resting — cancel and maybe retry
-                            P(f"    {po['crypto']}: Still unfilled, canceling...")
+                            # Still resting — cancel
+                            P(f"    {po['crypto']}: Unfilled, canceling...")
                             try:
                                 auth_delete(f"/portfolio/orders/{po['order_id']}")
                             except Exception as ce:
@@ -1100,60 +1095,10 @@ def run(live=False):
                                     auth_delete(f"/portfolio/orders/{po['order_id']}")
                                 except Exception:
                                     P(f"    {po['crypto']}: WARNING — order may be orphaned")
-
-                            if check_round < MAX_RETRIES - 1:
-                                # Re-fetch price and resubmit
-                                fresh_side, fresh_price = get_dominant_side(po["ticker"])
-                                if fresh_side and fresh_price:
-                                    P(f"    {po['crypto']}: Retrying at fresh price {fresh_price:.2f}")
-                                    try:
-                                        retry = place_order(po["ticker"], po["side"], fresh_price, BET_AMOUNT, count=CONTRACT_COUNT)
-                                        if retry:
-                                            r_order = retry.get("order", {})
-                                            r_id = r_order.get("order_id", "")
-                                            r_status = r_order.get("status", "")
-                                            po["bet_record"]["order_id"] = r_id
-                                            po["bet_record"]["status"] = r_status
-                                            po["price"] = fresh_price
-
-                                            if r_status == "executed":
-                                                avg_p = r_order.get("avg_price", None)
-                                                if avg_p is not None and avg_p > 1:
-                                                    avg_p = avg_p / 100
-                                                po["bet_record"]["fill_price"] = avg_p if avg_p else fresh_price
-                                                bets.append(po["bet_record"])
-                                                save_bets(bets)
-                                                total_new += 1
-                                                placed_this_window.add(po["crypto"])
-                                                P(f"    {po['crypto']}: FILLED on retry @ {po['bet_record']['fill_price']:.2f}")
-                                            else:
-                                                po["order_id"] = r_id
-                                                still_pending.append(po)
-                                        else:
-                                            P(f"    {po['crypto']}: Retry order failed")
-                                            po["bet_record"]["action"] = "unfilled"
-                                            po["bet_record"]["status"] = "canceled"
-                                            bets.append(po["bet_record"])
-                                            placed_this_window.add(po["crypto"])
-                                    except Exception as e:
-                                        P(f"    {po['crypto']}: Retry error: {e}")
-                                        po["bet_record"]["action"] = "unfilled"
-                                        po["bet_record"]["status"] = "canceled"
-                                        bets.append(po["bet_record"])
-                                        placed_this_window.add(po["crypto"])
-                                else:
-                                    P(f"    {po['crypto']}: No fresh price, giving up")
-                                    po["bet_record"]["action"] = "unfilled"
-                                    po["bet_record"]["status"] = "canceled"
-                                    bets.append(po["bet_record"])
-                                    placed_this_window.add(po["crypto"])
-                            else:
-                                # Last round — mark as unfilled
-                                po["bet_record"]["action"] = "unfilled"
-                                po["bet_record"]["status"] = "canceled"
-                                bets.append(po["bet_record"])
-                                placed_this_window.add(po["crypto"])
-                                P(f"    {po['crypto']}: Unfilled after {MAX_RETRIES} rounds")
+                            po["bet_record"]["action"] = "unfilled"
+                            po["bet_record"]["status"] = "canceled"
+                            bets.append(po["bet_record"])
+                            placed_this_window.add(po["crypto"])
                         time.sleep(0.3)
                     except Exception as e:
                         P(f"    {po['crypto']}: Check error: {e}")
@@ -1161,16 +1106,6 @@ def run(live=False):
                         po["bet_record"]["status"] = "error"
                         bets.append(po["bet_record"])
                         placed_this_window.add(po["crypto"])
-
-                pending_orders = still_pending
-
-            # Handle any remaining after all rounds
-            for po in pending_orders:
-                po["bet_record"]["action"] = "unfilled"
-                po["bet_record"]["status"] = "canceled"
-                bets.append(po["bet_record"])
-                placed_this_window.add(po["crypto"])
-            if pending_orders:
                 save_bets(bets)
 
             # Periodic git backup
