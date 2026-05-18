@@ -96,7 +96,7 @@ def aggregate_to_15m(prices_with_ts):
 def fetch_crypto_prices():
     """Fetch 24h price data from CoinGecko, aggregated to 15-min candles."""
     crypto_data = {}
-    for sym, cid in COIN_IDS.items():
+    for i, (sym, cid) in enumerate(COIN_IDS.items()):
         url = f"{COINGECKO}/coins/{cid}/market_chart?vs_currency=usd&days=1"
         data = fetch_coingecko(url)
         if data and "prices" in data:
@@ -104,7 +104,7 @@ def fetch_crypto_prices():
             candles = aggregate_to_15m(raw)
             if len(candles) >= 8:
                 crypto_data[sym] = candles
-        time.sleep(6)
+        time.sleep(2 if i < 2 else 8)  # fast for first 3, slow after
     return crypto_data
 
 
