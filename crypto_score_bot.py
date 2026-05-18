@@ -65,16 +65,19 @@ COIN_IDS = {
 COINGECKO = "https://api.coingecko.com/api/v3"
 
 # ── CoinGecko data fetching ────────────────────────────────────────────
-def fetch_coingecko(url, retries=2):
+def fetch_coingecko(url, retries=3):
     for attempt in range(retries + 1):
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-            resp = urllib.request.urlopen(req, timeout=12)
+            resp = urllib.request.urlopen(req, timeout=15)
             return json.loads(resp.read().decode())
-        except Exception:
+        except Exception as e:
             if attempt < retries:
-                time.sleep(1.5)
+                wait = 2 + attempt * 2  # 2s, 4s, 6s backoff
+                P(f"    CoinGecko retry {attempt+1}/{retries} ({e}), waiting {wait}s...")
+                time.sleep(wait)
             else:
+                P(f"    CoinGecko FAILED for {url.split('/')[-2]}: {e}")
                 return None
 
 
@@ -101,7 +104,7 @@ def fetch_crypto_prices():
             candles = aggregate_to_15m(raw)
             if len(candles) >= 8:
                 crypto_data[sym] = candles
-        time.sleep(1.2)
+        time.sleep(2.5)
     return crypto_data
 
 
