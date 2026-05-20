@@ -1120,16 +1120,35 @@ def run(live=False):
                                     pass
                         else:
                             # Still resting — cancel
-                            P(f"    {po['crypto']}: Unfilled, canceling...")
+                            P(f"    {po['crypto']}: Unfilled (status={check_status}), canceling order {po['order_id']}...")
                             try:
-                                auth_delete(f"/portfolio/orders/{po['order_id']}")
+                                cancel_resp = auth_delete(f"/portfolio/orders/{po['order_id']}")
+                                P(f"    {po['crypto']}: Cancel response: {cancel_resp}")
                             except Exception as ce:
                                 P(f"    {po['crypto']}: Cancel error: {ce}")
                                 try:
-                                    time.sleep(0.5)
-                                    auth_delete(f"/portfolio/orders/{po['order_id']}")
-                                except Exception:
-                                    P(f"    {po['crypto']}: WARNING — order may be orphaned")
+                                    time.sleep(1)
+                                    cancel_resp = auth_delete(f"/portfolio/orders/{po['order_id']}")
+                                    P(f"    {po['crypto']}: Cancel retry response: {cancel_resp}")
+                                except Exception as ce2:
+                                    P(f"    {po['crypto']}: Cancel retry also failed: {ce2}")
+                            # Verify it was actually canceled
+                            time.sleep(1)
+                            try:
+                                verify = auth_get(f"/portfolio/orders/{po['order_id']}")
+                                v_order = verify.get("order", verify)
+                                v_status = v_order.get("status", "unknown")
+                                P(f"    {po['crypto']}: Post-cancel status: {v_status}")
+                                if v_status == "resting":
+                                    P(f"    {po['crypto']}: WARNING — still resting after cancel!")
+                                    # Try decrease_order as fallback
+                                    try:
+                                        auth_post(f"/portfolio/orders/{po['order_id']}/decrease", {"reduce_by": v_order.get("remaining_count", CONTRACT_COUNT)})
+                                        P(f"    {po['crypto']}: Used decrease_order as fallback")
+                                    except Exception:
+                                        pass
+                            except Exception:
+                                pass
                             po["bet_record"]["action"] = "unfilled"
                             po["bet_record"]["status"] = "canceled"
                             bets.append(po["bet_record"])
