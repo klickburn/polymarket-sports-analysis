@@ -643,32 +643,64 @@ def place_take_profit(ticker, side, count):
 
 
 # ── Load/save bets ──────────────────────────────────────────────────────
-def load_bets():
-    if os.path.exists(BETS_FILE):
+def _try_load_json(path):
+    """Try to load JSON from a file, return (data, error) tuple."""
+    if not os.path.exists(path):
+        return None, "not found"
+    try:
+        with open(path) as f:
+            data = json.load(f)
+        return data, None
+    except json.JSONDecodeError as e:
+        # Try to salvage by reading up to the last valid ']'
         try:
-            with open(BETS_FILE) as f:
-                return json.load(f)
-        except json.JSONDecodeError as e:
-            P(f"  WARNING: Bets file corrupted ({e}), attempting repair...")
-            # Try to salvage by reading up to the last valid ']'
-            try:
-                with open(BETS_FILE) as f:
-                    raw = f.read()
-                last_bracket = raw.rfind(']')
-                if last_bracket > 0:
-                    repaired = json.loads(raw[:last_bracket + 1])
-                    P(f"  Repaired: recovered {len(repaired)} bets")
-                    # Save repaired version
-                    with open(BETS_FILE, "w") as f:
-                        json.dump(repaired, f, indent=2, default=str)
-                    return repaired
-            except Exception:
-                pass
-            # If repair fails, back up corrupted file and start fresh
-            backup = BETS_FILE + ".corrupted"
-            os.rename(BETS_FILE, backup)
-            P(f"  Could not repair — backed up to {backup}, starting fresh")
-            return []
+            with open(path) as f:
+                raw = f.read()
+            last_bracket = raw.rfind(']')
+            if last_bracket > 0:
+                repaired = json.loads(raw[:last_bracket + 1])
+                return repaired, None
+        except Exception:
+            pass
+        return None, str(e)
+    except Exception as e:
+        return None, str(e)
+
+
+def load_bets():
+    # Try main file first
+    data, err = _try_load_json(BETS_FILE)
+    if data is not None:
+        return data
+
+    if err and err != "not found":
+        P(f"  WARNING: Bets file corrupted ({err})")
+
+    # Try .bak backup
+    bak_file = BETS_FILE + ".bak"
+    data, err2 = _try_load_json(bak_file)
+    if data is not None:
+        P(f"  RECOVERED {len(data)} bets from .bak backup!")
+        save_bets(data)  # Restore main file from backup
+        return data
+
+    # Try .tmp (might have been written but not renamed)
+    tmp_file = BETS_FILE + ".tmp"
+    data, err3 = _try_load_json(tmp_file)
+    if data is not None:
+        P(f"  RECOVERED {len(data)} bets from .tmp file!")
+        save_bets(data)
+        return data
+
+    if err and err != "not found":
+        # All recovery failed — save corrupted file for debugging
+        corrupted = BETS_FILE + ".corrupted"
+        try:
+            os.rename(BETS_FILE, corrupted)
+        except Exception:
+            pass
+        P(f"  All recovery failed — starting fresh (corrupted file saved)")
+
     return []
 
 
