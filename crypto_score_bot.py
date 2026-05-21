@@ -932,17 +932,6 @@ def run(live=False):
             if window_sides:
                 P(f"  Window sides: {window_sides}")
 
-            # Re-fetch BTC once before evaluating trades
-            btc_url = f"{COINGECKO}/coins/bitcoin/market_chart?vs_currency=usd&days=1"
-            btc_data = fetch_coingecko(btc_url)
-            if btc_data and "prices" in btc_data:
-                raw = sorted(btc_data["prices"], key=lambda x: x[0])
-                btc_candles = aggregate_to_15m(raw)
-                if len(btc_candles) >= 8:
-                    fresh_ind = compute_indicators({"BTC": btc_candles})
-                    if "BTC" in fresh_ind:
-                        indicators["BTC"] = fresh_ind["BTC"]
-
             # ── Phase 1: Evaluate scores and build trade list ──────────
             trade_queue = []  # [{crypto, ticker, side, price, score, bet_record}, ...]
             for crypto, snap in crypto_snapshots.items():
