@@ -907,11 +907,11 @@ def run(live=False):
             for c, cfg2 in CRYPTOS.items():
                 if c in placed_this_window:
                     continue
-                time.sleep(2)
+                time.sleep(0.5)
                 mkt2, ev2 = find_current_market(cfg2["series"])
                 if not mkt2:
                     continue
-                time.sleep(2)
+                time.sleep(0.5)
                 s2, p2 = get_dominant_side(mkt2["ticker"])
                 crypto_snapshots[c] = {"market": mkt2, "event": ev2, "side": s2, "price": p2}
 
