@@ -53,12 +53,11 @@ CRYPTOS = {
     "BTC":  {"series": "KXBTC15M"},
     "ETH":  {"series": "KXETH15M"},
     "XRP":  {"series": "KXXRP15M"},
-    "DOGE": {"series": "KXDOGE15M"},
 }
 
 COIN_IDS = {
     "BTC": "bitcoin", "ETH": "ethereum",
-    "XRP": "ripple", "DOGE": "dogecoin",
+    "XRP": "ripple",
 }
 
 COINGECKO = "https://api.coingecko.com/api/v3"
@@ -829,7 +828,6 @@ def run(live=False):
     indicators = {}
     checked_positions = False
     fetched_indicators = False
-    doge_window_count = 0  # Track windows to alternate DOGE
     PREFETCH_MINUTE = ENTRY_AFTER_MINUTES  # Fetch CoinGecko right at entry time
 
     P(f"\n  Running continuously — polling every {POLL_INTERVAL}s...")
@@ -848,12 +846,7 @@ def run(live=False):
                 checked_positions = False
                 fetched_indicators = False
                 bets = load_bets()
-                doge_window_count += 1
-                doge_this_window = (doge_window_count % 2 == 1)  # Trade DOGE every other window
                 P(f"\n  -- Window {window_start.strftime('%H:%M')}-{window_end.strftime('%H:%M')} UTC ({len(bets)} bets on file) --")
-                if not doge_this_window:
-                    P("  DOGE: Skipping this window (every other)")
-                    placed_this_window.add("DOGE")
 
             # Too early — sleep until prefetch time
             if mins_in < PREFETCH_MINUTE:
@@ -863,8 +856,7 @@ def run(live=False):
             # Fetch CoinGecko right before trading
             if not fetched_indicators:
                 P("  Fetching CoinGecko data...")
-                skip_coins = {"DOGE"} if not doge_this_window else None
-                crypto_data = fetch_crypto_prices(skip_coins=skip_coins)
+                crypto_data = fetch_crypto_prices()
                 if crypto_data:
                     indicators = compute_indicators(crypto_data)
                     P(f"  Got indicators for {len(indicators)} cryptos")
