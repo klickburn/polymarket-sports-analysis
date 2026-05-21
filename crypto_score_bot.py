@@ -888,12 +888,15 @@ def run(live=False):
 
             # Fetch positions/orders once per window, right before trading
             if not checked_positions:
+                P("  Checking open orders/positions...")
                 open_order_tickers = get_open_orders()
                 time.sleep(1)
                 existing_positions = get_existing_positions()
                 skip_tickers = open_order_tickers | existing_positions
                 if skip_tickers:
                     P(f"  Skipping {len(skip_tickers)} tickers with open orders/positions")
+                else:
+                    P("  No existing orders/positions to skip")
                 checked_positions = True
                 time.sleep(1)
 
@@ -904,15 +907,18 @@ def run(live=False):
             # Single pass: collect sides for consensus + evaluate trades
             CONSENSUS_EXCLUDE = {"BNB", "HYPE"}
             crypto_snapshots = {}
+            P(f"  Scanning {len(CRYPTOS)} markets...")
             for c, cfg2 in CRYPTOS.items():
                 if c in placed_this_window:
                     continue
                 time.sleep(0.5)
                 mkt2, ev2 = find_current_market(cfg2["series"])
                 if not mkt2:
+                    P(f"    {c}: No market found")
                     continue
                 time.sleep(0.5)
                 s2, p2 = get_dominant_side(mkt2["ticker"])
+                P(f"    {c}: {s2} @ {p2}" if s2 else f"    {c}: No dominant side")
                 crypto_snapshots[c] = {"market": mkt2, "event": ev2, "side": s2, "price": p2}
 
             # Build consensus from snapshots (excluding BNB/HYPE)
