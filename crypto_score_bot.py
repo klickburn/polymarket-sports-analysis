@@ -52,13 +52,12 @@ STATUS_FILE = os.path.join(DATA_DIR, "crypto_score_status.json")
 CRYPTOS = {
     "BTC":  {"series": "KXBTC15M"},
     "ETH":  {"series": "KXETH15M"},
-    "SOL":  {"series": "KXSOL15M"},
     "XRP":  {"series": "KXXRP15M"},
     "DOGE": {"series": "KXDOGE15M"},
 }
 
 COIN_IDS = {
-    "BTC": "bitcoin", "ETH": "ethereum", "SOL": "solana",
+    "BTC": "bitcoin", "ETH": "ethereum",
     "XRP": "ripple", "DOGE": "dogecoin",
 }
 
