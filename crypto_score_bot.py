@@ -63,9 +63,13 @@ COIN_IDS = {
 }
 
 COINGECKO = "https://api.coingecko.com/api/v3"
+CG_API_KEY = os.environ.get("CG_API_KEY", "CG-djNqgGcv7UfYvqDfKsxWX1ii")
 
 # ── CoinGecko data fetching ────────────────────────────────────────────
 def fetch_coingecko(url, retries=3):
+    # Append API key
+    sep = "&" if "?" in url else "?"
+    url = f"{url}{sep}x_cg_demo_api_key={CG_API_KEY}"
     for attempt in range(retries + 1):
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
@@ -73,7 +77,7 @@ def fetch_coingecko(url, retries=3):
             return json.loads(resp.read().decode())
         except Exception as e:
             if attempt < retries:
-                wait = 5 + attempt * 5  # 5s, 10s, 15s backoff
+                wait = 3 + attempt * 3  # 3s, 6s, 9s backoff
                 P(f"    CoinGecko retry {attempt+1}/{retries} ({e}), waiting {wait}s...")
                 time.sleep(wait)
             else:
@@ -104,7 +108,7 @@ def fetch_crypto_prices():
             candles = aggregate_to_15m(raw)
             if len(candles) >= 8:
                 crypto_data[sym] = candles
-        time.sleep(2 if i < 2 else 8)  # fast for first 3, slow after
+        time.sleep(1)  # API key allows faster requests
     return crypto_data
 
 
