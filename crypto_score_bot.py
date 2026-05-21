@@ -77,7 +77,7 @@ def fetch_coingecko(url, retries=3):
             return json.loads(resp.read().decode())
         except Exception as e:
             if attempt < retries:
-                wait = 3 + attempt * 3  # 3s, 6s, 9s backoff
+                wait = 1 + attempt * 2  # 1s, 3s, 5s backoff
                 P(f"    CoinGecko retry {attempt+1}/{retries} ({e}), waiting {wait}s...")
                 time.sleep(wait)
             else:
@@ -108,7 +108,7 @@ def fetch_crypto_prices():
             candles = aggregate_to_15m(raw)
             if len(candles) >= 8:
                 crypto_data[sym] = candles
-        time.sleep(1)  # API key allows faster requests
+        time.sleep(0.3)  # 100 req/min limit with API key
     return crypto_data
 
 
