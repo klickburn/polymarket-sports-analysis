@@ -1001,8 +1001,11 @@ def run(live=False):
                     "strategy_version": SCORE_VERSION,
                 }
 
-                if score < MIN_SCORE:
-                    P(f"    {crypto}: SKIP (score {score:+d} < {MIN_SCORE})")
+                signal_count = score + 3
+                SKIP_SIGNALS = {1, 2}  # Skip signal counts 1 and 2
+
+                if signal_count in SKIP_SIGNALS:
+                    P(f"    {crypto}: SKIP (signal count {signal_count} in skip list)")
                     bet_record["action"] = "skip"
                     bets.append(bet_record)
                     save_bets(bets)
@@ -1010,7 +1013,7 @@ def run(live=False):
                     continue
 
                 if score > MAX_SCORE:
-                    P(f"    {crypto}: SKIP (score {score:+d} > {MAX_SCORE}, signal count {score+3} > {MAX_SCORE+3})")
+                    P(f"    {crypto}: SKIP (signal count {signal_count} > {MAX_SCORE+3})")
                     bet_record["action"] = "skip"
                     bets.append(bet_record)
                     save_bets(bets)
