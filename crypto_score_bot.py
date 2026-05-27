@@ -1022,7 +1022,7 @@ def run(live=False):
                 }
 
                 signal_count = score + 3
-                SKIP_SIGNALS = {1, 2}  # Skip signal counts 1 and 2
+                SKIP_SIGNALS = {2}  # Skip signal count 2 only
 
                 if signal_count in SKIP_SIGNALS:
                     P(f"    {crypto}: SKIP (signal count {signal_count} in skip list)")
