@@ -703,7 +703,28 @@ def load_bets():
             os.rename(BETS_FILE, corrupted)
         except Exception:
             pass
-        P(f"  All recovery failed — starting fresh (corrupted file saved)")
+        P(f"  All local recovery failed — trying GitHub backup...")
+
+    # Last resort: restore from GitHub repo backup
+    gh_token = os.environ.get("GITHUB_TOKEN", "")
+    repo = os.environ.get("GITHUB_REPO", "klickburn/polymarket-sports-analysis")
+    try:
+        import base64
+        api_url = f"https://api.github.com/repos/{repo}/contents/crypto_score_bets.json"
+        headers = {"Accept": "application/vnd.github.v3+json", "User-Agent": "score-bot"}
+        if gh_token:
+            headers["Authorization"] = f"token {gh_token}"
+        req = urllib.request.Request(api_url, headers=headers)
+        resp = urllib.request.urlopen(req, timeout=30)
+        file_data = json.loads(resp.read())
+        content = base64.b64decode(file_data["content"]).decode()
+        restored = json.loads(content)
+        if restored:
+            P(f"  RECOVERED {len(restored)} bets from GitHub backup!")
+            save_bets(restored)
+            return restored
+    except Exception as e:
+        P(f"  GitHub restore failed: {e}")
 
     return []
 
