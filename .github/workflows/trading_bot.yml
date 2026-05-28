@@ -34,17 +34,44 @@ jobs:
 
       - name: Backup crypto score bets from Railway
         run: |
-          curl -sf "https://ankurkalshi.up.railway.app/api/score-data" | python3 -c "
-          import sys, json
-          data = json.load(sys.stdin)
-          bets = data.get('recent_bets', [])
-          if bets:
-              with open('crypto_score_bets.json', 'w') as f:
-                  json.dump(bets, f, indent=2, default=str)
-              print(f'Saved {len(bets)} score bets')
-          else:
-              print('No score bets found')
-          " || echo "Railway API unreachable, skipping score backup"
+          python3 -c "
+          import json, subprocess, sys
+          # Fetch new bets from Railway
+          try:
+              import urllib.request
+              resp = urllib.request.urlopen('https://ankurkalshi.up.railway.app/api/score-data', timeout=30)
+              data = json.loads(resp.read())
+              new_bets = data.get('recent_bets', [])
+          except Exception as e:
+              print(f'Railway API unreachable: {e}')
+              sys.exit(0)
+          if not new_bets:
+              print('No score bets from Railway')
+              sys.exit(0)
+          # Load existing backup from git
+          existing = []
+          try:
+              with open('crypto_score_bets.json') as f:
+                  existing = json.load(f)
+          except Exception:
+              pass
+          # Merge: use ticker+timestamp as unique key
+          seen = set()
+          for b in existing:
+              key = (b.get('ticker',''), b.get('timestamp',''))
+              seen.add(key)
+          added = 0
+          for b in new_bets:
+              key = (b.get('ticker',''), b.get('timestamp',''))
+              if key not in seen:
+                  existing.append(b)
+                  seen.add(key)
+                  added += 1
+          existing.sort(key=lambda x: x.get('timestamp',''))
+          with open('crypto_score_bets.json', 'w') as f:
+              json.dump(existing, f, indent=2, default=str)
+          print(f'Score bets: {len(existing)} total ({added} new, {len(existing)-added} existing)')
+          " || echo "Score backup failed, skipping"
 
       - name: Commit bot data
         run: |
