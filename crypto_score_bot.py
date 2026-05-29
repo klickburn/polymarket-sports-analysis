@@ -69,6 +69,7 @@ COINGECKO = "https://api.coingecko.com/api/v3"
 CG_API_KEYS = [
     os.environ.get("CG_API_KEY", "CG-djNqgGcv7UfYvqDfKsxWX1ii"),
     os.environ.get("CG_API_KEY_2", "CG-hx9L9wzotJeCZ1xeeLoJqJT9"),
+    os.environ.get("CG_API_KEY_3", "CG-5sTc7yccYpF1zWVWfDduHT8i"),
 ]
 _cg_key_index = 0
 
