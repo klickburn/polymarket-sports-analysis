@@ -684,43 +684,10 @@ def _try_load_json(path):
         return None, str(e)
 
 
-def load_bets():
-    # Try main file first
-    data, err = _try_load_json(BETS_FILE)
-    if data is not None:
-        return data
-
-    if err and err != "not found":
-        P(f"  WARNING: Bets file corrupted ({err})")
-
-    # Try .bak backup
-    bak_file = BETS_FILE + ".bak"
-    data, err2 = _try_load_json(bak_file)
-    if data is not None:
-        P(f"  RECOVERED {len(data)} bets from .bak backup!")
-        save_bets(data)  # Restore main file from backup
-        return data
-
-    # Try .tmp (might have been written but not renamed)
-    tmp_file = BETS_FILE + ".tmp"
-    data, err3 = _try_load_json(tmp_file)
-    if data is not None:
-        P(f"  RECOVERED {len(data)} bets from .tmp file!")
-        save_bets(data)
-        return data
-
-    if err and err != "not found":
-        # Save corrupted file for debugging
-        corrupted = BETS_FILE + ".corrupted"
-        try:
-            os.rename(BETS_FILE, corrupted)
-        except Exception:
-            pass
-
-    P(f"  All local recovery failed — trying GitHub backup...")
-    # Last resort: restore from GitHub repo backup
-    gh_token = os.environ.get("GITHUB_TOKEN", "")
+def _fetch_github_bets():
+    """Fetch bets from GitHub repo backup."""
     repo = os.environ.get("GITHUB_REPO", "klickburn/polymarket-sports-analysis")
+    gh_token = os.environ.get("GITHUB_TOKEN", "")
     try:
         import base64
         api_url = f"https://api.github.com/repos/{repo}/contents/crypto_score_bets.json"
@@ -731,15 +698,77 @@ def load_bets():
         resp = urllib.request.urlopen(req, timeout=30)
         file_data = json.loads(resp.read())
         content = base64.b64decode(file_data["content"]).decode()
-        restored = json.loads(content)
-        if restored:
-            P(f"  RECOVERED {len(restored)} bets from GitHub backup!")
-            save_bets(restored)
-            return restored
+        return json.loads(content)
     except Exception as e:
-        P(f"  GitHub restore failed: {e}")
+        P(f"  GitHub fetch failed: {e}")
+        return []
 
-    return []
+
+def _merge_bets(local, remote):
+    """Merge two bet lists, dedup by ticker+timestamp, sorted by timestamp."""
+    seen = set()
+    merged = []
+    for b in local + remote:
+        key = (b.get("ticker", ""), b.get("timestamp", ""))
+        if key not in seen:
+            seen.add(key)
+            merged.append(b)
+    merged.sort(key=lambda x: x.get("timestamp", ""))
+    return merged
+
+
+_github_merged = False
+
+def load_bets():
+    global _github_merged
+    # Try main file first
+    data, err = _try_load_json(BETS_FILE)
+
+    if data is None:
+        if err and err != "not found":
+            P(f"  WARNING: Bets file corrupted ({err})")
+            corrupted = BETS_FILE + ".corrupted"
+            try:
+                os.rename(BETS_FILE, corrupted)
+            except Exception:
+                pass
+
+        # Try .bak backup
+        bak_file = BETS_FILE + ".bak"
+        data, err2 = _try_load_json(bak_file)
+        if data is not None:
+            P(f"  RECOVERED {len(data)} bets from .bak backup!")
+
+    if data is None:
+        # Try .tmp
+        tmp_file = BETS_FILE + ".tmp"
+        data, err3 = _try_load_json(tmp_file)
+        if data is not None:
+            P(f"  RECOVERED {len(data)} bets from .tmp file!")
+
+    if data is None:
+        data = []
+
+    # Merge with GitHub backup once on startup to recover missing historical bets
+    if not _github_merged:
+        _github_merged = True
+        github_bets = _fetch_github_bets()
+        if github_bets:
+            before = len(data)
+            data = _merge_bets(data, github_bets)
+            added = len(data) - before
+            if added > 0:
+                P(f"  Merged {added} missing bets from GitHub backup (total: {len(data)})")
+                save_bets(data)
+            elif before == 0:
+                P(f"  RESTORED {len(data)} bets from GitHub backup!")
+                save_bets(data)
+            else:
+                P(f"  GitHub backup checked — no missing bets ({len(data)} total)")
+        elif len(data) == 0:
+            P(f"  No local or GitHub bets found — starting fresh")
+
+    return data
 
 
 def save_bets(bets):
