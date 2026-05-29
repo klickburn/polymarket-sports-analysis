@@ -710,14 +710,14 @@ def load_bets():
         return data
 
     if err and err != "not found":
-        # All recovery failed — save corrupted file for debugging
+        # Save corrupted file for debugging
         corrupted = BETS_FILE + ".corrupted"
         try:
             os.rename(BETS_FILE, corrupted)
         except Exception:
             pass
-        P(f"  All local recovery failed — trying GitHub backup...")
 
+    P(f"  All local recovery failed — trying GitHub backup...")
     # Last resort: restore from GitHub repo backup
     gh_token = os.environ.get("GITHUB_TOKEN", "")
     repo = os.environ.get("GITHUB_REPO", "klickburn/polymarket-sports-analysis")
