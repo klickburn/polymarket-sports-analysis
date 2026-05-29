@@ -52,22 +52,34 @@ STATUS_FILE = os.path.join(DATA_DIR, "crypto_score_status.json")
 CRYPTOS = {
     "BTC":  {"series": "KXBTC15M"},
     "ETH":  {"series": "KXETH15M"},
+    "SOL":  {"series": "KXSOL15M"},
     "XRP":  {"series": "KXXRP15M"},
+    "DOGE": {"series": "KXDOGE15M"},
+    "BNB":  {"series": "KXBNB15M"},
+    "HYPE": {"series": "KXHYPE15M"},
 }
 
 COIN_IDS = {
-    "BTC": "bitcoin", "ETH": "ethereum",
-    "XRP": "ripple",
+    "BTC": "bitcoin", "ETH": "ethereum", "SOL": "solana",
+    "XRP": "ripple", "DOGE": "dogecoin",
+    "BNB": "binancecoin", "HYPE": "hyperliquid",
 }
 
 COINGECKO = "https://api.coingecko.com/api/v3"
-CG_API_KEY = os.environ.get("CG_API_KEY", "CG-djNqgGcv7UfYvqDfKsxWX1ii")
+CG_API_KEYS = [
+    os.environ.get("CG_API_KEY", "CG-djNqgGcv7UfYvqDfKsxWX1ii"),
+    os.environ.get("CG_API_KEY_2", "CG-hx9L9wzotJeCZ1xeeLoJqJT9"),
+]
+_cg_key_index = 0
 
 # ── CoinGecko data fetching ────────────────────────────────────────────
 def fetch_coingecko(url, retries=3):
-    # Append API key
+    # Rotate API keys
+    global _cg_key_index
+    key = CG_API_KEYS[_cg_key_index % len(CG_API_KEYS)]
+    _cg_key_index += 1
     sep = "&" if "?" in url else "?"
-    url = f"{url}{sep}x_cg_demo_api_key={CG_API_KEY}"
+    url = f"{url}{sep}x_cg_demo_api_key={key}"
     for attempt in range(retries + 1):
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
