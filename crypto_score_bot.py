@@ -687,16 +687,33 @@ def _try_load_json(path):
 def _fetch_github_bets():
     """Fetch bets from GitHub repo backup via raw URL."""
     repo = os.environ.get("GITHUB_REPO", "klickburn/polymarket-sports-analysis")
-    try:
-        raw_url = f"https://raw.githubusercontent.com/{repo}/main/crypto_score_bets.json"
-        req = urllib.request.Request(raw_url, headers={"User-Agent": "score-bot"})
-        resp = urllib.request.urlopen(req, timeout=60)
-        data = json.loads(resp.read().decode())
-        P(f"  GitHub backup: fetched {len(data)} bets")
-        return data
-    except Exception as e:
-        P(f"  GitHub fetch failed: {e}")
-        return []
+    urls = [
+        f"https://raw.githubusercontent.com/{repo}/main/crypto_score_bets.json",
+        f"https://api.github.com/repos/{repo}/contents/crypto_score_bets.json",
+    ]
+    for url in urls:
+        try:
+            P(f"  Trying GitHub restore: {url[:60]}...")
+            req = urllib.request.Request(url, headers={"User-Agent": "score-bot"})
+            resp = urllib.request.urlopen(req, timeout=120)
+            raw = resp.read().decode()
+            # Contents API returns JSON with download_url for large files
+            if '"download_url"' in raw[:500]:
+                import base64
+                meta = json.loads(raw)
+                if meta.get("encoding") == "base64" and meta.get("content"):
+                    raw = base64.b64decode(meta["content"]).decode()
+                elif meta.get("download_url"):
+                    P(f"  Following download_url...")
+                    req2 = urllib.request.Request(meta["download_url"], headers={"User-Agent": "score-bot"})
+                    resp2 = urllib.request.urlopen(req2, timeout=120)
+                    raw = resp2.read().decode()
+            data = json.loads(raw)
+            P(f"  GitHub backup: fetched {len(data)} bets")
+            return data
+        except Exception as e:
+            P(f"  GitHub fetch failed ({url[:40]}...): {e}")
+    return []
 
 
 def _merge_bets(local, remote):
