@@ -980,7 +980,7 @@ def run(live=False):
                 continue
 
             # Single pass: collect sides for consensus + evaluate trades
-            TRADE_PAUSED = {"SOL", "DOGE", "BNB", "HYPE"}  # Fetch data but don't trade
+            TRADE_PAUSED = set()  # All cryptos active
             CONSENSUS_EXCLUDE = {"BNB", "HYPE"}
             crypto_snapshots = {}
             P(f"  Scanning {len(CRYPTOS)} markets...")
