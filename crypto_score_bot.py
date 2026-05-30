@@ -685,20 +685,15 @@ def _try_load_json(path):
 
 
 def _fetch_github_bets():
-    """Fetch bets from GitHub repo backup."""
+    """Fetch bets from GitHub repo backup via raw URL."""
     repo = os.environ.get("GITHUB_REPO", "klickburn/polymarket-sports-analysis")
-    gh_token = os.environ.get("GITHUB_TOKEN", "")
     try:
-        import base64
-        api_url = f"https://api.github.com/repos/{repo}/contents/crypto_score_bets.json"
-        headers = {"Accept": "application/vnd.github.v3+json", "User-Agent": "score-bot"}
-        if gh_token:
-            headers["Authorization"] = f"token {gh_token}"
-        req = urllib.request.Request(api_url, headers=headers)
-        resp = urllib.request.urlopen(req, timeout=30)
-        file_data = json.loads(resp.read())
-        content = base64.b64decode(file_data["content"]).decode()
-        return json.loads(content)
+        raw_url = f"https://raw.githubusercontent.com/{repo}/main/crypto_score_bets.json"
+        req = urllib.request.Request(raw_url, headers={"User-Agent": "score-bot"})
+        resp = urllib.request.urlopen(req, timeout=60)
+        data = json.loads(resp.read().decode())
+        P(f"  GitHub backup: fetched {len(data)} bets")
+        return data
     except Exception as e:
         P(f"  GitHub fetch failed: {e}")
         return []
