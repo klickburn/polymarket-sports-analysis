@@ -172254,5 +172254,202 @@
     "status": "executed",
     "fill_price": 0.68,
     "fill_price_checked": true
+  },
+  {
+    "crypto": "XRP",
+    "ticker": "KXXRP15M-26JUN011400-00",
+    "event_ticker": "KXXRP15M-26JUN011400",
+    "side": "no",
+    "price": 0.64,
+    "score": 2,
+    "reasons": [
+      [
+        "Signal Score",
+        "5/8",
+        "5"
+      ],
+      [
+        "RSI Aligned",
+        "NO RSI=60.1",
+        "+2"
+      ],
+      [
+        "1h MeanRev",
+        "ret=+0.38%",
+        "+1"
+      ],
+      [
+        "Strong MR",
+        "|+0.38%|>0.3%",
+        "+1"
+      ],
+      [
+        "BTC Same",
+        "btc=+0.00%",
+        "0"
+      ],
+      [
+        "High Vol",
+        "0.43\u22650.3",
+        "+1"
+      ],
+      [
+        "Consensus",
+        "all NO",
+        "0"
+      ],
+      [
+        "Stoch High",
+        "100.0",
+        "0"
+      ]
+    ],
+    "score_breakdown": {
+      "Signal Score": {
+        "detail": "5/8",
+        "points": 5
+      },
+      "RSI Aligned": {
+        "detail": "NO RSI=60.1",
+        "points": 2
+      },
+      "1h MeanRev": {
+        "detail": "ret=+0.38%",
+        "points": 1
+      },
+      "Strong MR": {
+        "detail": "|+0.38%|>0.3%",
+        "points": 1
+      },
+      "BTC Same": {
+        "detail": "btc=+0.00%",
+        "points": 0
+      },
+      "High Vol": {
+        "detail": "0.43\u22650.3",
+        "points": 1
+      },
+      "Consensus": {
+        "detail": "all NO",
+        "points": 0
+      },
+      "Stoch High": {
+        "detail": "100.0",
+        "points": 0
+      }
+    },
+    "indicators": {
+      "ret_1h": 0.3777,
+      "ret_3h": 1.2703,
+      "vol_6h": 0.4333,
+      "rsi": 60.05,
+      "stoch": 100.0,
+      "pack_agreement": 1.0,
+      "btc_ret_1h": 0.0816
+    },
+    "bet_amount": 0.1,
+    "contracts": 1,
+    "entry_minute": 3.1,
+    "timestamp": "2026-06-01T17:48:14.842106+00:00",
+    "window_end": "2026-06-01T18:00:00+00:00",
+    "result": "open",
+    "strategy_version": "v7",
+    "action": "trade",
+    "order_id": "dfc44f40-9422-4f43-b478-e1b277535c4b",
+    "status": "executed",
+    "fill_price": 0.64,
+    "fill_price_checked": true
+  },
+  {
+    "crypto": "BTC",
+    "ticker": "KXBTC15M-26JUN011400-00",
+    "event_ticker": "KXBTC15M-26JUN011400",
+    "side": "yes",
+    "price": 0.6,
+    "score": 0,
+    "reasons": [
+      [
+        "Signal Score",
+        "3/8",
+        "3"
+      ],
+      [
+        "RSI Aligned",
+        "YES RSI=48.4",
+        "+2"
+      ],
+      [
+        "1h NoRev",
+        "ret=+0.11%",
+        "0"
+      ],
+      [
+        "BTC Same",
+        "btc=+0.00%",
+        "0"
+      ],
+      [
+        "High Vol",
+        "0.48\u22650.3",
+        "+1"
+      ],
+      [
+        "No Consensus",
+        "{'BTC': 'yes', 'ETH': 'yes', 'XRP': 'no'}",
+        "0"
+      ],
+      [
+        "Stoch High",
+        "100.0",
+        "0"
+      ]
+    ],
+    "score_breakdown": {
+      "Signal Score": {
+        "detail": "3/8",
+        "points": 3
+      },
+      "RSI Aligned": {
+        "detail": "YES RSI=48.4",
+        "points": 2
+      },
+      "1h NoRev": {
+        "detail": "ret=+0.11%",
+        "points": 0
+      },
+      "BTC Same": {
+        "detail": "btc=+0.00%",
+        "points": 0
+      },
+      "High Vol": {
+        "detail": "0.48\u22650.3",
+        "points": 1
+      },
+      "No Consensus": {
+        "detail": "{'BTC': 'yes', 'ETH': 'yes', 'XRP': 'no'}",
+        "points": 0
+      },
+      "Stoch High": {
+        "detail": "100.0",
+        "points": 0
+      }
+    },
+    "indicators": {
+      "ret_1h": 0.1132,
+      "ret_3h": 0.2599,
+      "vol_6h": 0.479,
+      "rsi": 48.36,
+      "stoch": 100.0,
+      "pack_agreement": 1.0,
+      "btc_ret_1h": 0.1132
+    },
+    "bet_amount": 0.1,
+    "contracts": 1,
+    "entry_minute": 4.6,
+    "timestamp": "2026-06-01T17:49:46.739895+00:00",
+    "window_end": "2026-06-01T18:00:00+00:00",
+    "result": "open",
+    "strategy_version": "v7",
+    "action": "skip"
   }
 ]
