@@ -295791,5 +295791,102 @@
     "result": "open",
     "strategy_version": "v7",
     "action": "skip"
+  },
+  {
+    "crypto": "XRP",
+    "ticker": "KXXRP15M-26JUN060715-15",
+    "event_ticker": "KXXRP15M-26JUN060715",
+    "side": "yes",
+    "price": 0.79,
+    "score": 1,
+    "reasons": [
+      [
+        "Signal Score",
+        "4/8",
+        "4"
+      ],
+      [
+        "RSI Aligned",
+        "YES RSI=44.7",
+        "+2"
+      ],
+      [
+        "1h MeanRev",
+        "ret=-0.05%",
+        "+1"
+      ],
+      [
+        "BTC Same",
+        "btc=+0.00%",
+        "0"
+      ],
+      [
+        "High Vol",
+        "1.13\u22650.3",
+        "+1"
+      ],
+      [
+        "Consensus",
+        "all YES",
+        "0"
+      ],
+      [
+        "Stoch High",
+        "31.5",
+        "0"
+      ]
+    ],
+    "score_breakdown": {
+      "Signal Score": {
+        "detail": "4/8",
+        "points": 4
+      },
+      "RSI Aligned": {
+        "detail": "YES RSI=44.7",
+        "points": 2
+      },
+      "1h MeanRev": {
+        "detail": "ret=-0.05%",
+        "points": 1
+      },
+      "BTC Same": {
+        "detail": "btc=+0.00%",
+        "points": 0
+      },
+      "High Vol": {
+        "detail": "1.13\u22650.3",
+        "points": 1
+      },
+      "Consensus": {
+        "detail": "all YES",
+        "points": 0
+      },
+      "Stoch High": {
+        "detail": "31.5",
+        "points": 0
+      }
+    },
+    "indicators": {
+      "ret_1h": -0.0532,
+      "ret_3h": -1.2678,
+      "vol_6h": 1.1298,
+      "rsi": 44.75,
+      "stoch": 31.47,
+      "pack_agreement": 0.333,
+      "btc_ret_1h": 0.1183
+    },
+    "bet_amount": 0.1,
+    "contracts": 5,
+    "entry_minute": 6.1,
+    "timestamp": "2026-06-06T11:06:17.766984+00:00",
+    "window_end": "2026-06-06T11:15:00+00:00",
+    "result": "unfilled",
+    "strategy_version": "v7",
+    "action": "trade",
+    "order_id": "01410d84-a75f-474b-b9c0-63795407c6b0",
+    "status": "canceled",
+    "fill_price": 0.79,
+    "filled_count": 5,
+    "fill_price_checked": true
   }
 ]
