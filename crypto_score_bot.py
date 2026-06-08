@@ -889,7 +889,7 @@ def get_dynamic_contracts(bets):
     last_10 = resolved[-10:]
     wins = sum(1 for b in last_10 if b["result"] == "win")
     losses = 10 - wins
-    if wins >= 8 and _dynamic_contracts == 1:
+    if wins >= 9 and _dynamic_contracts == 1:
         _dynamic_contracts = 5
         P(f"  [STREAK] {wins}/10 wins — scaling UP to 5 contracts")
     elif losses >= 4 and _dynamic_contracts == 5:
