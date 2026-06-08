@@ -877,6 +877,26 @@ def git_backup_bets(bets):
         P(f"  [GIT] Backup failed: {e}")
 
 
+# ── Dynamic contract sizing ─────────────────────────────────────────────
+_dynamic_contracts = CONTRACT_COUNT  # starts at default (1)
+
+def get_dynamic_contracts(bets):
+    """Scale up to 5 contracts on hot streaks, back to 1 on cold streaks."""
+    global _dynamic_contracts
+    resolved = [b for b in bets if b.get("action") == "trade" and b.get("result") in ("win", "loss")]
+    if len(resolved) < 10:
+        return _dynamic_contracts
+    last_10 = resolved[-10:]
+    wins = sum(1 for b in last_10 if b["result"] == "win")
+    losses = 10 - wins
+    if wins >= 8 and _dynamic_contracts == 1:
+        _dynamic_contracts = 5
+        P(f"  [STREAK] {wins}/10 wins — scaling UP to 5 contracts")
+    elif losses >= 4 and _dynamic_contracts == 5:
+        _dynamic_contracts = 1
+        P(f"  [STREAK] {losses}/10 losses — scaling DOWN to 1 contract")
+    return _dynamic_contracts
+
 # ── Main loop ───────────────────────────────────────────────────────────
 def run(live=False):
     P("=" * 65)
@@ -1114,10 +1134,12 @@ def run(live=False):
                 })
 
             # ── Phase 2: Fire all orders at once ──────────────────────
+            current_contracts = get_dynamic_contracts(bets)
             pending_orders = []  # [{crypto, ticker, side, price, order_id, bet_record}, ...]
             for tq in trade_queue:
+                tq["bet_record"]["contracts"] = current_contracts
                 try:
-                    result = place_order(tq["ticker"], tq["side"], tq["price"], BET_AMOUNT, count=CONTRACT_COUNT)
+                    result = place_order(tq["ticker"], tq["side"], tq["price"], BET_AMOUNT, count=current_contracts)
                     if not result:
                         P(f"    {tq['crypto']}: Order failed")
                         tq["bet_record"]["action"] = "unfilled"
