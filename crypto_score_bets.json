@@ -367514,5 +367514,101 @@
     "result": "open",
     "strategy_version": "v7",
     "action": "skip"
+  },
+  {
+    "crypto": "XRP",
+    "ticker": "KXXRP15M-26JUN090215-15",
+    "event_ticker": "KXXRP15M-26JUN090215",
+    "side": "yes",
+    "price": 0.6,
+    "score": -2,
+    "reasons": [
+      [
+        "Signal Score",
+        "1/8",
+        "1"
+      ],
+      [
+        "RSI Misalign",
+        "YES RSI=62.2",
+        "0"
+      ],
+      [
+        "1h NoRev",
+        "ret=+0.49%",
+        "0"
+      ],
+      [
+        "BTC Same",
+        "btc=+0.00%",
+        "0"
+      ],
+      [
+        "High Vol",
+        "0.46\u22650.3",
+        "+1"
+      ],
+      [
+        "Consensus",
+        "all YES",
+        "0"
+      ],
+      [
+        "Stoch High",
+        "98.7",
+        "0"
+      ]
+    ],
+    "score_breakdown": {
+      "Signal Score": {
+        "detail": "1/8",
+        "points": 1
+      },
+      "RSI Misalign": {
+        "detail": "YES RSI=62.2",
+        "points": 0
+      },
+      "1h NoRev": {
+        "detail": "ret=+0.49%",
+        "points": 0
+      },
+      "BTC Same": {
+        "detail": "btc=+0.00%",
+        "points": 0
+      },
+      "High Vol": {
+        "detail": "0.46\u22650.3",
+        "points": 1
+      },
+      "Consensus": {
+        "detail": "all YES",
+        "points": 0
+      },
+      "Stoch High": {
+        "detail": "98.7",
+        "points": 0
+      }
+    },
+    "indicators": {
+      "ret_1h": 0.4892,
+      "ret_3h": 1.7182,
+      "vol_6h": 0.4642,
+      "rsi": 62.16,
+      "stoch": 98.72,
+      "pack_agreement": 0.333,
+      "btc_ret_1h": -0.0139
+    },
+    "bet_amount": 0.1,
+    "contracts": 1,
+    "entry_minute": 5.1,
+    "timestamp": "2026-06-09T06:05:11.161729+00:00",
+    "window_end": "2026-06-09T06:15:00+00:00",
+    "result": "open",
+    "strategy_version": "v7",
+    "action": "trade",
+    "order_id": "92b7d49d-434f-4c29-be50-da9b8edb0c6b",
+    "status": "executed",
+    "fill_price": 0.6,
+    "fill_price_checked": true
   }
 ]
