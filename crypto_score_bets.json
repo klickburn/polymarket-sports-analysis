@@ -362177,5 +362177,206 @@
     "result": "open",
     "strategy_version": "v7",
     "action": "skip"
+  },
+  {
+    "crypto": "ETH",
+    "ticker": "KXETH15M-26JUN082145-45",
+    "event_ticker": "KXETH15M-26JUN082145",
+    "side": "no",
+    "price": 0.61,
+    "score": 1,
+    "reasons": [
+      [
+        "Signal Score",
+        "4/8",
+        "4"
+      ],
+      [
+        "RSI Misalign",
+        "NO RSI=39.8",
+        "0"
+      ],
+      [
+        "1h MeanRev",
+        "ret=+0.49%",
+        "+1"
+      ],
+      [
+        "Strong MR",
+        "|+0.49%|>0.3%",
+        "+1"
+      ],
+      [
+        "BTC Same",
+        "btc=+0.00%",
+        "0"
+      ],
+      [
+        "High Vol",
+        "0.92\u22650.3",
+        "+1"
+      ],
+      [
+        "Consensus",
+        "all NO",
+        "0"
+      ],
+      [
+        "Stoch OS",
+        "16.8<30",
+        "+1"
+      ]
+    ],
+    "score_breakdown": {
+      "Signal Score": {
+        "detail": "4/8",
+        "points": 4
+      },
+      "RSI Misalign": {
+        "detail": "NO RSI=39.8",
+        "points": 0
+      },
+      "1h MeanRev": {
+        "detail": "ret=+0.49%",
+        "points": 1
+      },
+      "Strong MR": {
+        "detail": "|+0.49%|>0.3%",
+        "points": 1
+      },
+      "BTC Same": {
+        "detail": "btc=+0.00%",
+        "points": 0
+      },
+      "High Vol": {
+        "detail": "0.92\u22650.3",
+        "points": 1
+      },
+      "Consensus": {
+        "detail": "all NO",
+        "points": 0
+      },
+      "Stoch OS": {
+        "detail": "16.8<30",
+        "points": 1
+      }
+    },
+    "indicators": {
+      "ret_1h": 0.4933,
+      "ret_3h": -1.8877,
+      "vol_6h": 0.9185,
+      "rsi": 39.82,
+      "stoch": 16.84,
+      "pack_agreement": 1.0,
+      "btc_ret_1h": 0.4109
+    },
+    "bet_amount": 0.1,
+    "contracts": 1,
+    "entry_minute": 2.7,
+    "timestamp": "2026-06-09T01:32:50.802409+00:00",
+    "window_end": "2026-06-09T01:45:00+00:00",
+    "result": "open",
+    "strategy_version": "v7",
+    "action": "trade",
+    "order_id": "103b2e67-41df-4a14-8f19-ede831520658",
+    "status": "executed",
+    "fill_price": 0.61,
+    "fill_price_checked": true
+  },
+  {
+    "crypto": "BTC",
+    "ticker": "KXBTC15M-26JUN082145-45",
+    "event_ticker": "KXBTC15M-26JUN082145",
+    "side": "yes",
+    "price": 0.64,
+    "score": 1,
+    "reasons": [
+      [
+        "Signal Score",
+        "4/8",
+        "4"
+      ],
+      [
+        "RSI Aligned",
+        "YES RSI=39.5",
+        "+2"
+      ],
+      [
+        "1h NoRev",
+        "ret=+0.42%",
+        "0"
+      ],
+      [
+        "BTC Same",
+        "btc=+0.00%",
+        "0"
+      ],
+      [
+        "High Vol",
+        "0.55\u22650.3",
+        "+1"
+      ],
+      [
+        "Consensus",
+        "all YES",
+        "0"
+      ],
+      [
+        "Stoch OS",
+        "25.7<30",
+        "+1"
+      ]
+    ],
+    "score_breakdown": {
+      "Signal Score": {
+        "detail": "4/8",
+        "points": 4
+      },
+      "RSI Aligned": {
+        "detail": "YES RSI=39.5",
+        "points": 2
+      },
+      "1h NoRev": {
+        "detail": "ret=+0.42%",
+        "points": 0
+      },
+      "BTC Same": {
+        "detail": "btc=+0.00%",
+        "points": 0
+      },
+      "High Vol": {
+        "detail": "0.55\u22650.3",
+        "points": 1
+      },
+      "Consensus": {
+        "detail": "all YES",
+        "points": 0
+      },
+      "Stoch OS": {
+        "detail": "25.7<30",
+        "points": 1
+      }
+    },
+    "indicators": {
+      "ret_1h": 0.4173,
+      "ret_3h": -0.9819,
+      "vol_6h": 0.5477,
+      "rsi": 39.53,
+      "stoch": 25.7,
+      "pack_agreement": 1.0,
+      "btc_ret_1h": 0.4173
+    },
+    "bet_amount": 0.1,
+    "contracts": 1,
+    "entry_minute": 4.6,
+    "timestamp": "2026-06-09T01:34:49.525117+00:00",
+    "window_end": "2026-06-09T01:45:00+00:00",
+    "result": "open",
+    "strategy_version": "v7",
+    "action": "trade",
+    "order_id": "1e290d82-54d0-4c7d-b8e8-c717f255fcf5",
+    "status": "executed",
+    "fill_price": 0.64,
+    "fill_price_checked": true
   }
 ]
