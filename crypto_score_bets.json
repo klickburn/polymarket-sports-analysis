@@ -368802,5 +368802,102 @@
     "status": "executed",
     "fill_price": 0.64,
     "fill_price_checked": true
+  },
+  {
+    "crypto": "XRP",
+    "ticker": "KXXRP15M-26JUN090330-30",
+    "event_ticker": "KXXRP15M-26JUN090330",
+    "side": "no",
+    "price": 0.7,
+    "score": 1,
+    "reasons": [
+      [
+        "Signal Score",
+        "4/8",
+        "4"
+      ],
+      [
+        "RSI Aligned",
+        "NO RSI=59.6",
+        "+2"
+      ],
+      [
+        "1h MeanRev",
+        "ret=+0.01%",
+        "+1"
+      ],
+      [
+        "BTC Same",
+        "btc=+0.00%",
+        "0"
+      ],
+      [
+        "High Vol",
+        "0.57\u22650.3",
+        "+1"
+      ],
+      [
+        "No Consensus",
+        "{'ETH': 'yes', 'XRP': 'no'}",
+        "0"
+      ],
+      [
+        "Stoch High",
+        "88.8",
+        "0"
+      ]
+    ],
+    "score_breakdown": {
+      "Signal Score": {
+        "detail": "4/8",
+        "points": 4
+      },
+      "RSI Aligned": {
+        "detail": "NO RSI=59.6",
+        "points": 2
+      },
+      "1h MeanRev": {
+        "detail": "ret=+0.01%",
+        "points": 1
+      },
+      "BTC Same": {
+        "detail": "btc=+0.00%",
+        "points": 0
+      },
+      "High Vol": {
+        "detail": "0.57\u22650.3",
+        "points": 1
+      },
+      "No Consensus": {
+        "detail": "{'ETH': 'yes', 'XRP': 'no'}",
+        "points": 0
+      },
+      "Stoch High": {
+        "detail": "88.8",
+        "points": 0
+      }
+    },
+    "indicators": {
+      "ret_1h": 0.0073,
+      "ret_3h": 0.3421,
+      "vol_6h": 0.5659,
+      "rsi": 59.58,
+      "stoch": 88.85,
+      "pack_agreement": 0.667,
+      "btc_ret_1h": 0.0041
+    },
+    "bet_amount": 0.1,
+    "contracts": 1,
+    "entry_minute": 9.6,
+    "timestamp": "2026-06-09T07:24:49.765821+00:00",
+    "window_end": "2026-06-09T07:30:00+00:00",
+    "result": "open",
+    "strategy_version": "v7",
+    "action": "trade",
+    "order_id": "f29d6747-6f0b-413e-ad1c-ca674db56565",
+    "status": "resting",
+    "fill_price": 0.7,
+    "filled_count": 1,
+    "fill_price_checked": true
   }
 ]
