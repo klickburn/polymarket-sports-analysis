@@ -394372,5 +394372,102 @@
     "result": "open",
     "strategy_version": "v7",
     "action": "skip"
+  },
+  {
+    "crypto": "BTC",
+    "ticker": "KXBTC15M-26JUN100300-00",
+    "event_ticker": "KXBTC15M-26JUN100300",
+    "side": "yes",
+    "price": 0.69,
+    "score": -2,
+    "reasons": [
+      [
+        "Signal Score",
+        "1/8",
+        "1"
+      ],
+      [
+        "RSI Misalign",
+        "YES RSI=50.5",
+        "0"
+      ],
+      [
+        "1h NoRev",
+        "ret=+0.12%",
+        "0"
+      ],
+      [
+        "BTC Same",
+        "btc=+0.00%",
+        "0"
+      ],
+      [
+        "High Vol",
+        "0.35\u22650.3",
+        "+1"
+      ],
+      [
+        "Consensus",
+        "all YES",
+        "0"
+      ],
+      [
+        "Stoch High",
+        "79.8",
+        "0"
+      ]
+    ],
+    "score_breakdown": {
+      "Signal Score": {
+        "detail": "1/8",
+        "points": 1
+      },
+      "RSI Misalign": {
+        "detail": "YES RSI=50.5",
+        "points": 0
+      },
+      "1h NoRev": {
+        "detail": "ret=+0.12%",
+        "points": 0
+      },
+      "BTC Same": {
+        "detail": "btc=+0.00%",
+        "points": 0
+      },
+      "High Vol": {
+        "detail": "0.35\u22650.3",
+        "points": 1
+      },
+      "Consensus": {
+        "detail": "all YES",
+        "points": 0
+      },
+      "Stoch High": {
+        "detail": "79.8",
+        "points": 0
+      }
+    },
+    "indicators": {
+      "ret_1h": 0.1167,
+      "ret_3h": -0.0646,
+      "vol_6h": 0.3479,
+      "rsi": 50.49,
+      "stoch": 79.78,
+      "pack_agreement": 0.833,
+      "btc_ret_1h": 0.1167
+    },
+    "bet_amount": 0.1,
+    "contracts": 1,
+    "entry_minute": 2.8,
+    "timestamp": "2026-06-10T06:47:53.711783+00:00",
+    "window_end": "2026-06-10T07:00:00+00:00",
+    "result": "open",
+    "strategy_version": "v7",
+    "action": "trade",
+    "order_id": "084e55e2-81b8-4836-b15d-0655956267a1",
+    "status": "executed",
+    "fill_price": 0.69,
+    "filled_count": 1,
+    "fill_price_checked": true
   }
 ]
