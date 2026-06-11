@@ -416892,5 +416892,106 @@
     "result": "open",
     "strategy_version": "v7",
     "action": "skip"
+  },
+  {
+    "crypto": "ETH",
+    "ticker": "KXETH15M-26JUN110045-45",
+    "event_ticker": "KXETH15M-26JUN110045",
+    "side": "yes",
+    "price": 0.6,
+    "score": 0,
+    "reasons": [
+      [
+        "Signal Score",
+        "3/8",
+        "3"
+      ],
+      [
+        "RSI Misalign",
+        "YES RSI=61.5",
+        "0"
+      ],
+      [
+        "1h MeanRev",
+        "ret=-0.35%",
+        "+1"
+      ],
+      [
+        "Strong MR",
+        "|-0.35%|>0.3%",
+        "+1"
+      ],
+      [
+        "BTC Same",
+        "btc=+0.00%",
+        "0"
+      ],
+      [
+        "High Vol",
+        "0.56\u22650.3",
+        "+1"
+      ],
+      [
+        "No Consensus",
+        "{'ETH': 'yes', 'DOGE': 'no'}",
+        "0"
+      ],
+      [
+        "Stoch High",
+        "73.7",
+        "0"
+      ]
+    ],
+    "score_breakdown": {
+      "Signal Score": {
+        "detail": "3/8",
+        "points": 3
+      },
+      "RSI Misalign": {
+        "detail": "YES RSI=61.5",
+        "points": 0
+      },
+      "1h MeanRev": {
+        "detail": "ret=-0.35%",
+        "points": 1
+      },
+      "Strong MR": {
+        "detail": "|-0.35%|>0.3%",
+        "points": 1
+      },
+      "BTC Same": {
+        "detail": "btc=+0.00%",
+        "points": 0
+      },
+      "High Vol": {
+        "detail": "0.56\u22650.3",
+        "points": 1
+      },
+      "No Consensus": {
+        "detail": "{'ETH': 'yes', 'DOGE': 'no'}",
+        "points": 0
+      },
+      "Stoch High": {
+        "detail": "73.7",
+        "points": 0
+      }
+    },
+    "indicators": {
+      "ret_1h": -0.3531,
+      "ret_3h": 0.4864,
+      "vol_6h": 0.563,
+      "rsi": 61.54,
+      "stoch": 73.66,
+      "pack_agreement": 0.333,
+      "btc_ret_1h": -0.1627
+    },
+    "bet_amount": 0.1,
+    "contracts": 1,
+    "entry_minute": 2.6,
+    "timestamp": "2026-06-11T04:32:45.934300+00:00",
+    "window_end": "2026-06-11T04:45:00+00:00",
+    "result": "open",
+    "strategy_version": "v7",
+    "action": "skip"
   }
 ]
