@@ -922,6 +922,41 @@ def get_dynamic_contracts(bets, crypto, signal_count):
 
     return current
 
+def _resolve_open_bets(bets):
+    """Quickly resolve open bets from past windows so scaling has fresh data."""
+    now = datetime.now(timezone.utc)
+    changed = False
+    for bet in bets:
+        if bet.get("result") != "open" or bet.get("action") != "trade":
+            continue
+        # Only resolve bets whose window has ended (ticker encodes the time)
+        ticker = bet.get("ticker", "")
+        try:
+            mkt = public_get(f"/markets/{ticker}")
+            market = mkt.get("market", {})
+            mkt_status = market.get("status", "")
+            result_val = market.get("result", "")
+            if mkt_status in ("settled", "finalized") and result_val:
+                side = bet.get("side", "")
+                won = (result_val == "yes" and side == "yes") or \
+                      (result_val == "no" and side == "no")
+                bet["result"] = "win" if won else "loss"
+                bet["market_result"] = result_val
+                price = bet.get("fill_price", bet.get("price", 0))
+                contracts = bet.get("filled_count", bet.get("contracts", 1))
+                if won:
+                    bet["pnl"] = round(contracts * (1.0 - price), 2)
+                else:
+                    bet["pnl"] = round(-contracts * price, 2)
+                changed = True
+                P(f"  [RESOLVE] {bet.get('crypto','')} {ticker}: {bet['result']}")
+            time.sleep(0.3)
+        except Exception:
+            pass
+    if changed:
+        save_bets(bets)
+    return bets
+
 # ── Main loop ───────────────────────────────────────────────────────────
 def run(live=False):
     P("=" * 65)
@@ -966,6 +1001,7 @@ def run(live=False):
                 checked_positions = False
                 fetched_indicators = False
                 bets = load_bets()
+                bets = _resolve_open_bets(bets)
                 P(f"\n  -- Window {window_start.strftime('%H:%M')}-{window_end.strftime('%H:%M')} UTC ({len(bets)} bets on file) --")
 
             # Too early — sleep until prefetch time
