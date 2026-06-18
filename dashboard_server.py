@@ -605,12 +605,16 @@ def _resolve_score_bets():
 
 
 def _build_scaling_performance(resolved):
-    """Analyze how dynamic contract scaling is performing."""
+    """Analyze how dynamic contract scaling is performing (BTC/ETH, 1↔2 only)."""
     if not resolved:
         return {}
 
-    trades_at_1 = [b for b in resolved if b.get("contracts", 1) == 1]
-    trades_at_2 = [b for b in resolved if b.get("contracts", 1) == 2]
+    # Only BTC/ETH, only 1 or 2 contracts (exclude legacy 5x trades)
+    filtered = [b for b in resolved
+                if b.get("crypto") in ("BTC", "ETH") and b.get("contracts", 1) in (1, 2)]
+
+    trades_at_1 = [b for b in filtered if b.get("contracts", 1) == 1]
+    trades_at_2 = [b for b in filtered if b.get("contracts", 1) == 2]
 
     def calc_stats(trades):
         if not trades:
@@ -625,16 +629,14 @@ def _build_scaling_performance(resolved):
             "pnl": round(pnl, 2),
         }
 
-    # Per-crypto per-signal breakdown
     by_crypto_signal = {}
-    for b in resolved:
+    for b in filtered:
         crypto = b.get("crypto", "?")
         sig = b.get("score", 0) + 3
         key = f"{crypto}_sig{sig}"
         if key not in by_crypto_signal:
             by_crypto_signal[key] = {"at_1": [], "at_2": []}
-        contracts = b.get("contracts", 1)
-        if contracts >= 2:
+        if b.get("contracts", 1) == 2:
             by_crypto_signal[key]["at_2"].append(b)
         else:
             by_crypto_signal[key]["at_1"].append(b)
@@ -649,8 +651,8 @@ def _build_scaling_performance(resolved):
     return {
         "overall_at_1": calc_stats(trades_at_1),
         "overall_at_2": calc_stats(trades_at_2),
-        "total_trades": len(resolved),
-        "pct_at_scaled": round(len(trades_at_2) / len(resolved) * 100, 1) if resolved else 0,
+        "total_trades": len(filtered),
+        "pct_at_scaled": round(len(trades_at_2) / len(filtered) * 100, 1) if filtered else 0,
         "breakdown": breakdown,
     }
 
