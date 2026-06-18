@@ -884,17 +884,17 @@ def get_dynamic_contracts(bets):
     """Scale up to 5 contracts on hot streaks, back to 1 on cold streaks."""
     global _dynamic_contracts
     resolved = [b for b in bets if b.get("action") == "trade" and b.get("result") in ("win", "loss")]
-    if len(resolved) < 7:
+    if len(resolved) < 5:
         return _dynamic_contracts
-    last_7 = resolved[-7:]
-    wins = sum(1 for b in last_7 if b["result"] == "win")
-    losses = 7 - wins
-    if wins >= 6 and _dynamic_contracts == 1:
+    last_5 = resolved[-5:]
+    wins = sum(1 for b in last_5 if b["result"] == "win")
+    losses = 5 - wins
+    if wins >= 4 and _dynamic_contracts == 1:
         _dynamic_contracts = 5
-        P(f"  [STREAK] {wins}/7 wins — scaling UP to 5 contracts")
-    elif losses >= 3 and _dynamic_contracts == 5:
+        P(f"  [STREAK] {wins}/5 wins — scaling UP to 5 contracts")
+    elif losses >= 2 and _dynamic_contracts == 5:
         _dynamic_contracts = 1
-        P(f"  [STREAK] {losses}/7 losses — scaling DOWN to 1 contract")
+        P(f"  [STREAK] {losses}/5 losses — scaling DOWN to 1 contract")
     return _dynamic_contracts
 
 # ── Main loop ───────────────────────────────────────────────────────────
