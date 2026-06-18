@@ -877,25 +877,50 @@ def git_backup_bets(bets):
         P(f"  [GIT] Backup failed: {e}")
 
 
-# ── Dynamic contract sizing ─────────────────────────────────────────────
-_dynamic_contracts = CONTRACT_COUNT  # starts at default (1)
+# ── Dynamic contract sizing (per-crypto, per-signal) ───────────────────
+SCALE_CONFIGS = {
+    ("BTC", 0): (10, 8, 5),   ("ETH", 0): None,
+    ("BTC", 1): (7, 7, 4),    ("ETH", 1): (7, 6, 3),
+    ("BTC", 2): (7, 5, 3),    ("ETH", 2): None,
+    ("BTC", 3): (10, 8, 4),   ("ETH", 3): (3, 3, 2),
+    ("BTC", 4): None,          ("ETH", 4): (10, 9, 5),
+    ("BTC", 5): (4, 3, 2),    ("ETH", 5): None,
+    ("BTC", 6): (7, 7, 4),    ("ETH", 6): (5, 5, 3),
+    ("BTC", 7): (4, 4, 3),    ("ETH", 7): (7, 5, 3),
+}
+SCALE_UP_COUNT = 2
+_scale_state = {}  # (crypto, signal) -> current contracts
 
-def get_dynamic_contracts(bets):
-    """Scale up to 5 contracts on hot streaks, back to 1 on cold streaks."""
-    global _dynamic_contracts
-    resolved = [b for b in bets if b.get("action") == "trade" and b.get("result") in ("win", "loss")]
-    if len(resolved) < 5:
-        return _dynamic_contracts
-    last_5 = resolved[-5:]
-    wins = sum(1 for b in last_5 if b["result"] == "win")
-    losses = 5 - wins
-    if wins >= 4 and _dynamic_contracts == 1:
-        _dynamic_contracts = 5
-        P(f"  [STREAK] {wins}/5 wins — scaling UP to 5 contracts")
-    elif losses >= 2 and _dynamic_contracts == 5:
-        _dynamic_contracts = 1
-        P(f"  [STREAK] {losses}/5 losses — scaling DOWN to 1 contract")
-    return _dynamic_contracts
+def get_dynamic_contracts(bets, crypto, signal_count):
+    """Per-crypto per-signal scaling: 1 ↔ 2 contracts based on streaks."""
+    key = (crypto, signal_count)
+    cfg = SCALE_CONFIGS.get(key)
+    if cfg is None:
+        return 1
+
+    window, win_thresh, loss_thresh = cfg
+    current = _scale_state.get(key, 1)
+
+    resolved = [b for b in bets
+                if b.get("action") == "trade" and b.get("result") in ("win", "loss")
+                and b.get("crypto") == crypto and (b.get("score", 0) + 3) == signal_count]
+    if len(resolved) < window:
+        return current
+
+    last_n = resolved[-window:]
+    wins = sum(1 for b in last_n if b["result"] == "win")
+    losses = window - wins
+
+    if wins >= win_thresh and current == 1:
+        _scale_state[key] = SCALE_UP_COUNT
+        P(f"  [SCALE] {crypto} sig={signal_count}: {wins}/{window} wins — UP to {SCALE_UP_COUNT}")
+        return SCALE_UP_COUNT
+    elif losses >= loss_thresh and current == SCALE_UP_COUNT:
+        _scale_state[key] = 1
+        P(f"  [SCALE] {crypto} sig={signal_count}: {losses}/{window} losses — DOWN to 1")
+        return 1
+
+    return current
 
 # ── Main loop ───────────────────────────────────────────────────────────
 def run(live=False):
@@ -1134,9 +1159,10 @@ def run(live=False):
                 })
 
             # ── Phase 2: Fire all orders at once ──────────────────────
-            current_contracts = get_dynamic_contracts(bets)
             pending_orders = []  # [{crypto, ticker, side, price, order_id, bet_record}, ...]
             for tq in trade_queue:
+                sig_count = tq["score"] + 3
+                current_contracts = get_dynamic_contracts(bets, tq["crypto"], sig_count)
                 tq["bet_record"]["contracts"] = current_contracts
                 try:
                     result = place_order(tq["ticker"], tq["side"], tq["price"], BET_AMOUNT, count=current_contracts)

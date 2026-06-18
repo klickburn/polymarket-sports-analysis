@@ -604,6 +604,57 @@ def _resolve_score_bets():
     return bets
 
 
+def _build_scaling_performance(resolved):
+    """Analyze how dynamic contract scaling is performing."""
+    if not resolved:
+        return {}
+
+    trades_at_1 = [b for b in resolved if b.get("contracts", 1) == 1]
+    trades_at_2 = [b for b in resolved if b.get("contracts", 1) == 2]
+
+    def calc_stats(trades):
+        if not trades:
+            return {"trades": 0, "wins": 0, "losses": 0, "win_rate": 0, "pnl": 0}
+        wins = sum(1 for b in trades if b["result"] == "win")
+        pnl = sum(b.get("pnl", 0) for b in trades)
+        return {
+            "trades": len(trades),
+            "wins": wins,
+            "losses": len(trades) - wins,
+            "win_rate": round(wins / len(trades) * 100, 1),
+            "pnl": round(pnl, 2),
+        }
+
+    # Per-crypto per-signal breakdown
+    by_crypto_signal = {}
+    for b in resolved:
+        crypto = b.get("crypto", "?")
+        sig = b.get("score", 0) + 3
+        key = f"{crypto}_sig{sig}"
+        if key not in by_crypto_signal:
+            by_crypto_signal[key] = {"at_1": [], "at_2": []}
+        contracts = b.get("contracts", 1)
+        if contracts >= 2:
+            by_crypto_signal[key]["at_2"].append(b)
+        else:
+            by_crypto_signal[key]["at_1"].append(b)
+
+    breakdown = {}
+    for key, data in sorted(by_crypto_signal.items()):
+        breakdown[key] = {
+            "at_1": calc_stats(data["at_1"]),
+            "at_2": calc_stats(data["at_2"]),
+        }
+
+    return {
+        "overall_at_1": calc_stats(trades_at_1),
+        "overall_at_2": calc_stats(trades_at_2),
+        "total_trades": len(resolved),
+        "pct_at_scaled": round(len(trades_at_2) / len(resolved) * 100, 1) if resolved else 0,
+        "breakdown": breakdown,
+    }
+
+
 def _build_score_report(bets, status, balance_info=None):
     """Build the score data report from bets — no API calls, instant."""
     trades = [b for b in bets if b.get("action") == "trade" and b.get("result") != "unfilled"]
@@ -652,6 +703,9 @@ def _build_score_report(bets, status, balance_info=None):
                 by_crypto[c]["skip_would_lost"] += 1
             by_crypto[c]["skip_hypothetical_pnl"] += b.get("hypothetical_pnl", 0)
 
+    # ── Scaling performance breakdown ──────────────────────────────────
+    scaling_perf = _build_scaling_performance(resolved)
+
     return {
         "total_trades": len(trades),
         "total_skips": len(skips),
@@ -668,6 +722,7 @@ def _build_score_report(bets, status, balance_info=None):
         "skip_missed_gains": round(skip_missed_gains, 2),
         "score_distribution": score_dist,
         "by_crypto": by_crypto,
+        "scaling_performance": scaling_perf,
         "indicators": status.get("indicators", {}),
         "last_indicator_update": status.get("last_update", ""),
         "recent_bets": bets,
