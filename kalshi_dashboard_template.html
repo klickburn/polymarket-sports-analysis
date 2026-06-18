@@ -578,6 +578,19 @@
   </div>
 
   <hr class="section-divider">
+  <div class="section-header"><h2>Scaling Strategy</h2><span class="badge" style="background:rgba(34,197,94,0.2);color:var(--green)">1↔2 Contracts</span></div>
+  <div class="kpi-row" id="scalingKpis"></div>
+  <div class="card" style="margin-top:16px">
+    <h3>Per-Crypto Per-Signal Scaling Performance</h3>
+    <div class="scroll-table">
+      <table>
+        <thead><tr><th>Crypto / Signal</th><th>At 1x</th><th>1x WR%</th><th>1x P&L</th><th>At 2x</th><th>2x WR%</th><th>2x P&L</th><th>2x Edge</th></tr></thead>
+        <tbody id="scalingTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <hr class="section-divider">
   <div class="section-header"><h2>Daily P&L</h2><span class="badge" style="background:rgba(168,85,247,0.2);color:var(--purple)">Per Day</span></div>
   <div class="grid-2">
     <div class="card">
@@ -1723,6 +1736,39 @@ function renderScoreBot() {
     document.getElementById('scoreDailyCryptoPnlChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:300px;color:var(--muted)">No resolved trades yet</div>';
     document.getElementById('scoreDailyContent').innerHTML = '';
   }
+
+  // Scaling performance
+  const sp = d.scaling_performance || {};
+  const o1 = sp.overall_at_1 || {};
+  const o2 = sp.overall_at_2 || {};
+  const pctScaled = sp.pct_at_scaled || 0;
+  const edgePerTrade = o2.trades > 0 ? ((o2.pnl / o2.trades) - (o1.trades > 0 ? o1.pnl / o1.trades : 0)) : 0;
+  document.getElementById('scalingKpis').innerHTML = `
+    <div class="kpi"><div class="label">Trades at 1x</div><div class="value">${o1.trades||0}</div></div>
+    <div class="kpi"><div class="label">1x Win Rate</div><div class="value">${o1.win_rate||0}%</div></div>
+    <div class="kpi"><div class="label">1x P&L</div><div class="value ${(o1.pnl||0)>=0?'green':'red'}">$${(o1.pnl||0).toFixed(2)}</div></div>
+    <div class="kpi"><div class="label">Trades at 2x</div><div class="value purple">${o2.trades||0}</div></div>
+    <div class="kpi"><div class="label">2x Win Rate</div><div class="value">${o2.win_rate||0}%</div></div>
+    <div class="kpi"><div class="label">2x P&L</div><div class="value ${(o2.pnl||0)>=0?'green':'red'}">$${(o2.pnl||0).toFixed(2)}</div></div>
+    <div class="kpi"><div class="label">% Scaled</div><div class="value">${pctScaled}%</div></div>
+    <div class="kpi"><div class="label">2x Edge/Trade</div><div class="value ${edgePerTrade>=0?'green':'red'}">$${edgePerTrade.toFixed(4)}</div></div>
+  `;
+  const bd = sp.breakdown || {};
+  const sortedKeys = Object.keys(bd).sort();
+  document.getElementById('scalingTableBody').innerHTML = sortedKeys.map(key => {
+    const s1 = bd[key].at_1 || {};
+    const s2 = bd[key].at_2 || {};
+    const edge = s2.trades > 0 && s1.trades > 0 ? (s2.win_rate - s1.win_rate) : null;
+    const edgeStr = edge !== null ? `<span style="color:${edge>=0?'var(--green)':'var(--red)'}"> ${edge>=0?'+':''}${edge.toFixed(1)}%</span>` : '<span style="color:var(--muted)">—</span>';
+    const parts = key.split('_sig');
+    const label = parts.length === 2 ? `${parts[0]} / Sig ${parts[1]}` : key;
+    return `<tr>
+      <td>${label}</td>
+      <td>${s1.trades||0}</td><td>${s1.win_rate||0}%</td><td style="color:${(s1.pnl||0)>=0?'var(--green)':'var(--red)'}">$${(s1.pnl||0).toFixed(2)}</td>
+      <td>${s2.trades||0}</td><td>${s2.win_rate||0}%</td><td style="color:${(s2.pnl||0)>=0?'var(--green)':'var(--red)'}">$${(s2.pnl||0).toFixed(2)}</td>
+      <td>${edgeStr}</td>
+    </tr>`;
+  }).join('');
 
   // Recent decisions table
   renderScoreTable(allBets);
