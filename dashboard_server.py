@@ -609,9 +609,11 @@ def _build_scaling_performance(resolved):
     if not resolved:
         return {}
 
-    # Only BTC/ETH, only 1 or 2 contracts (exclude legacy 5x trades)
+    # Only BTC/ETH, only 1 or 2 contracts, only after scaling was deployed
+    scaling_deployed = "2026-06-17T19:40"
     filtered = [b for b in resolved
-                if b.get("crypto") in ("BTC", "ETH") and b.get("contracts", 1) in (1, 2)]
+                if b.get("crypto") in ("BTC", "ETH") and b.get("contracts", 1) in (1, 2)
+                and b.get("timestamp", "") >= scaling_deployed]
 
     trades_at_1 = [b for b in filtered if b.get("contracts", 1) == 1]
     trades_at_2 = [b for b in filtered if b.get("contracts", 1) == 2]
