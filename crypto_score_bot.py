@@ -39,7 +39,7 @@ POLL_INTERVAL = int(os.environ.get("SCORE_POLL_INTERVAL", "20"))
 MIN_PRICE = float(os.environ.get("SCORE_MIN_PRICE", "0.78"))
 MAX_PRICE = float(os.environ.get("SCORE_MAX_PRICE", "0.99"))
 MIN_SCORE = int(os.environ.get("SCORE_MIN_SCORE", "-3"))  # Signal count 0 = pts-3 = -3
-MAX_SCORE = int(os.environ.get("SCORE_MAX_SCORE", "2"))  # Signal count 5 = pts-3 = 2
+MAX_SCORE = int(os.environ.get("SCORE_MAX_SCORE", "4"))  # Signal count 7 = pts-3 = 4
 TAKE_PROFIT_PRICE = float(os.environ.get("SCORE_TAKE_PROFIT", "0.95"))
 SCORE_VERSION = os.environ.get("SCORE_VERSION", "v4")
 
@@ -1160,7 +1160,7 @@ def run(live=False):
                 }
 
                 signal_count = score + 3
-                SKIP_SIGNALS = {0, 1, 2, 3}  # Skip signal counts 0, 1, 2, 3
+                SKIP_SIGNALS = set()  # Trading all signal counts 0-7
 
                 if signal_count in SKIP_SIGNALS:
                     P(f"    {crypto}: SKIP (signal count {signal_count} in skip list)")
