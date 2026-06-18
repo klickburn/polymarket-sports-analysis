@@ -877,33 +877,37 @@ def git_backup_bets(bets):
         P(f"  [GIT] Backup failed: {e}")
 
 
-# ── Dynamic contract sizing (per-crypto, per-signal) ───────────────────
-SCALE_CONFIGS = {
-    ("BTC", 0): (10, 8, 5),   ("ETH", 0): None,
-    ("BTC", 1): (7, 7, 4),    ("ETH", 1): (7, 6, 3),
-    ("BTC", 2): (7, 5, 3),    ("ETH", 2): None,
-    ("BTC", 3): (10, 8, 4),   ("ETH", 3): (3, 3, 2),
-    ("BTC", 4): None,          ("ETH", 4): (10, 9, 5),
-    ("BTC", 5): (4, 3, 2),    ("ETH", 5): None,
-    ("BTC", 6): (7, 7, 4),    ("ETH", 6): (5, 5, 3),
-    ("BTC", 7): (4, 4, 3),    ("ETH", 7): (7, 5, 3),
+# ── Dynamic contract sizing (grouped signals, BTC+ETH combined) ────────
+# Group A: signals 0,4,5 — window=4, need 4 wins to scale up, 2 losses to scale down
+# Group B: signals 1,2,3,6,7 — window=8, need 6 wins to scale up, 3 losses to scale down
+SCALE_GROUPS = {
+    "A": {"signals": {0, 4, 5}, "window": 4, "win_thresh": 4, "loss_thresh": 2},
+    "B": {"signals": {1, 2, 3, 6, 7}, "window": 8, "win_thresh": 6, "loss_thresh": 3},
 }
 SCALE_UP_COUNT = 2
-_scale_state = {}  # (crypto, signal) -> current contracts
+_scale_state = {}  # group_name -> current contracts
+
+def _get_scale_group(signal_count):
+    for name, cfg in SCALE_GROUPS.items():
+        if signal_count in cfg["signals"]:
+            return name, cfg
+    return None, None
 
 def get_dynamic_contracts(bets, crypto, signal_count):
-    """Per-crypto per-signal scaling: 1 ↔ 2 contracts based on streaks."""
-    key = (crypto, signal_count)
-    cfg = SCALE_CONFIGS.get(key)
+    """Grouped scaling: BTC+ETH combined, signal groups A/B."""
+    group_name, cfg = _get_scale_group(signal_count)
     if cfg is None:
         return 1
 
-    window, win_thresh, loss_thresh = cfg
-    current = _scale_state.get(key, 1)
+    window = cfg["window"]
+    win_thresh = cfg["win_thresh"]
+    loss_thresh = cfg["loss_thresh"]
+    current = _scale_state.get(group_name, 1)
 
     resolved = [b for b in bets
                 if b.get("action") == "trade" and b.get("result") in ("win", "loss")
-                and b.get("crypto") == crypto and (b.get("score", 0) + 3) == signal_count]
+                and b.get("crypto") in ("BTC", "ETH")
+                and (b.get("score", 0) + 3) in cfg["signals"]]
     if len(resolved) < window:
         return current
 
@@ -912,12 +916,12 @@ def get_dynamic_contracts(bets, crypto, signal_count):
     losses = window - wins
 
     if wins >= win_thresh and current == 1:
-        _scale_state[key] = SCALE_UP_COUNT
-        P(f"  [SCALE] {crypto} sig={signal_count}: {wins}/{window} wins — UP to {SCALE_UP_COUNT}")
+        _scale_state[group_name] = SCALE_UP_COUNT
+        P(f"  [SCALE] Group {group_name} sigs={cfg['signals']}: {wins}/{window} wins — UP to {SCALE_UP_COUNT}")
         return SCALE_UP_COUNT
     elif losses >= loss_thresh and current == SCALE_UP_COUNT:
-        _scale_state[key] = 1
-        P(f"  [SCALE] {crypto} sig={signal_count}: {losses}/{window} losses — DOWN to 1")
+        _scale_state[group_name] = 1
+        P(f"  [SCALE] Group {group_name} sigs={cfg['signals']}: {losses}/{window} losses — DOWN to 1")
         return 1
 
     return current

@@ -631,20 +631,28 @@ def _build_scaling_performance(resolved):
             "pnl": round(pnl, 2),
         }
 
-    by_crypto_signal = {}
+    # Group A: signals 0,4,5 | Group B: signals 1,2,3,6,7
+    group_a_sigs = {0, 4, 5}
+    group_b_sigs = {1, 2, 3, 6, 7}
+    by_group = {
+        "Group A (sig 0,4,5)": {"at_1": [], "at_2": []},
+        "Group B (sig 1,2,3,6,7)": {"at_1": [], "at_2": []},
+    }
     for b in filtered:
-        crypto = b.get("crypto", "?")
         sig = b.get("score", 0) + 3
-        key = f"{crypto}_sig{sig}"
-        if key not in by_crypto_signal:
-            by_crypto_signal[key] = {"at_1": [], "at_2": []}
-        if b.get("contracts", 1) == 2:
-            by_crypto_signal[key]["at_2"].append(b)
+        if sig in group_a_sigs:
+            key = "Group A (sig 0,4,5)"
+        elif sig in group_b_sigs:
+            key = "Group B (sig 1,2,3,6,7)"
         else:
-            by_crypto_signal[key]["at_1"].append(b)
+            continue
+        if b.get("contracts", 1) == 2:
+            by_group[key]["at_2"].append(b)
+        else:
+            by_group[key]["at_1"].append(b)
 
     breakdown = {}
-    for key, data in sorted(by_crypto_signal.items()):
+    for key, data in sorted(by_group.items()):
         breakdown[key] = {
             "at_1": calc_stats(data["at_1"]),
             "at_2": calc_stats(data["at_2"]),
