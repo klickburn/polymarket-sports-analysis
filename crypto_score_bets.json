@@ -541712,5 +541712,101 @@
     "status": "executed",
     "fill_price": 0.8,
     "fill_price_checked": true
+  },
+  {
+    "crypto": "ETH",
+    "ticker": "KXETH15M-26JUN181000-00",
+    "event_ticker": "KXETH15M-26JUN181000",
+    "side": "yes",
+    "price": 0.6,
+    "score": 2,
+    "reasons": [
+      [
+        "Signal Score",
+        "5/8",
+        "5"
+      ],
+      [
+        "RSI Aligned",
+        "YES RSI=37.2",
+        "+2"
+      ],
+      [
+        "1h MeanRev",
+        "ret=-0.90%",
+        "+1"
+      ],
+      [
+        "Strong MR",
+        "|-0.90%|>0.3%",
+        "+1"
+      ],
+      [
+        "BTC Same",
+        "btc=+0.00%",
+        "0"
+      ],
+      [
+        "No Consensus",
+        "{'ETH': 'yes', 'SOL': 'yes', 'DOGE': 'no'}",
+        "0"
+      ],
+      [
+        "Stoch OS",
+        "0.0<30",
+        "+1"
+      ]
+    ],
+    "score_breakdown": {
+      "Signal Score": {
+        "detail": "5/8",
+        "points": 5
+      },
+      "RSI Aligned": {
+        "detail": "YES RSI=37.2",
+        "points": 2
+      },
+      "1h MeanRev": {
+        "detail": "ret=-0.90%",
+        "points": 1
+      },
+      "Strong MR": {
+        "detail": "|-0.90%|>0.3%",
+        "points": 1
+      },
+      "BTC Same": {
+        "detail": "btc=+0.00%",
+        "points": 0
+      },
+      "No Consensus": {
+        "detail": "{'ETH': 'yes', 'SOL': 'yes', 'DOGE': 'no'}",
+        "points": 0
+      },
+      "Stoch OS": {
+        "detail": "0.0<30",
+        "points": 1
+      }
+    },
+    "indicators": {
+      "ret_1h": -0.904,
+      "ret_3h": -0.6329,
+      "vol_6h": 0.1882,
+      "rsi": 37.23,
+      "stoch": 0.0,
+      "pack_agreement": 1.0,
+      "btc_ret_1h": -0.7063
+    },
+    "bet_amount": 0.1,
+    "contracts": 1,
+    "entry_minute": 2.3,
+    "timestamp": "2026-06-18T13:47:32.314008+00:00",
+    "window_end": "2026-06-18T14:00:00+00:00",
+    "result": "open",
+    "strategy_version": "v7",
+    "action": "trade",
+    "order_id": "c9f0bf6f-dc9a-4b17-b720-499bb2e93a34",
+    "status": "executed",
+    "fill_price": 0.6,
+    "fill_price_checked": true
   }
 ]
