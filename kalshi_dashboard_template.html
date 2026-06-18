@@ -581,10 +581,10 @@
   <div class="section-header"><h2>Scaling Strategy</h2><span class="badge" style="background:rgba(34,197,94,0.2);color:var(--green)">1↔2 Contracts</span></div>
   <div class="kpi-row" id="scalingKpis"></div>
   <div class="card" style="margin-top:16px">
-    <h3>Per-Crypto Per-Signal Scaling Performance</h3>
+    <h3>Grouped Scaling Performance (BTC+ETH Combined)</h3>
     <div class="scroll-table">
       <table>
-        <thead><tr><th>Crypto / Signal</th><th>At 1x</th><th>1x WR%</th><th>1x P&L</th><th>At 2x</th><th>2x WR%</th><th>2x P&L</th><th>2x Edge</th></tr></thead>
+        <thead><tr><th>Group</th><th>At 1x</th><th>1x WR%</th><th>1x P&L</th><th>At 2x</th><th>2x WR%</th><th>2x P&L</th><th>2x Edge</th></tr></thead>
         <tbody id="scalingTableBody"></tbody>
       </table>
     </div>
@@ -1760,8 +1760,7 @@ function renderScoreBot() {
     const s2 = bd[key].at_2 || {};
     const edge = s2.trades > 0 && s1.trades > 0 ? (s2.win_rate - s1.win_rate) : null;
     const edgeStr = edge !== null ? `<span style="color:${edge>=0?'var(--green)':'var(--red)'}"> ${edge>=0?'+':''}${edge.toFixed(1)}%</span>` : '<span style="color:var(--muted)">—</span>';
-    const parts = key.split('_sig');
-    const label = parts.length === 2 ? `${parts[0]} / Sig ${parts[1]}` : key;
+    const label = key;
     return `<tr>
       <td>${label}</td>
       <td>${s1.trades||0}</td><td>${s1.win_rate||0}%</td><td style="color:${(s1.pnl||0)>=0?'var(--green)':'var(--red)'}">$${(s1.pnl||0).toFixed(2)}</td>
