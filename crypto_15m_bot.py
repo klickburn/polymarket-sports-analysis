@@ -23,7 +23,7 @@ import requests
 from datetime import datetime, timezone, timedelta
 
 # ── Config ──────────────────────────────────────────────────────────────
-API_BASE = "https://trading-api.kalshi.com/trade-api/v2"
+API_BASE = "https://api.elections.kalshi.com/trade-api/v2"
 
 KALSHI_KEY_ID = os.environ.get("KALSHI_KEY_ID", "")
 KALSHI_PRIVATE_KEY = os.environ.get("KALSHI_PRIVATE_KEY", "")
@@ -275,22 +275,24 @@ def place_order(ticker, side, price_dollars, amount_dollars, count=None):
     price_cents = min(99, int(round(price_dollars * 100)) + PRICE_BUMP_CENTS)
     count = count or CONTRACT_COUNT
 
+    # V2 order endpoint: side is "bid" (buying yes) or "ask" (buying no)
+    # price is fixed-point dollar string, count is string
+    api_side = "bid" if side == "yes" else "ask"
+    price_dollar_str = f"{price_cents / 100:.2f}"
+
     order = {
         "ticker": ticker,
-        "action": "buy",
-        "side": side,
-        "type": "limit",
-        "count": count,
+        "side": api_side,
+        "count": str(count),
+        "price": price_dollar_str,
+        "time_in_force": "fill_or_kill",
+        "self_trade_prevention_type": "taker_at_cross",
         "client_order_id": str(uuid.uuid4()),
     }
-    if side == "yes":
-        order["yes_price"] = price_cents
-    else:
-        order["no_price"] = price_cents
 
     try:
         P(f"    Placing: {count} contracts @ {price_cents}c ({side.upper()}) = ~${count * price_cents / 100:.2f}")
-        result = auth_post("/portfolio/orders", data=order)
+        result = auth_post("/portfolio/events/orders", data=order)
         order_data = result.get("order", {})
         status = order_data.get("status", "unknown")
         P(f"    Order status: {status}")

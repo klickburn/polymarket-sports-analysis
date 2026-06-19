@@ -635,21 +635,21 @@ def place_take_profit(ticker, side, count):
     if TAKE_PROFIT_PRICE <= 0:
         return None
     tp_cents = int(round(TAKE_PROFIT_PRICE * 100))
+    # V2 order endpoint: selling yes = ask, selling no = bid
+    api_side = "ask" if side == "yes" else "bid"
+    price_dollar_str = f"{tp_cents / 100:.2f}"
     order = {
         "ticker": ticker,
-        "action": "sell",
-        "side": side,
-        "type": "limit",
-        "count": count,
+        "side": api_side,
+        "count": str(count),
+        "price": price_dollar_str,
+        "time_in_force": "good_till_canceled",
+        "self_trade_prevention_type": "taker_at_cross",
         "client_order_id": str(uuid.uuid4()),
     }
-    if side == "yes":
-        order["yes_price"] = tp_cents
-    else:
-        order["no_price"] = tp_cents
     try:
         P(f"    Take-profit: SELL {count} @ {tp_cents}c ({side.upper()})")
-        result = auth_post("/portfolio/orders", data=order)
+        result = auth_post("/portfolio/events/orders", data=order)
         order_data = result.get("order", {})
         status = order_data.get("status", "unknown")
         P(f"    TP order status: {status}")
