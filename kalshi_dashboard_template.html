@@ -1788,7 +1788,7 @@ function renderScoreTable(bets) {
       if (pts === '0') return `<span style="color:var(--muted)">${r[0]}</span>`;
       return `<span style="color:var(--green)">${r[0]}:${pts}</span>`;
     }).join(', ');
-    const actionTag = b.action === 'trade' ? '<span class="tag open">TRADE</span>' : '<span class="tag loss">SKIP</span>';
+    const actionTag = b.action === 'trade' ? '<span class="tag open">TRADE</span>' : b.action === 'unfilled' ? '<span class="tag" style="background:rgba(234,179,8,0.2);color:#eab308">UNFILLED</span>' : '<span class="tag loss">SKIP</span>';
     const scoreColor = (b.score || 0) >= 0 ? 'var(--green)' : 'var(--red)';
     const scoreDisplay = isV7 ? signalScore : `${(b.score || 0) >= 0 ? '+' : ''}${b.score || 0}`;
     const pnl = b.result === 'win' || b.result === 'loss' ? pnlHtml(b.pnl) : '-';

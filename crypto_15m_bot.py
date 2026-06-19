@@ -285,7 +285,7 @@ def place_order(ticker, side, price_dollars, amount_dollars, count=None):
         "side": api_side,
         "count": str(count),
         "price": price_dollar_str,
-        "time_in_force": "fill_or_kill",
+        "time_in_force": "good_till_canceled",
         "self_trade_prevention_type": "taker_at_cross",
         "client_order_id": str(uuid.uuid4()),
     }
