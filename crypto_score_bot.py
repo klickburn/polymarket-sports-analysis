@@ -1055,11 +1055,16 @@ def run(live=False):
                     indicators = compute_indicators(crypto_data)
                     P(f"  Got indicators for {len(indicators)} cryptos")
 
-                    # Save status for dashboard
-                    status = {
-                        "last_update": datetime.now(timezone.utc).isoformat(),
-                        "indicators": {},
-                    }
+                    # Save status for dashboard (preserve existing keys like scale_state)
+                    status = {}
+                    if os.path.exists(STATUS_FILE):
+                        try:
+                            with open(STATUS_FILE) as f:
+                                status = json.load(f)
+                        except Exception:
+                            status = {}
+                    status["last_update"] = datetime.now(timezone.utc).isoformat()
+                    status["indicators"] = {}
                     for sym, ind in indicators.items():
                         status["indicators"][sym] = {
                             "price": ind["current_price"],
