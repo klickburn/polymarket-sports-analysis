@@ -580,6 +580,7 @@
   <hr class="section-divider">
   <div class="section-header"><h2>Scaling Strategy</h2><span class="badge" style="background:rgba(34,197,94,0.2);color:var(--green)">1↔2 Contracts</span></div>
   <div class="kpi-row" id="scalingKpis"></div>
+  <div id="scalingStatusCards" style="display:flex;gap:16px;margin-top:16px;flex-wrap:wrap"></div>
   <div class="card" style="margin-top:16px">
     <h3>Grouped Scaling Performance (BTC+ETH Combined)</h3>
     <div class="scroll-table">
@@ -1753,6 +1754,35 @@ function renderScoreBot() {
     <div class="kpi"><div class="label">% Scaled</div><div class="value">${pctScaled}%</div></div>
     <div class="kpi"><div class="label">2x Edge/Trade</div><div class="value ${edgePerTrade>=0?'green':'red'}">$${edgePerTrade.toFixed(4)}</div></div>
   `;
+  // Scaling status cards
+  const ss = sp.scaling_status || {};
+  const groupLabels = {A: "Group A (sig 0,4,5)", B: "Group B (sig 1,2,3,6,7)"};
+  document.getElementById('scalingStatusCards').innerHTML = Object.entries(ss).map(([gname, s]) => {
+    const isScaled = s.current === 2;
+    const borderColor = isScaled ? 'var(--green)' : 'var(--yellow)';
+    const statusLabel = isScaled ? '2x SCALED UP' : '1x BASE';
+    const statusColor = isScaled ? 'var(--green)' : 'var(--yellow)';
+    const recent = (s.recent || []).map(r => `<span style="color:${r==='W'?'var(--green)':'var(--red)';};font-weight:700;margin:0 1px">${r}</span>`).join('');
+    let progressText;
+    if (isScaled) {
+      progressText = s.needed > 0
+        ? `${s.losses_in_window}/${s.threshold} losses in last ${s.window} — <b>${s.needed} more loss${s.needed>1?'es':''}</b> to scale down`
+        : `At threshold — will scale down on next trade`;
+    } else {
+      progressText = s.needed > 0
+        ? `${s.wins_in_window}/${s.threshold} wins in last ${s.window} — <b>${s.needed} more win${s.needed>1?'s':''}</b> to scale up`
+        : `At threshold — will scale up on next trade`;
+    }
+    return `<div class="card" style="flex:1;min-width:280px;border-left:3px solid ${borderColor}">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <h3 style="margin:0">${groupLabels[gname] || gname}</h3>
+        <span style="background:${isScaled?'rgba(34,197,94,0.15)':'rgba(234,179,8,0.15)'};color:${statusColor};padding:3px 10px;border-radius:6px;font-weight:700;font-size:13px">${statusLabel}</span>
+      </div>
+      <div style="font-size:14px;color:var(--text);margin-bottom:6px">${progressText}</div>
+      <div style="font-size:12px;color:var(--muted)">Recent: ${recent}</div>
+    </div>`;
+  }).join('');
+
   const bd = sp.breakdown || {};
   const sortedKeys = Object.keys(bd).sort();
   document.getElementById('scalingTableBody').innerHTML = sortedKeys.map(key => {

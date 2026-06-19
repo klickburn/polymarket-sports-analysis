@@ -658,12 +658,67 @@ def _build_scaling_performance(resolved):
             "at_2": calc_stats(data["at_2"]),
         }
 
+    # Current scaling status: compute where each group stands right now
+    scale_configs = {
+        "A": {"signals": {0, 4, 5}, "up_window": 8, "up_thresh": 5, "down_window": 16, "down_thresh": 2},
+        "B": {"signals": {1, 2, 3, 6, 7}, "up_window": 8, "up_thresh": 5, "down_window": 8, "down_thresh": 3},
+    }
+    all_resolved = [b for b in resolved
+                    if b.get("crypto") in ("BTC", "ETH")]
+    scaling_status = {}
+    for gname, cfg in scale_configs.items():
+        g_trades = [b for b in all_resolved if (b.get("score", 0) + 3) in cfg["signals"]]
+        # Simulate to find current state
+        current = 1
+        for i, t in enumerate(g_trades):
+            if current == 1 and i + 1 >= cfg["up_window"]:
+                last_n = g_trades[i + 1 - cfg["up_window"]:i + 1]
+                wins = sum(1 for x in last_n if x["result"] == "win")
+                if wins >= cfg["up_thresh"]:
+                    current = 2
+            elif current == 2 and i + 1 >= cfg["down_window"]:
+                last_n = g_trades[i + 1 - cfg["down_window"]:i + 1]
+                losses = sum(1 for x in last_n if x["result"] == "loss")
+                if losses >= cfg["down_thresh"]:
+                    current = 1
+
+        # Compute distance to next transition
+        if current == 1:
+            window = cfg["up_window"]
+            last_n = g_trades[-window:] if len(g_trades) >= window else g_trades
+            wins = sum(1 for x in last_n if x["result"] == "win")
+            needed = cfg["up_thresh"] - wins
+            scaling_status[gname] = {
+                "current": 1,
+                "direction": "up",
+                "wins_in_window": wins,
+                "window": window,
+                "threshold": cfg["up_thresh"],
+                "needed": max(0, needed),
+                "recent": [t["result"][0].upper() for t in last_n[-8:]],
+            }
+        else:
+            window = cfg["down_window"]
+            last_n = g_trades[-window:] if len(g_trades) >= window else g_trades
+            losses = sum(1 for x in last_n if x["result"] == "loss")
+            needed = cfg["down_thresh"] - losses
+            scaling_status[gname] = {
+                "current": 2,
+                "direction": "down",
+                "losses_in_window": losses,
+                "window": window,
+                "threshold": cfg["down_thresh"],
+                "needed": max(0, needed),
+                "recent": [t["result"][0].upper() for t in last_n[-8:]],
+            }
+
     return {
         "overall_at_1": calc_stats(trades_at_1),
         "overall_at_2": calc_stats(trades_at_2),
         "total_trades": len(filtered),
         "pct_at_scaled": round(len(trades_at_2) / len(filtered) * 100, 1) if filtered else 0,
         "breakdown": breakdown,
+        "scaling_status": scaling_status,
     }
 
 
