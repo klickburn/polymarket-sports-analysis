@@ -845,6 +845,25 @@ def get_score_data():
     return JSONResponse(_build_score_report(bets, status))
 
 
+@app.get("/api/score-debug")
+def score_debug():
+    """Debug: show raw status file contents and resolved scale_state."""
+    raw = {}
+    try:
+        if os.path.exists(SCORE_STATUS_FILE):
+            with open(SCORE_STATUS_FILE) as f:
+                raw = json.load(f)
+    except Exception as e:
+        raw = {"error": str(e)}
+    return JSONResponse({
+        "status_file_path": SCORE_STATUS_FILE,
+        "file_exists": os.path.exists(SCORE_STATUS_FILE),
+        "raw_status_keys": list(raw.keys()) if isinstance(raw, dict) else "not_dict",
+        "scale_state": raw.get("scale_state") if isinstance(raw, dict) else None,
+        "score_data_dir": SCORE_DATA_DIR,
+    })
+
+
 @app.post("/api/score-reset")
 def reset_score_data():
     """Clear all score bot trade history."""
