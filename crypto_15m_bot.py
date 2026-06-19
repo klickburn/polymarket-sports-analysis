@@ -293,12 +293,16 @@ def place_order(ticker, side, price_dollars, amount_dollars, count=None):
     try:
         P(f"    Placing: {count} contracts @ {price_cents}c ({side.upper()}) = ~${count * price_cents / 100:.2f}")
         result = auth_post("/portfolio/events/orders", data=order)
-        order_data = result.get("order", {})
+        P(f"    V2 response keys: {list(result.keys()) if isinstance(result, dict) else type(result)}")
+        order_data = result.get("order", result)
         status = order_data.get("status", "unknown")
-        P(f"    Order status: {status}")
+        order_id = order_data.get("order_id", "")
+        P(f"    Order status: {status}, order_id: {order_id}")
         if status == "canceled":
             P(f"    Order canceled (no liquidity)")
             return None
+        if not order_id and "order" not in result:
+            result["order"] = order_data
         return result
     except Exception as e:
         P(f"    ORDER FAILED: {e}")
