@@ -532,52 +532,6 @@
   </div>
 
   <hr class="section-divider">
-  <div class="section-header"><h2>Live Indicators</h2><span class="badge" style="background:rgba(168,85,247,0.2);color:var(--purple)">CoinGecko</span></div>
-  <div id="scoreIndicatorsContent"></div>
-
-  <hr class="section-divider">
-  <div class="section-header"><h2>Crypto Performance</h2><span class="badge badge-crypto">Per Asset</span></div>
-  <div id="scoreCryptoCards" class="analytics-signal-grid"></div>
-
-  <div class="grid-2" style="margin-top:20px">
-    <div class="card">
-      <h3>P&L by Crypto</h3>
-      <div class="chart-container med"><canvas id="scoreCryptoPnlChart"></canvas></div>
-    </div>
-    <div class="card">
-      <h3>Score Distribution</h3>
-      <div class="chart-container med"><canvas id="scoreDistChart"></canvas></div>
-    </div>
-  </div>
-
-  <div class="grid-2" style="margin-top:20px">
-    <div class="card">
-      <h3>P&L by Signal Score</h3>
-      <div class="chart-container med"><canvas id="scorePnlByScoreChart"></canvas></div>
-    </div>
-    <div class="card">
-      <h3>Trades by Signal Score</h3>
-      <div class="chart-container med"><canvas id="scoreCountByScoreChart"></canvas></div>
-    </div>
-  </div>
-
-  <hr class="section-divider">
-  <div class="section-header"><h2>Skip Analysis</h2><span class="badge" style="background:rgba(234,179,8,0.2);color:var(--yellow)">Filter Value</span></div>
-  <div class="grid-2">
-    <div class="card">
-      <h3>Trade vs Skip Outcomes</h3>
-      <div style="display:flex;gap:20px;align-items:center">
-        <div style="width:45%"><canvas id="scoreSkipDoughnut"></canvas></div>
-        <div id="scoreSkipStats" style="flex:1"></div>
-      </div>
-    </div>
-    <div class="card">
-      <h3>Skip Accuracy Over Time</h3>
-      <div id="scoreSkipBreakdown"></div>
-    </div>
-  </div>
-
-  <hr class="section-divider">
   <div class="section-header"><h2>Scaling Strategy</h2><span class="badge" style="background:rgba(34,197,94,0.2);color:var(--green)">1↔2 Contracts</span></div>
   <div class="kpi-row" id="scalingKpis"></div>
   <div id="scalingStatusCards" style="display:flex;gap:16px;margin-top:16px;flex-wrap:wrap"></div>
@@ -1355,9 +1309,7 @@ function renderScoreBot() {
     { label: 'Account Value', value: (sBal + sPort) > 0 ? `$${(sBal + sPort).toFixed(2)}` : '--', cls: 'cyan', sub: `$${sBal.toFixed(2)} cash + $${sPort.toFixed(2)} portfolio` },
     { label: 'Total P&L', value: `$${d.total_pnl >= 0 ? '+' : ''}${d.total_pnl.toFixed(2)}`, cls: d.total_pnl >= 0 ? 'green' : 'red', sub: `Avg $${avgPnl >= 0 ? '+' : ''}${avgPnl.toFixed(2)}/trade` },
     { label: 'Win Rate', value: d.resolved > 0 ? `${wr}%` : '--', cls: wr >= 55 ? 'green' : wr >= 45 ? 'orange' : 'red', sub: `${d.wins}W - ${d.losses}L of ${d.resolved}` },
-    { label: 'Net Filter Value', value: `$${netFilterValue >= 0 ? '+' : ''}${netFilterValue.toFixed(2)}`, cls: netFilterValue >= 0 ? 'green' : 'red', sub: `$${lossesSaved.toFixed(2)} saved - $${missedGains.toFixed(2)} missed` },
-    { label: 'Skip Accuracy', value: skipResolved > 0 ? `${(skipWouldLost / skipResolved * 100).toFixed(0)}%` : '--', cls: skipWouldLost >= skipWouldWon ? 'green' : 'red', sub: `${skipWouldLost} correct / ${skipWouldWon} wrong` },
-    { label: 'Trades / Skips', value: `${d.total_trades} / ${d.total_skips}`, cls: 'purple', sub: `${d.total_trades + d.total_skips} total decisions` },
+    { label: 'Total Trades', value: `${d.total_trades}`, cls: 'purple', sub: `${d.resolved} resolved` },
   ];
   document.getElementById('scoreKpis').innerHTML = kpis.map(k =>
     `<div class="kpi"><div class="label">${k.label}</div><div class="value ${k.cls}">${k.value}</div><div class="sub">${k.sub}</div></div>`
