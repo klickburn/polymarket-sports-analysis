@@ -1762,7 +1762,7 @@ function renderScoreBot() {
     const borderColor = isScaled ? 'var(--green)' : 'var(--yellow)';
     const statusLabel = isScaled ? '2x SCALED UP' : '1x BASE';
     const statusColor = isScaled ? 'var(--green)' : 'var(--yellow)';
-    const recent = (s.recent || []).map(r => `<span style="color:${r==='W'?'var(--green)':'var(--red)';};font-weight:700;margin:0 1px">${r}</span>`).join('');
+    const recent = (s.recent || []).map(r => `<span style="color:${r==='W'?'var(--green)':'var(--red)'};font-weight:700;margin:0 1px">${r}</span>`).join('');
     let progressText;
     if (isScaled) {
       progressText = s.needed > 0
