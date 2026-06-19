@@ -23,7 +23,7 @@ import requests
 from datetime import datetime, timezone, timedelta
 
 # ── Config ──────────────────────────────────────────────────────────────
-API_BASE = "https://api.elections.kalshi.com/trade-api/v2"
+API_BASE = "https://trading-api.kalshi.com/trade-api/v2"
 
 KALSHI_KEY_ID = os.environ.get("KALSHI_KEY_ID", "")
 KALSHI_PRIVATE_KEY = os.environ.get("KALSHI_PRIVATE_KEY", "")
