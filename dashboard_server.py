@@ -658,31 +658,26 @@ def _build_scaling_performance(resolved):
             "at_2": calc_stats(data["at_2"]),
         }
 
-    # Current scaling status: compute where each group stands right now
+    # Read actual scale state from bot's status file
     scale_configs = {
         "A": {"signals": {0, 4, 5}, "up_window": 8, "up_thresh": 5, "down_window": 16, "down_thresh": 2},
         "B": {"signals": {1, 2, 3, 6, 7}, "up_window": 8, "up_thresh": 5, "down_window": 8, "down_thresh": 3},
     }
-    all_resolved = [b for b in resolved
-                    if b.get("crypto") in ("BTC", "ETH")]
+    bot_scale_state = {}
+    try:
+        status_path = os.path.join(os.environ.get("DATA_DIR", "."), "crypto_score_status.json")
+        if os.path.exists(status_path):
+            with open(status_path) as f:
+                bot_scale_state = json.load(f).get("scale_state", {})
+    except Exception:
+        pass
+
+    all_resolved = [b for b in resolved if b.get("crypto") in ("BTC", "ETH")]
     scaling_status = {}
     for gname, cfg in scale_configs.items():
         g_trades = [b for b in all_resolved if (b.get("score", 0) + 3) in cfg["signals"]]
-        # Simulate to find current state
-        current = 1
-        for i, t in enumerate(g_trades):
-            if current == 1 and i + 1 >= cfg["up_window"]:
-                last_n = g_trades[i + 1 - cfg["up_window"]:i + 1]
-                wins = sum(1 for x in last_n if x["result"] == "win")
-                if wins >= cfg["up_thresh"]:
-                    current = 2
-            elif current == 2 and i + 1 >= cfg["down_window"]:
-                last_n = g_trades[i + 1 - cfg["down_window"]:i + 1]
-                losses = sum(1 for x in last_n if x["result"] == "loss")
-                if losses >= cfg["down_thresh"]:
-                    current = 1
+        current = int(bot_scale_state.get(gname, 1))
 
-        # Compute distance to next transition
         if current == 1:
             window = cfg["up_window"]
             last_n = g_trades[-window:] if len(g_trades) >= window else g_trades

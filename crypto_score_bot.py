@@ -887,6 +887,33 @@ SCALE_GROUPS = {
 SCALE_UP_COUNT = 2
 _scale_state = {}
 
+def _persist_scale_state():
+    """Save scale state to status file so dashboard can read it."""
+    try:
+        if os.path.exists(STATUS_FILE):
+            with open(STATUS_FILE) as f:
+                status = json.load(f)
+        else:
+            status = {}
+        status["scale_state"] = dict(_scale_state)
+        save_status(status)
+    except Exception:
+        pass
+
+def _restore_scale_state():
+    """Restore scale state from status file to survive deploys."""
+    global _scale_state
+    try:
+        if os.path.exists(STATUS_FILE):
+            with open(STATUS_FILE) as f:
+                status = json.load(f)
+            saved = status.get("scale_state", {})
+            if saved:
+                _scale_state = {k: int(v) for k, v in saved.items()}
+                P(f"  [SCALE] Restored state: {_scale_state}")
+    except Exception:
+        pass
+
 def _get_scale_group(signal_count):
     for name, cfg in SCALE_GROUPS.items():
         if signal_count in cfg["signals"]:
@@ -914,6 +941,7 @@ def get_dynamic_contracts(bets, crypto, signal_count):
         if wins >= cfg["up_thresh"]:
             _scale_state[group_name] = SCALE_UP_COUNT
             P(f"  [SCALE] Group {group_name}: {wins}/{cfg['up_window']} wins — UP to {SCALE_UP_COUNT}")
+            _persist_scale_state()
             return SCALE_UP_COUNT
     else:
         if len(resolved) < cfg["down_window"]:
@@ -923,6 +951,7 @@ def get_dynamic_contracts(bets, crypto, signal_count):
         if losses >= cfg["down_thresh"]:
             _scale_state[group_name] = 1
             P(f"  [SCALE] Group {group_name}: {losses}/{cfg['down_window']} losses — DOWN to 1")
+            _persist_scale_state()
             return 1
 
     return current
@@ -972,6 +1001,8 @@ def run(live=False):
     P(f"  Price range: {MIN_PRICE*100:.0f}-{MAX_PRICE*100:.0f}c | {CONTRACT_COUNT} contracts | TP: {tp_str}")
     P(f"  Cryptos: {', '.join(CRYPTOS.keys())}")
     P("=" * 65)
+
+    _restore_scale_state()
 
     if live:
         bal = get_balance()
