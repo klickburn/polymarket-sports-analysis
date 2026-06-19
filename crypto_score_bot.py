@@ -1013,10 +1013,11 @@ def run(live=False):
                 time.sleep(POLL_INTERVAL)
                 continue
 
-            # Fetch CoinGecko right before trading
+            # Fetch CoinGecko right before trading (skip paused cryptos to save API calls)
+            TRADE_PAUSED = {"SOL", "DOGE", "BNB", "HYPE", "XRP"}
             if not fetched_indicators:
                 P("  Fetching CoinGecko data...")
-                crypto_data = fetch_crypto_prices()
+                crypto_data = fetch_crypto_prices(skip_coins=TRADE_PAUSED)
                 if crypto_data:
                     indicators = compute_indicators(crypto_data)
                     P(f"  Got indicators for {len(indicators)} cryptos")
@@ -1065,7 +1066,6 @@ def run(live=False):
                 continue
 
             # Single pass: collect sides for consensus + evaluate trades
-            TRADE_PAUSED = {"SOL", "DOGE", "BNB", "HYPE", "XRP"}  # Fetch data but don't trade
             CONSENSUS_EXCLUDE = {"BNB", "HYPE"}
             crypto_snapshots = {}
             P(f"  Scanning {len(CRYPTOS)} markets...")
