@@ -293,17 +293,39 @@ def place_order(ticker, side, price_dollars, amount_dollars, count=None):
     try:
         P(f"    Placing: {count} contracts @ {price_cents}c ({side.upper()}) = ~${count * price_cents / 100:.2f}")
         result = auth_post("/portfolio/events/orders", data=order)
-        P(f"    V2 response keys: {list(result.keys()) if isinstance(result, dict) else type(result)}")
-        order_data = result.get("order", result)
-        status = order_data.get("status", "unknown")
-        order_id = order_data.get("order_id", "")
-        P(f"    Order status: {status}, order_id: {order_id}")
+        # V2 response is flat: {order_id, fill_count, remaining_count, average_fill_price, ...}
+        order_id = result.get("order_id", "")
+        fill_count = float(result.get("fill_count", "0"))
+        remaining = float(result.get("remaining_count", "0"))
+        avg_price = result.get("average_fill_price")
+
+        if fill_count > 0 and remaining == 0:
+            status = "executed"
+        elif fill_count > 0:
+            status = "partial"
+        elif remaining > 0:
+            status = "resting"
+        else:
+            status = "canceled"
+
+        P(f"    Order {order_id}: status={status}, filled={fill_count}, remaining={remaining}")
+
         if status == "canceled":
             P(f"    Order canceled (no liquidity)")
             return None
-        if not order_id and "order" not in result:
-            result["order"] = order_data
-        return result
+
+        # Normalize into {"order": {...}} shape for downstream code
+        normalized = {
+            "order": {
+                "order_id": order_id,
+                "status": status,
+                "fill_count": fill_count,
+                "remaining_count": remaining,
+                "avg_price": float(avg_price) if avg_price else None,
+                "count": count,
+            }
+        }
+        return normalized
     except Exception as e:
         P(f"    ORDER FAILED: {e}")
         return None

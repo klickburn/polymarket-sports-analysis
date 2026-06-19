@@ -650,10 +650,9 @@ def place_take_profit(ticker, side, count):
     try:
         P(f"    Take-profit: SELL {count} @ {tp_cents}c ({side.upper()})")
         result = auth_post("/portfolio/events/orders", data=order)
-        order_data = result.get("order", {})
-        status = order_data.get("status", "unknown")
-        P(f"    TP order status: {status}")
-        return result
+        order_id = result.get("order_id", "")
+        P(f"    TP order {order_id}: placed")
+        return {"order": {"order_id": order_id, "status": "resting"}}
     except Exception as e:
         P(f"    TP ORDER FAILED: {e}")
         return None
@@ -1219,17 +1218,16 @@ def run(live=False):
                     tq["bet_record"]["order_id"] = order_id
                     tq["bet_record"]["status"] = order_status
 
-                    if order_status == "executed":
-                        # Filled immediately
-                        avg_p = order.get("avg_price", None)
-                        if avg_p is not None and avg_p > 1:
-                            avg_p = avg_p / 100
+                    if order_status in ("executed", "partial"):
+                        avg_p = order.get("avg_price")
                         tq["bet_record"]["fill_price"] = avg_p if avg_p else tq["price"]
+                        if order.get("fill_count"):
+                            tq["bet_record"]["filled_count"] = int(order["fill_count"])
                         bets.append(tq["bet_record"])
                         save_bets(bets)
                         total_new += 1
                         placed_this_window.add(tq["crypto"])
-                        P(f"    {tq['crypto']}: FILLED INSTANTLY @ {tq['bet_record']['fill_price']:.2f}")
+                        P(f"    {tq['crypto']}: FILLED @ {tq['bet_record']['fill_price']:.2f}")
                     else:
                         # Resting — add to pending for bulk check
                         pending_orders.append({
@@ -1287,36 +1285,18 @@ def run(live=False):
                                 except Exception:
                                     pass
                         else:
-                            # Still resting — cancel
                             P(f"    {po['crypto']}: Unfilled (status={check_status}), canceling order {po['order_id']}...")
                             try:
-                                cancel_resp = auth_delete(f"/portfolio/orders/{po['order_id']}")
-                                P(f"    {po['crypto']}: Cancel response: {cancel_resp}")
+                                cancel_resp = auth_delete(f"/portfolio/events/orders/{po['order_id']}")
+                                P(f"    {po['crypto']}: Canceled (reduced_by={cancel_resp.get('reduced_by', '?')})")
                             except Exception as ce:
                                 P(f"    {po['crypto']}: Cancel error: {ce}")
                                 try:
                                     time.sleep(1)
-                                    cancel_resp = auth_delete(f"/portfolio/orders/{po['order_id']}")
-                                    P(f"    {po['crypto']}: Cancel retry response: {cancel_resp}")
+                                    cancel_resp = auth_delete(f"/portfolio/events/orders/{po['order_id']}")
+                                    P(f"    {po['crypto']}: Cancel retry ok")
                                 except Exception as ce2:
                                     P(f"    {po['crypto']}: Cancel retry also failed: {ce2}")
-                            # Verify it was actually canceled
-                            time.sleep(1)
-                            try:
-                                verify = auth_get(f"/portfolio/orders/{po['order_id']}")
-                                v_order = verify.get("order", verify)
-                                v_status = v_order.get("status", "unknown")
-                                P(f"    {po['crypto']}: Post-cancel status: {v_status}")
-                                if v_status == "resting":
-                                    P(f"    {po['crypto']}: WARNING — still resting after cancel!")
-                                    # Try decrease_order as fallback
-                                    try:
-                                        auth_post(f"/portfolio/orders/{po['order_id']}/decrease", {"reduce_by": v_order.get("remaining_count", CONTRACT_COUNT)})
-                                        P(f"    {po['crypto']}: Used decrease_order as fallback")
-                                    except Exception:
-                                        pass
-                            except Exception:
-                                pass
                             po["bet_record"]["action"] = "unfilled"
                             po["bet_record"]["status"] = "canceled"
                             bets.append(po["bet_record"])
