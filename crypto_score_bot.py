@@ -915,7 +915,7 @@ def _restore_scale_state():
                 return
     except Exception:
         pass
-    # No saved state — derive from trade history
+    # No saved state — check current window (same as bot's cold-start logic)
     try:
         if os.path.exists(BETS_FILE):
             with open(BETS_FILE) as f:
@@ -925,22 +925,15 @@ def _restore_scale_state():
                         and b.get("crypto") in ("BTC", "ETH")]
             for gname, cfg in SCALE_GROUPS.items():
                 g_trades = [b for b in resolved if (b.get("score", 0) + 3) in cfg["signals"]]
-                scale = 1
-                for i in range(len(g_trades)):
-                    window_trades = g_trades[:i+1]
-                    if scale == 1:
-                        if len(window_trades) >= cfg["up_window"]:
-                            last_n = window_trades[-cfg["up_window"]:]
-                            wins = sum(1 for b in last_n if b["result"] == "win")
-                            if wins >= cfg["up_thresh"]:
-                                scale = SCALE_UP_COUNT
+                if len(g_trades) >= cfg["up_window"]:
+                    last_n = g_trades[-cfg["up_window"]:]
+                    wins = sum(1 for b in last_n if b["result"] == "win")
+                    if wins >= cfg["up_thresh"]:
+                        _scale_state[gname] = SCALE_UP_COUNT
                     else:
-                        if len(window_trades) >= cfg["down_window"]:
-                            last_n = window_trades[-cfg["down_window"]:]
-                            losses = sum(1 for b in last_n if b["result"] == "loss")
-                            if losses >= cfg["down_thresh"]:
-                                scale = 1
-                _scale_state[gname] = scale
+                        _scale_state[gname] = 1
+                else:
+                    _scale_state[gname] = 1
             P(f"  [SCALE] Derived from history: {_scale_state}")
             _persist_scale_state()
     except Exception:
