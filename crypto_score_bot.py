@@ -901,7 +901,7 @@ def _persist_scale_state():
         pass
 
 def _restore_scale_state():
-    """Restore scale state from status file to survive deploys."""
+    """Restore scale state from status file, or derive from trade history."""
     global _scale_state
     try:
         if os.path.exists(STATUS_FILE):
@@ -912,6 +912,37 @@ def _restore_scale_state():
                 _scale_state = {k: int(v) for k, v in saved.items()}
                 P(f"  [SCALE] Restored state: {_scale_state}")
                 _persist_scale_state()
+                return
+    except Exception:
+        pass
+    # No saved state — derive from trade history
+    try:
+        if os.path.exists(BETS_FILE):
+            with open(BETS_FILE) as f:
+                bets = json.load(f)
+            resolved = [b for b in bets
+                        if b.get("action") == "trade" and b.get("result") in ("win", "loss")
+                        and b.get("crypto") in ("BTC", "ETH")]
+            for gname, cfg in SCALE_GROUPS.items():
+                g_trades = [b for b in resolved if (b.get("score", 0) + 3) in cfg["signals"]]
+                scale = 1
+                for i in range(len(g_trades)):
+                    window_trades = g_trades[:i+1]
+                    if scale == 1:
+                        if len(window_trades) >= cfg["up_window"]:
+                            last_n = window_trades[-cfg["up_window"]:]
+                            wins = sum(1 for b in last_n if b["result"] == "win")
+                            if wins >= cfg["up_thresh"]:
+                                scale = SCALE_UP_COUNT
+                    else:
+                        if len(window_trades) >= cfg["down_window"]:
+                            last_n = window_trades[-cfg["down_window"]:]
+                            losses = sum(1 for b in last_n if b["result"] == "loss")
+                            if losses >= cfg["down_thresh"]:
+                                scale = 1
+                _scale_state[gname] = scale
+            P(f"  [SCALE] Derived from history: {_scale_state}")
+            _persist_scale_state()
     except Exception:
         pass
 
