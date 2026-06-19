@@ -877,14 +877,15 @@ def git_backup_bets(bets):
 
 
 # ── Dynamic contract sizing (grouped signals, BTC+ETH combined) ────────
-# Group A: signals 0,4,5 — window=4, need 4 wins to scale up, 2 losses to scale down
-# Group B: signals 1,2,3,6,7 — window=8, need 6 wins to scale up, 3 losses to scale down
+# Split up/down windows: scale up slowly, scale down fast
+# Group A: signals 0,4,5 — up: 5/8 wins, down: 2 losses in 16
+# Group B: signals 1,2,3,6,7 — up: 5/8 wins, down: 3 losses in 8
 SCALE_GROUPS = {
-    "A": {"signals": {0, 4, 5}, "window": 4, "win_thresh": 4, "loss_thresh": 2},
-    "B": {"signals": {1, 2, 3, 6, 7}, "window": 8, "win_thresh": 6, "loss_thresh": 3},
+    "A": {"signals": {0, 4, 5}, "up_window": 8, "up_thresh": 5, "down_window": 16, "down_thresh": 2},
+    "B": {"signals": {1, 2, 3, 6, 7}, "up_window": 8, "up_thresh": 5, "down_window": 8, "down_thresh": 3},
 }
 SCALE_UP_COUNT = 2
-_scale_state = {}  # group_name -> current contracts
+_scale_state = {}
 
 def _get_scale_group(signal_count):
     for name, cfg in SCALE_GROUPS.items():
@@ -893,35 +894,36 @@ def _get_scale_group(signal_count):
     return None, None
 
 def get_dynamic_contracts(bets, crypto, signal_count):
-    """Grouped scaling: BTC+ETH combined, signal groups A/B."""
+    """Grouped scaling: BTC+ETH combined, split up/down windows."""
     group_name, cfg = _get_scale_group(signal_count)
     if cfg is None:
         return 1
 
-    window = cfg["window"]
-    win_thresh = cfg["win_thresh"]
-    loss_thresh = cfg["loss_thresh"]
     current = _scale_state.get(group_name, 1)
 
     resolved = [b for b in bets
                 if b.get("action") == "trade" and b.get("result") in ("win", "loss")
                 and b.get("crypto") in ("BTC", "ETH")
                 and (b.get("score", 0) + 3) in cfg["signals"]]
-    if len(resolved) < window:
-        return current
 
-    last_n = resolved[-window:]
-    wins = sum(1 for b in last_n if b["result"] == "win")
-    losses = window - wins
-
-    if wins >= win_thresh and current == 1:
-        _scale_state[group_name] = SCALE_UP_COUNT
-        P(f"  [SCALE] Group {group_name} sigs={cfg['signals']}: {wins}/{window} wins — UP to {SCALE_UP_COUNT}")
-        return SCALE_UP_COUNT
-    elif losses >= loss_thresh and current == SCALE_UP_COUNT:
-        _scale_state[group_name] = 1
-        P(f"  [SCALE] Group {group_name} sigs={cfg['signals']}: {losses}/{window} losses — DOWN to 1")
-        return 1
+    if current == 1:
+        if len(resolved) < cfg["up_window"]:
+            return current
+        last_n = resolved[-cfg["up_window"]:]
+        wins = sum(1 for b in last_n if b["result"] == "win")
+        if wins >= cfg["up_thresh"]:
+            _scale_state[group_name] = SCALE_UP_COUNT
+            P(f"  [SCALE] Group {group_name}: {wins}/{cfg['up_window']} wins — UP to {SCALE_UP_COUNT}")
+            return SCALE_UP_COUNT
+    else:
+        if len(resolved) < cfg["down_window"]:
+            return current
+        last_n = resolved[-cfg["down_window"]:]
+        losses = sum(1 for b in last_n if b["result"] == "loss")
+        if losses >= cfg["down_thresh"]:
+            _scale_state[group_name] = 1
+            P(f"  [SCALE] Group {group_name}: {losses}/{cfg['down_window']} losses — DOWN to 1")
+            return 1
 
     return current
 
