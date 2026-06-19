@@ -665,9 +665,8 @@ def _build_scaling_performance(resolved):
     }
     bot_scale_state = {}
     try:
-        status_path = os.path.join(os.environ.get("DATA_DIR", "."), "crypto_score_status.json")
-        if os.path.exists(status_path):
-            with open(status_path) as f:
+        if os.path.exists(SCORE_STATUS_FILE):
+            with open(SCORE_STATUS_FILE) as f:
                 bot_scale_state = json.load(f).get("scale_state", {})
     except Exception:
         pass

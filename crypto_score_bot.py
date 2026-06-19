@@ -911,6 +911,7 @@ def _restore_scale_state():
             if saved:
                 _scale_state = {k: int(v) for k, v in saved.items()}
                 P(f"  [SCALE] Restored state: {_scale_state}")
+                _persist_scale_state()
     except Exception:
         pass
 
