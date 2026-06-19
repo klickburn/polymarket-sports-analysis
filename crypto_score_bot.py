@@ -1075,6 +1075,8 @@ def run(live=False):
                             "stoch": round(ind["stoch"], 1),
                             "pack_agreement": round(ind["pack_agreement"], 2),
                         }
+                    if _scale_state:
+                        status["scale_state"] = dict(_scale_state)
                     save_status(status)
                     fetched_indicators = True
                 else:
