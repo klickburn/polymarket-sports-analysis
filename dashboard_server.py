@@ -604,7 +604,7 @@ def _resolve_score_bets():
     return bets
 
 
-def _build_scaling_performance(resolved):
+def _build_scaling_performance(resolved, status=None):
     """Analyze how dynamic contract scaling is performing (BTC/ETH, 1↔2 only)."""
     if not resolved:
         return {}
@@ -663,13 +663,14 @@ def _build_scaling_performance(resolved):
         "A": {"signals": {0, 4, 5}, "up_window": 8, "up_thresh": 5, "down_window": 16, "down_thresh": 2},
         "B": {"signals": {1, 2, 3, 6, 7}, "up_window": 8, "up_thresh": 5, "down_window": 8, "down_thresh": 3},
     }
-    bot_scale_state = {}
-    try:
-        if os.path.exists(SCORE_STATUS_FILE):
-            with open(SCORE_STATUS_FILE) as f:
-                bot_scale_state = json.load(f).get("scale_state", {})
-    except Exception:
-        pass
+    bot_scale_state = (status or {}).get("scale_state", {})
+    if not bot_scale_state:
+        try:
+            if os.path.exists(SCORE_STATUS_FILE):
+                with open(SCORE_STATUS_FILE) as f:
+                    bot_scale_state = json.load(f).get("scale_state", {})
+        except Exception:
+            pass
 
     all_resolved = [b for b in resolved if b.get("crypto") in ("BTC", "ETH")]
     scaling_status = {}
@@ -765,7 +766,7 @@ def _build_score_report(bets, status, balance_info=None):
             by_crypto[c]["skip_hypothetical_pnl"] += b.get("hypothetical_pnl", 0)
 
     # ── Scaling performance breakdown ──────────────────────────────────
-    scaling_perf = _build_scaling_performance(resolved)
+    scaling_perf = _build_scaling_performance(resolved, status)
 
     return {
         "total_trades": len(trades),
