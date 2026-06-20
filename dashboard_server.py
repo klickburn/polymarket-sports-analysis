@@ -660,15 +660,18 @@ def _build_scaling_performance(resolved, status=None):
 
     # Read actual scale state from bot's status file
     scale_configs = {
-        "A": {"signals": {0, 4, 5}, "up_window": 8, "up_thresh": 5, "down_window": 16, "down_thresh": 2},
-        "B": {"signals": {1, 2, 3, 6, 7}, "up_window": 8, "up_thresh": 5, "down_window": 8, "down_thresh": 3},
+        "A": {"signals": {0, 4, 5}, "up_window": 6, "up_thresh": 4, "down_window": 16, "down_thresh": 4},
+        "B": {"signals": {1, 2, 3, 6, 7}, "up_window": 6, "up_thresh": 5, "down_window": 16, "down_thresh": 5},
     }
     bot_scale_state = (status or {}).get("scale_state", {})
+    bot_scale_up_at = (status or {}).get("scale_up_at", {})
     if not bot_scale_state:
         try:
             if os.path.exists(SCORE_STATUS_FILE):
                 with open(SCORE_STATUS_FILE) as f:
-                    bot_scale_state = json.load(f).get("scale_state", {})
+                    saved = json.load(f)
+                    bot_scale_state = saved.get("scale_state", {})
+                    bot_scale_up_at = saved.get("scale_up_at", {})
         except Exception:
             pass
 
@@ -693,18 +696,22 @@ def _build_scaling_performance(resolved, status=None):
                 "recent": [t["result"][0].upper() for t in last_n[-8:]],
             }
         else:
+            # Only count trades since scale-up (matches bot logic)
+            up_idx = int(bot_scale_up_at.get(gname, 0))
+            since_up = g_trades[up_idx:]
             window = cfg["down_window"]
-            last_n = g_trades[-window:] if len(g_trades) >= window else g_trades
-            losses = sum(1 for x in last_n if x["result"] == "loss")
+            check_trades = since_up[-window:] if len(since_up) >= window else since_up
+            losses = sum(1 for x in check_trades if x["result"] == "loss")
             needed = cfg["down_thresh"] - losses
             scaling_status[gname] = {
                 "current": 2,
                 "direction": "down",
                 "losses_in_window": losses,
+                "trades_since_up": len(since_up),
                 "window": window,
                 "threshold": cfg["down_thresh"],
                 "needed": max(0, needed),
-                "recent": [t["result"][0].upper() for t in last_n[-8:]],
+                "recent": [t["result"][0].upper() for t in since_up[-8:]],
             }
 
     return {

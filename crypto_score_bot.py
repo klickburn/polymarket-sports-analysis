@@ -877,15 +877,16 @@ def git_backup_bets(bets):
 
 
 # ── Dynamic contract sizing (grouped signals, BTC+ETH combined) ────────
-# Split up/down windows: scale up slowly, scale down fast
-# Group A: signals 0,4,5 — up: 5/8 wins, down: 2 losses in 16
-# Group B: signals 1,2,3,6,7 — up: 5/8 wins, down: 3 losses in 8
+# Split up/down windows; down-check only counts trades since last scale-up
+# Group A: signals 0,4,5 — up: 4/6 wins, down: 4 losses in 16 (since scale-up)
+# Group B: signals 1,2,3,6,7 — up: 5/6 wins, down: 5 losses in 16 (since scale-up)
 SCALE_GROUPS = {
-    "A": {"signals": {0, 4, 5}, "up_window": 8, "up_thresh": 5, "down_window": 16, "down_thresh": 2},
-    "B": {"signals": {1, 2, 3, 6, 7}, "up_window": 8, "up_thresh": 5, "down_window": 8, "down_thresh": 3},
+    "A": {"signals": {0, 4, 5}, "up_window": 6, "up_thresh": 4, "down_window": 16, "down_thresh": 4},
+    "B": {"signals": {1, 2, 3, 6, 7}, "up_window": 6, "up_thresh": 5, "down_window": 16, "down_thresh": 5},
 }
 SCALE_UP_COUNT = 2
 _scale_state = {}
+_scale_up_at = {}  # group -> trade count when scaled up (for down-check offset)
 
 def _persist_scale_state():
     """Save scale state to status file so dashboard can read it."""
@@ -896,13 +897,14 @@ def _persist_scale_state():
         else:
             status = {}
         status["scale_state"] = dict(_scale_state)
+        status["scale_up_at"] = dict(_scale_up_at)
         save_status(status)
     except Exception:
         pass
 
 def _restore_scale_state():
     """Restore scale state from status file, or derive from trade history."""
-    global _scale_state
+    global _scale_state, _scale_up_at
     try:
         if os.path.exists(STATUS_FILE):
             with open(STATUS_FILE) as f:
@@ -910,7 +912,10 @@ def _restore_scale_state():
             saved = status.get("scale_state", {})
             if saved:
                 _scale_state = {k: int(v) for k, v in saved.items()}
-                P(f"  [SCALE] Restored state: {_scale_state}")
+                saved_up_at = status.get("scale_up_at", {})
+                if saved_up_at:
+                    _scale_up_at = {k: int(v) for k, v in saved_up_at.items()}
+                P(f"  [SCALE] Restored state: {_scale_state}, up_at: {_scale_up_at}")
                 _persist_scale_state()
                 return
     except Exception:
@@ -930,6 +935,7 @@ def _restore_scale_state():
                     wins = sum(1 for b in last_n if b["result"] == "win")
                     if wins >= cfg["up_thresh"]:
                         _scale_state[gname] = SCALE_UP_COUNT
+                        _scale_up_at[gname] = len(g_trades)
                     else:
                         _scale_state[gname] = 1
                 else:
@@ -965,17 +971,21 @@ def get_dynamic_contracts(bets, crypto, signal_count):
         wins = sum(1 for b in last_n if b["result"] == "win")
         if wins >= cfg["up_thresh"]:
             _scale_state[group_name] = SCALE_UP_COUNT
+            _scale_up_at[group_name] = len(resolved)
             P(f"  [SCALE] Group {group_name}: {wins}/{cfg['up_window']} wins — UP to {SCALE_UP_COUNT}")
             _persist_scale_state()
             return SCALE_UP_COUNT
     else:
-        if len(resolved) < cfg["down_window"]:
+        # Only check trades AFTER the scale-up transition
+        up_idx = _scale_up_at.get(group_name, 0)
+        since_up = resolved[up_idx:]
+        if len(since_up) < cfg["down_window"]:
             return current
-        last_n = resolved[-cfg["down_window"]:]
+        last_n = since_up[-cfg["down_window"]:]
         losses = sum(1 for b in last_n if b["result"] == "loss")
         if losses >= cfg["down_thresh"]:
             _scale_state[group_name] = 1
-            P(f"  [SCALE] Group {group_name}: {losses}/{cfg['down_window']} losses — DOWN to 1")
+            P(f"  [SCALE] Group {group_name}: {losses}/{cfg['down_window']} losses (since scale-up) — DOWN to 1")
             _persist_scale_state()
             return 1
 
@@ -1101,6 +1111,8 @@ def run(live=False):
                         }
                     if _scale_state:
                         status["scale_state"] = dict(_scale_state)
+                    if _scale_up_at:
+                        status["scale_up_at"] = dict(_scale_up_at)
                     save_status(status)
                     fetched_indicators = True
                 else:
