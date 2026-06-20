@@ -1006,53 +1006,8 @@ def _resolve_open_bets(bets):
     for bet in bets:
         if bet.get("result") != "open" or bet.get("action") != "trade":
             continue
-
-        # For resting orders, check if the order filled before resolving
-        if bet.get("status") == "resting" and bet.get("order_id"):
-            try:
-                check = auth_get(f"/portfolio/orders/{bet['order_id']}")
-                check_order = check.get("order", check)
-                check_status = check_order.get("status", "")
-                remaining = int(check_order.get("remaining_count", 0))
-                total = int(check_order.get("count", bet.get("contracts", 1)))
-                filled = total - remaining
-                if filled > 0:
-                    avg_p = check_order.get("avg_price", None)
-                    if avg_p is not None and avg_p > 1:
-                        avg_p = avg_p / 100
-                    bet["status"] = "executed"
-                    bet["fill_price"] = avg_p if avg_p else bet.get("price")
-                    bet["filled_count"] = filled
-                    bet["contracts"] = filled
-                    changed = True
-                    P(f"  [RESTING] {bet.get('crypto','')} order filled ({filled} contracts)")
-                elif check_status in ("canceled", "cancelled"):
-                    bet["action"] = "unfilled"
-                    bet["result"] = "unfilled"
-                    bet["status"] = "canceled"
-                    changed = True
-                    P(f"  [RESTING] {bet.get('crypto','')} order was canceled")
-                    continue
-                time.sleep(0.3)
-            except Exception:
-                pass
-
+        # Only resolve bets whose window has ended (ticker encodes the time)
         ticker = bet.get("ticker", "")
-        # Skip resolving if order never filled
-        if bet.get("status") == "resting":
-            try:
-                mkt = public_get(f"/markets/{ticker}")
-                market = mkt.get("market", {})
-                if market.get("status") in ("settled", "finalized"):
-                    bet["action"] = "unfilled"
-                    bet["result"] = "unfilled"
-                    changed = True
-                    P(f"  [RESTING] {bet.get('crypto','')} {ticker}: market settled but order never filled")
-                time.sleep(0.3)
-            except Exception:
-                pass
-            continue
-
         try:
             mkt = public_get(f"/markets/{ticker}")
             market = mkt.get("market", {})
@@ -1415,11 +1370,21 @@ def run(live=False):
                                 except Exception:
                                     pass
                         else:
-                            P(f"    {po['crypto']}: Not yet filled (status={check_status}), leaving order resting")
-                            po["bet_record"]["status"] = "resting"
-                            po["bet_record"]["order_id"] = po["order_id"]
+                            P(f"    {po['crypto']}: Unfilled (status={check_status}), canceling order {po['order_id']}...")
+                            try:
+                                cancel_resp = auth_delete(f"/portfolio/events/orders/{po['order_id']}")
+                                P(f"    {po['crypto']}: Canceled (reduced_by={cancel_resp.get('reduced_by', '?')})")
+                            except Exception as ce:
+                                P(f"    {po['crypto']}: Cancel error: {ce}")
+                                try:
+                                    time.sleep(1)
+                                    cancel_resp = auth_delete(f"/portfolio/events/orders/{po['order_id']}")
+                                    P(f"    {po['crypto']}: Cancel retry ok")
+                                except Exception as ce2:
+                                    P(f"    {po['crypto']}: Cancel retry also failed: {ce2}")
+                            po["bet_record"]["action"] = "unfilled"
+                            po["bet_record"]["status"] = "canceled"
                             bets.append(po["bet_record"])
-                            save_bets(bets)
                             placed_this_window.add(po["crypto"])
                         time.sleep(0.3)
                     except Exception as e:
