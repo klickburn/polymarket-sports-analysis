@@ -272,12 +272,17 @@ def get_open_orders():
 
 # ── Order placement ─────────────────────────────────────────────────────
 def place_order(ticker, side, price_dollars, amount_dollars, count=None):
-    price_cents = min(99, int(round(price_dollars * 100)) + PRICE_BUMP_CENTS)
     count = count or CONTRACT_COUNT
 
-    # V2 order endpoint: side is "bid" (buying yes) or "ask" (buying no)
-    # price is fixed-point dollar string, count is string
+    # V2 API price is always the YES price
+    # bid = buy YES at price, ask = sell YES at price (= buy NO at 1-price)
     api_side = "bid" if side == "yes" else "ask"
+    if side == "yes":
+        price_cents = min(99, int(round(price_dollars * 100)) + PRICE_BUMP_CENTS)
+    else:
+        # Convert NO price to YES price, then subtract bump to be more aggressive
+        yes_equiv = int(round((1.0 - price_dollars) * 100)) - PRICE_BUMP_CENTS
+        price_cents = max(1, yes_equiv)
     price_dollar_str = f"{price_cents / 100:.2f}"
 
     order = {
@@ -291,7 +296,8 @@ def place_order(ticker, side, price_dollars, amount_dollars, count=None):
     }
 
     try:
-        P(f"    Placing: {count} contracts @ {price_cents}c ({side.upper()}) = ~${count * price_cents / 100:.2f}")
+        actual_cost = (100 - price_cents) if side == "no" else price_cents
+        P(f"    Placing: {count} contracts @ {actual_cost}c ({side.upper()}) = ~${count * actual_cost / 100:.2f}")
         result = auth_post("/portfolio/events/orders", data=order)
         # V2 response is flat: {order_id, fill_count, remaining_count, average_fill_price, ...}
         order_id = result.get("order_id", "")

@@ -634,9 +634,13 @@ def place_take_profit(ticker, side, count):
     """Place a limit sell order at TAKE_PROFIT_PRICE to lock in gains."""
     if TAKE_PROFIT_PRICE <= 0:
         return None
-    tp_cents = int(round(TAKE_PROFIT_PRICE * 100))
-    # V2 order endpoint: selling yes = ask, selling no = bid
+    # V2 API price is always YES price
+    # Selling YES = ask at TP price, Selling NO = bid at (1-TP) price
     api_side = "ask" if side == "yes" else "bid"
+    if side == "yes":
+        tp_cents = int(round(TAKE_PROFIT_PRICE * 100))
+    else:
+        tp_cents = int(round((1.0 - TAKE_PROFIT_PRICE) * 100))
     price_dollar_str = f"{tp_cents / 100:.2f}"
     order = {
         "ticker": ticker,
