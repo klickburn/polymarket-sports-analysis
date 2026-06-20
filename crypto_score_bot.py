@@ -910,17 +910,16 @@ def _restore_scale_state():
             with open(STATUS_FILE) as f:
                 status = json.load(f)
             saved = status.get("scale_state", {})
-            if saved:
+            saved_up_at = status.get("scale_up_at", {})
+            if saved and saved_up_at:
                 _scale_state = {k: int(v) for k, v in saved.items()}
-                saved_up_at = status.get("scale_up_at", {})
-                if saved_up_at:
-                    _scale_up_at = {k: int(v) for k, v in saved_up_at.items()}
+                _scale_up_at = {k: int(v) for k, v in saved_up_at.items()}
                 P(f"  [SCALE] Restored state: {_scale_state}, up_at: {_scale_up_at}")
                 _persist_scale_state()
                 return
     except Exception:
         pass
-    # No saved state — check current window (same as bot's cold-start logic)
+    # No saved state — replay trade history with correct up/down logic
     try:
         if os.path.exists(BETS_FILE):
             with open(BETS_FILE) as f:
@@ -930,17 +929,26 @@ def _restore_scale_state():
                         and b.get("crypto") in ("BTC", "ETH")]
             for gname, cfg in SCALE_GROUPS.items():
                 g_trades = [b for b in resolved if (b.get("score", 0) + 3) in cfg["signals"]]
-                if len(g_trades) >= cfg["up_window"]:
-                    last_n = g_trades[-cfg["up_window"]:]
-                    wins = sum(1 for b in last_n if b["result"] == "win")
-                    if wins >= cfg["up_thresh"]:
-                        _scale_state[gname] = SCALE_UP_COUNT
-                        _scale_up_at[gname] = len(g_trades)
+                scale = 1
+                up_at = 0
+                for i in range(len(g_trades)):
+                    if scale == 1:
+                        wt = g_trades[:i+1]
+                        if len(wt) >= cfg["up_window"]:
+                            wins = sum(1 for b in wt[-cfg["up_window"]:] if b["result"] == "win")
+                            if wins >= cfg["up_thresh"]:
+                                scale = SCALE_UP_COUNT
+                                up_at = i + 1
                     else:
-                        _scale_state[gname] = 1
-                else:
-                    _scale_state[gname] = 1
-            P(f"  [SCALE] Derived from history: {_scale_state}")
+                        since = g_trades[up_at:i+1]
+                        if len(since) >= cfg["down_window"]:
+                            losses = sum(1 for b in since[-cfg["down_window"]:] if b["result"] == "loss")
+                            if losses >= cfg["down_thresh"]:
+                                scale = 1
+                _scale_state[gname] = scale
+                if scale > 1:
+                    _scale_up_at[gname] = up_at
+            P(f"  [SCALE] Derived from history: {_scale_state}, up_at: {_scale_up_at}")
             _persist_scale_state()
     except Exception:
         pass
