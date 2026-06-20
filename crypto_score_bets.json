@@ -556691,5 +556691,203 @@
     "fill_price": 0.6,
     "filled_count": 1,
     "fill_price_checked": true
+  },
+  {
+    "crypto": "ETH",
+    "ticker": "KXETH15M-26JUN192030-30",
+    "event_ticker": "KXETH15M-26JUN192030",
+    "side": "yes",
+    "price": 0.6,
+    "score": -3,
+    "reasons": [
+      [
+        "Signal Score",
+        "0/8",
+        "0"
+      ],
+      [
+        "RSI Misalign",
+        "YES RSI=59.2",
+        "0"
+      ],
+      [
+        "1h NoRev",
+        "ret=+0.12%",
+        "0"
+      ],
+      [
+        "BTC Same",
+        "btc=+0.00%",
+        "0"
+      ],
+      [
+        "Consensus",
+        "all YES",
+        "0"
+      ],
+      [
+        "Stoch High",
+        "100.0",
+        "0"
+      ]
+    ],
+    "score_breakdown": {
+      "Signal Score": {
+        "detail": "0/8",
+        "points": 0
+      },
+      "RSI Misalign": {
+        "detail": "YES RSI=59.2",
+        "points": 0
+      },
+      "1h NoRev": {
+        "detail": "ret=+0.12%",
+        "points": 0
+      },
+      "BTC Same": {
+        "detail": "btc=+0.00%",
+        "points": 0
+      },
+      "Consensus": {
+        "detail": "all YES",
+        "points": 0
+      },
+      "Stoch High": {
+        "detail": "100.0",
+        "points": 0
+      }
+    },
+    "indicators": {
+      "ret_1h": 0.1212,
+      "ret_3h": 0.3682,
+      "vol_6h": 0.1714,
+      "rsi": 59.22,
+      "stoch": 100.0,
+      "pack_agreement": 1.0,
+      "btc_ret_1h": 0.329
+    },
+    "bet_amount": 0.1,
+    "contracts": 1,
+    "entry_minute": 2.0,
+    "timestamp": "2026-06-20T00:17:13.035746+00:00",
+    "window_end": "2026-06-20T00:30:00+00:00",
+    "result": "win",
+    "strategy_version": "v7",
+    "action": "trade",
+    "order_id": "a903f13e-d4a0-4504-a4a9-1e23d4f947bf",
+    "status": "executed",
+    "fill_price": 0.6,
+    "filled_count": 1,
+    "fill_price_checked": true,
+    "market_result": "yes",
+    "pnl": 0.4
+  },
+  {
+    "crypto": "BTC",
+    "ticker": "KXBTC15M-26JUN192030-30",
+    "event_ticker": "KXBTC15M-26JUN192030",
+    "side": "no",
+    "price": 0.64,
+    "score": 2,
+    "reasons": [
+      [
+        "Signal Score",
+        "5/8",
+        "5"
+      ],
+      [
+        "RSI Aligned",
+        "NO RSI=66.3",
+        "+2"
+      ],
+      [
+        "RSI Strong",
+        "66.3",
+        "+1"
+      ],
+      [
+        "1h MeanRev",
+        "ret=+0.33%",
+        "+1"
+      ],
+      [
+        "Strong MR",
+        "|+0.33%|>0.3%",
+        "+1"
+      ],
+      [
+        "BTC Same",
+        "btc=+0.00%",
+        "0"
+      ],
+      [
+        "No Consensus",
+        "{'BTC': 'no', 'SOL': 'yes', 'XRP': 'no'}",
+        "0"
+      ],
+      [
+        "Stoch High",
+        "91.0",
+        "0"
+      ]
+    ],
+    "score_breakdown": {
+      "Signal Score": {
+        "detail": "5/8",
+        "points": 5
+      },
+      "RSI Aligned": {
+        "detail": "NO RSI=66.3",
+        "points": 2
+      },
+      "RSI Strong": {
+        "detail": "66.3",
+        "points": 1
+      },
+      "1h MeanRev": {
+        "detail": "ret=+0.33%",
+        "points": 1
+      },
+      "Strong MR": {
+        "detail": "|+0.33%|>0.3%",
+        "points": 1
+      },
+      "BTC Same": {
+        "detail": "btc=+0.00%",
+        "points": 0
+      },
+      "No Consensus": {
+        "detail": "{'BTC': 'no', 'SOL': 'yes', 'XRP': 'no'}",
+        "points": 0
+      },
+      "Stoch High": {
+        "detail": "91.0",
+        "points": 0
+      }
+    },
+    "indicators": {
+      "ret_1h": 0.329,
+      "ret_3h": 0.6573,
+      "vol_6h": 0.1346,
+      "rsi": 66.28,
+      "stoch": 90.98,
+      "pack_agreement": 1.0,
+      "btc_ret_1h": 0.329
+    },
+    "bet_amount": 0.1,
+    "contracts": 2,
+    "entry_minute": 6.9,
+    "timestamp": "2026-06-20T00:22:03.293435+00:00",
+    "window_end": "2026-06-20T00:30:00+00:00",
+    "result": "loss",
+    "strategy_version": "v7",
+    "action": "trade",
+    "order_id": "3c87cc58-b1b2-46d7-9163-3e6e7f20cb87",
+    "status": "resting",
+    "fill_price": 0.64,
+    "filled_count": 1,
+    "fill_price_checked": true,
+    "market_result": "yes",
+    "pnl": -0.64
   }
 ]
