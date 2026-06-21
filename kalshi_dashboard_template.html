@@ -539,7 +539,7 @@
     <h3>Grouped Scaling Performance (BTC+ETH Combined)</h3>
     <div class="scroll-table">
       <table>
-        <thead><tr><th>Group</th><th>At 1x</th><th>1x WR%</th><th>1x P&L</th><th>At 2x</th><th>2x WR%</th><th>2x P&L</th><th>2x Edge</th></tr></thead>
+        <thead><tr><th>Group</th><th>At 1x</th><th>1x WR%</th><th>1x P&L</th><th>Scaled</th><th>Scaled WR%</th><th>Scaled P&L</th><th>Scaled Edge</th></tr></thead>
         <tbody id="scalingTableBody"></tbody>
       </table>
     </div>
@@ -1487,26 +1487,26 @@ function renderScoreBot() {
   // Scaling performance
   const sp = d.scaling_performance || {};
   const o1 = sp.overall_at_1 || {};
-  const o2 = sp.overall_at_2 || {};
+  const o2 = sp.overall_at_scaled || {};
   const pctScaled = sp.pct_at_scaled || 0;
   const edgePerTrade = o2.trades > 0 ? ((o2.pnl / o2.trades) - (o1.trades > 0 ? o1.pnl / o1.trades : 0)) : 0;
   document.getElementById('scalingKpis').innerHTML = `
     <div class="kpi"><div class="label">Trades at 1x</div><div class="value">${o1.trades||0}</div></div>
     <div class="kpi"><div class="label">1x Win Rate</div><div class="value">${o1.win_rate||0}%</div></div>
     <div class="kpi"><div class="label">1x P&L</div><div class="value ${(o1.pnl||0)>=0?'green':'red'}">$${(o1.pnl||0).toFixed(2)}</div></div>
-    <div class="kpi"><div class="label">Trades at 2x</div><div class="value purple">${o2.trades||0}</div></div>
-    <div class="kpi"><div class="label">2x Win Rate</div><div class="value">${o2.win_rate||0}%</div></div>
-    <div class="kpi"><div class="label">2x P&L</div><div class="value ${(o2.pnl||0)>=0?'green':'red'}">$${(o2.pnl||0).toFixed(2)}</div></div>
+    <div class="kpi"><div class="label">Trades Scaled</div><div class="value purple">${o2.trades||0}</div></div>
+    <div class="kpi"><div class="label">Scaled Win Rate</div><div class="value">${o2.win_rate||0}%</div></div>
+    <div class="kpi"><div class="label">Scaled P&L</div><div class="value ${(o2.pnl||0)>=0?'green':'red'}">$${(o2.pnl||0).toFixed(2)}</div></div>
     <div class="kpi"><div class="label">% Scaled</div><div class="value">${pctScaled}%</div></div>
-    <div class="kpi"><div class="label">2x Edge/Trade</div><div class="value ${edgePerTrade>=0?'green':'red'}">$${edgePerTrade.toFixed(4)}</div></div>
+    <div class="kpi"><div class="label">Scaled Edge/Trade</div><div class="value ${edgePerTrade>=0?'green':'red'}">$${edgePerTrade.toFixed(4)}</div></div>
   `;
   // Scaling status cards
   const ss = sp.scaling_status || {};
   const groupLabels = {A: "Group A (sig 0,4,5)", B: "Group B (sig 1,2,3,6,7)"};
   document.getElementById('scalingStatusCards').innerHTML = Object.entries(ss).map(([gname, s]) => {
-    const isScaled = s.current === 2;
+    const isScaled = s.current > 1;
     const borderColor = isScaled ? 'var(--green)' : 'var(--yellow)';
-    const statusLabel = isScaled ? '2x SCALED UP' : '1x BASE';
+    const statusLabel = isScaled ? `${s.current}x SCALED UP` : '1x BASE';
     const statusColor = isScaled ? 'var(--green)' : 'var(--yellow)';
     const recent = (s.recent || []).map(r => `<span style="color:${r==='W'?'var(--green)':'var(--red)'};font-weight:700;margin:0 1px">${r}</span>`).join('');
     let progressText;
@@ -1534,7 +1534,7 @@ function renderScoreBot() {
   const sortedKeys = Object.keys(bd).sort();
   document.getElementById('scalingTableBody').innerHTML = sortedKeys.map(key => {
     const s1 = bd[key].at_1 || {};
-    const s2 = bd[key].at_2 || {};
+    const s2 = bd[key].at_scaled || {};
     const edge = s2.trades > 0 && s1.trades > 0 ? (s2.win_rate - s1.win_rate) : null;
     const edgeStr = edge !== null ? `<span style="color:${edge>=0?'var(--green)':'var(--red)'}"> ${edge>=0?'+':''}${edge.toFixed(1)}%</span>` : '<span style="color:var(--muted)">—</span>';
     const label = key;

@@ -619,18 +619,18 @@ def _resolve_score_bets():
 
 
 def _build_scaling_performance(resolved, status=None):
-    """Analyze how dynamic contract scaling is performing (BTC/ETH, 1↔2 only)."""
+    """Analyze how dynamic contract scaling is performing (BTC/ETH)."""
     if not resolved:
         return {}
 
-    # Only BTC/ETH, only 1 or 2 contracts, only after scaling was deployed
+    # Only BTC/ETH, only after scaling was deployed
     scaling_deployed = "2026-06-17T19:40"
     filtered = [b for b in resolved
-                if b.get("crypto") in ("BTC", "ETH") and b.get("contracts", 1) in (1, 2)
+                if b.get("crypto") in ("BTC", "ETH")
                 and b.get("timestamp", "") >= scaling_deployed]
 
     trades_at_1 = [b for b in filtered if b.get("contracts", 1) == 1]
-    trades_at_2 = [b for b in filtered if b.get("contracts", 1) == 2]
+    trades_at_scaled = [b for b in filtered if b.get("contracts", 1) > 1]
 
     def calc_stats(trades):
         if not trades:
@@ -649,8 +649,8 @@ def _build_scaling_performance(resolved, status=None):
     group_a_sigs = {0, 4, 5}
     group_b_sigs = {1, 2, 3, 6, 7}
     by_group = {
-        "Group A (sig 0,4,5)": {"at_1": [], "at_2": []},
-        "Group B (sig 1,2,3,6,7)": {"at_1": [], "at_2": []},
+        "Group A (sig 0,4,5)": {"at_1": [], "at_scaled": []},
+        "Group B (sig 1,2,3,6,7)": {"at_1": [], "at_scaled": []},
     }
     for b in filtered:
         sig = b.get("score", 0) + 3
@@ -660,8 +660,8 @@ def _build_scaling_performance(resolved, status=None):
             key = "Group B (sig 1,2,3,6,7)"
         else:
             continue
-        if b.get("contracts", 1) == 2:
-            by_group[key]["at_2"].append(b)
+        if b.get("contracts", 1) > 1:
+            by_group[key]["at_scaled"].append(b)
         else:
             by_group[key]["at_1"].append(b)
 
@@ -669,7 +669,7 @@ def _build_scaling_performance(resolved, status=None):
     for key, data in sorted(by_group.items()):
         breakdown[key] = {
             "at_1": calc_stats(data["at_1"]),
-            "at_2": calc_stats(data["at_2"]),
+            "at_scaled": calc_stats(data["at_scaled"]),
         }
 
     # Read actual scale state from bot's status file
@@ -718,7 +718,7 @@ def _build_scaling_performance(resolved, status=None):
             losses = sum(1 for x in check_trades if x["result"] == "loss")
             needed = cfg["down_thresh"] - losses
             scaling_status[gname] = {
-                "current": 2,
+                "current": current,
                 "direction": "down",
                 "losses_in_window": losses,
                 "trades_since_up": len(since_up),
@@ -730,9 +730,9 @@ def _build_scaling_performance(resolved, status=None):
 
     return {
         "overall_at_1": calc_stats(trades_at_1),
-        "overall_at_2": calc_stats(trades_at_2),
+        "overall_at_scaled": calc_stats(trades_at_scaled),
         "total_trades": len(filtered),
-        "pct_at_scaled": round(len(trades_at_2) / len(filtered) * 100, 1) if filtered else 0,
+        "pct_at_scaled": round(len(trades_at_scaled) / len(filtered) * 100, 1) if filtered else 0,
         "breakdown": breakdown,
         "scaling_status": scaling_status,
     }
