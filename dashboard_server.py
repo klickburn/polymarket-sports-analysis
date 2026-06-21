@@ -468,7 +468,11 @@ def _resolve_score_bets():
                 if order_status == "executed":
                     avg_p = order_data.get("avg_price", 0)
                     if avg_p > 0:
-                        bet["fill_price"] = avg_p / 100 if avg_p > 1 else avg_p
+                        fp = avg_p / 100 if avg_p > 1 else avg_p
+                        # V2 avg_price is YES price; convert for NO side
+                        if bet.get("side") == "no":
+                            fp = 1.0 - fp
+                        bet["fill_price"] = fp
                     if filled_count > 0:
                         bet["filled_count"] = filled_count
                 # Order was never filled — mark as unfilled
@@ -480,7 +484,10 @@ def _resolve_score_bets():
                     # Partially filled
                     avg_p = order_data.get("avg_price", 0)
                     if avg_p > 0:
-                        bet["fill_price"] = avg_p / 100 if avg_p > 1 else avg_p
+                        fp = avg_p / 100 if avg_p > 1 else avg_p
+                        if bet.get("side") == "no":
+                            fp = 1.0 - fp
+                        bet["fill_price"] = fp
                     bet["filled_count"] = filled_count
                 bet["fill_price_checked"] = True
                 changed = True
@@ -516,6 +523,13 @@ def _resolve_score_bets():
         if fp is not None and fp > 1:
             bet["fill_price"] = fp / 100
             changed = True
+        # Fix NO fill_prices that were stored as YES price (V2 bug)
+        if bet.get("side") == "no" and fp is not None and bet.get("price"):
+            recorded_no = bet["price"]
+            if fp < 0.50 and recorded_no >= 0.50:
+                bet["fill_price"] = round(1.0 - fp, 4)
+                bet["fill_price_checked"] = False
+                changed = True
         if bet.get("action") == "trade" and bet.get("result") in ("win", "loss"):
             actual_price = bet.get("fill_price", bet.get("price", 0))
             contracts = bet.get("filled_count", bet.get("contracts", 1))

@@ -1353,6 +1353,9 @@ def run(live=False):
                             avg_p = check_order.get("avg_price", None)
                             if avg_p is not None and avg_p > 1:
                                 avg_p = avg_p / 100
+                            # V2 avg_price is always YES price; convert for NO side
+                            if avg_p is not None and po["side"] == "no":
+                                avg_p = 1.0 - avg_p
                             po["bet_record"]["status"] = check_status
                             po["bet_record"]["fill_price"] = avg_p if avg_p else po["price"]
                             if filled_count > 0:
