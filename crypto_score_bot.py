@@ -918,6 +918,10 @@ def _restore_scale_state():
             if saved and saved_up_at:
                 _scale_state = {k: int(v) for k, v in saved.items()}
                 _scale_up_at = {k: int(v) for k, v in saved_up_at.items()}
+                # If SCALE_UP_COUNT changed, update scaled groups to new value
+                for k, v in _scale_state.items():
+                    if v > 1 and v != SCALE_UP_COUNT:
+                        _scale_state[k] = SCALE_UP_COUNT
                 P(f"  [SCALE] Restored state: {_scale_state}, up_at: {_scale_up_at}")
                 _persist_scale_state()
                 return
