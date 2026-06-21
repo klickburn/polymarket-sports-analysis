@@ -1513,7 +1513,7 @@ function renderScoreBot() {
     if (isScaled) {
       const sinceUp = s.trades_since_up || 0;
       progressText = s.needed > 0
-        ? `${s.losses_in_window}/${s.threshold} losses in ${sinceUp} trades since scale-up — <b>${s.needed} more</b> to scale down`
+        ? `${sinceUp} trades since scale-up · ${s.losses_in_window}/${s.threshold} losses in last ${s.window} — <b>${s.needed} more</b> to scale down`
         : `At threshold — will scale down on next trade`;
     } else {
       progressText = s.needed > 0
