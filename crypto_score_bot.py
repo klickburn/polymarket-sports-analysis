@@ -888,7 +888,7 @@ SCALE_GROUPS = {
     "A": {"signals": {0, 4, 5}, "up_window": 6, "up_thresh": 4, "down_window": 16, "down_thresh": 4},
     "B": {"signals": {1, 2, 3, 6, 7}, "up_window": 6, "up_thresh": 5, "down_window": 16, "down_thresh": 5},
 }
-SCALE_UP_COUNT = 5
+SCALE_UP_COUNT = 2
 _scale_state = {}
 _scale_up_at = {}  # group -> trade count when scaled up (for down-check offset)
 
