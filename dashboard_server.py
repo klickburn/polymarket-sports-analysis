@@ -27,7 +27,7 @@ from crypto_15m_bot import (
     auth_get, public_get, get_balance, get_existing_positions,
     run as run_bot, P,
 )
-from crypto_score_bot import run as run_score_bot
+from crypto_score_bot import run as run_score_bot, SCALE_UP_COUNT
 # History data is committed as kalshi_history.json — no live fetch on Railway
 HISTORY_FILE = "kalshi_history.json"
 
@@ -733,6 +733,7 @@ def _build_scaling_performance(resolved, status=None):
         "overall_at_scaled": calc_stats(trades_at_scaled),
         "total_trades": len(filtered),
         "pct_at_scaled": round(len(trades_at_scaled) / len(filtered) * 100, 1) if filtered else 0,
+        "scale_up_count": SCALE_UP_COUNT,
         "breakdown": breakdown,
         "scaling_status": scaling_status,
     }

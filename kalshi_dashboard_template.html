@@ -532,7 +532,7 @@
   </div>
 
   <hr class="section-divider">
-  <div class="section-header"><h2>Scaling Strategy</h2><span class="badge" style="background:rgba(34,197,94,0.2);color:var(--green)">1↔2 Contracts</span></div>
+  <div class="section-header"><h2>Scaling Strategy</h2><span id="scalingBadge" class="badge" style="background:rgba(34,197,94,0.2);color:var(--green)">1↔? Contracts</span></div>
   <div class="kpi-row" id="scalingKpis"></div>
   <div id="scalingStatusCards" style="display:flex;gap:16px;margin-top:16px;flex-wrap:wrap"></div>
   <div class="card" style="margin-top:16px">
@@ -1486,6 +1486,8 @@ function renderScoreBot() {
 
   // Scaling performance
   const sp = d.scaling_performance || {};
+  const scaleMax = sp.scale_up_count || 2;
+  document.getElementById('scalingBadge').textContent = `1↔${scaleMax} Contracts`;
   const o1 = sp.overall_at_1 || {};
   const o2 = sp.overall_at_scaled || {};
   const pctScaled = sp.pct_at_scaled || 0;
