@@ -517,6 +517,32 @@ def _resolve_score_bets():
             except Exception:
                 pass
 
+    # Re-check filled_count from API for resolved trades where it might be stale
+    for bet in bets:
+        if (bet.get("action") == "trade" and bet.get("order_id")
+                and bet.get("result") in ("win", "loss")
+                and not bet.get("filled_count_verified")):
+            try:
+                order_resp = auth_get(f"/portfolio/orders/{bet['order_id']}")
+                order_data = order_resp.get("order", {})
+                remaining = order_data.get("remaining_count", 0)
+                api_filled = order_data.get("count", 0) - remaining
+                if api_filled > 0 and api_filled != bet.get("filled_count", 0):
+                    bet["filled_count"] = api_filled
+                    avg_p = order_data.get("avg_price", 0)
+                    if avg_p and avg_p > 1:
+                        avg_p = avg_p / 100
+                    if avg_p and bet.get("side") == "no":
+                        avg_p = 1.0 - avg_p
+                    if avg_p:
+                        bet["fill_price"] = avg_p
+                    changed = True
+                bet["filled_count_verified"] = True
+                changed = True
+                time.sleep(0.3)
+            except Exception:
+                pass
+
     # Normalize fill_price from cents to dollars if needed, recalculate P&L
     for bet in bets:
         fp = bet.get("fill_price")
