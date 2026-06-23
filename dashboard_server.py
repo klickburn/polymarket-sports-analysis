@@ -517,11 +517,12 @@ def _resolve_score_bets():
             except Exception:
                 pass
 
-    # Re-check filled_count from API for scaled trades where bot may have recorded partial fill
+    # Re-check filled_count from API for recent trades where bot may have recorded partial fill
+    one_day_ago = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
     for bet in bets:
         if (bet.get("action") == "trade" and bet.get("order_id")
                 and bet.get("result") in ("win", "loss")
-                and bet.get("contracts", 1) > 1
+                and bet.get("timestamp", "") >= one_day_ago
                 and not bet.get("filled_count_verified")):
             try:
                 order_resp = auth_get(f"/portfolio/orders/{bet['order_id']}")
