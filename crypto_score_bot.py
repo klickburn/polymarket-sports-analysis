@@ -969,6 +969,9 @@ def _get_scale_group(signal_count):
 
 def get_dynamic_contracts(bets, crypto, signal_count):
     """Grouped scaling: BTC+ETH combined, split up/down windows."""
+    if signal_count == 0:
+        return 1
+
     group_name, cfg = _get_scale_group(signal_count)
     if cfg is None:
         return 1
