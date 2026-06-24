@@ -916,7 +916,7 @@ def score_debug():
 
 @app.post("/api/score-backfill-prices")
 def backfill_fill_prices():
-    """One-time backfill: fetch fill_price from API for all trades missing it."""
+    """One-time backfill: fetch actual fill_price from API for all trades."""
     try:
         with open(SCORE_BETS_FILE) as f:
             bets = json.load(f)
@@ -925,10 +925,11 @@ def backfill_fill_prices():
 
     updated = 0
     checked = 0
+    errors = 0
     for bet in bets:
         if (bet.get("action") == "trade" and bet.get("order_id")
                 and bet.get("result") in ("win", "loss")
-                and not bet.get("fill_price")):
+                and not bet.get("fill_price_backfilled")):
             checked += 1
             try:
                 order_resp = auth_get(f"/portfolio/orders/{bet['order_id']}")
@@ -942,19 +943,19 @@ def backfill_fill_prices():
                     avg_p = 1.0 - avg_p
                 if avg_p:
                     bet["fill_price"] = avg_p
+                    updated += 1
                 if api_filled > 0:
                     bet["filled_count"] = api_filled
-                bet["filled_count_verified"] = True
-                updated += 1
+                bet["fill_price_backfilled"] = True
                 time.sleep(0.2)
             except Exception:
-                pass
+                errors += 1
 
-    if updated > 0:
+    if updated > 0 or checked > 0:
         with open(SCORE_BETS_FILE, "w") as f:
             json.dump(bets, f)
 
-    return JSONResponse({"status": "ok", "checked": checked, "updated": updated})
+    return JSONResponse({"status": "ok", "checked": checked, "updated": updated, "errors": errors})
 
 
 @app.post("/api/score-reset")
