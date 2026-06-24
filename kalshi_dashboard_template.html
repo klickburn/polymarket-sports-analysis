@@ -1578,7 +1578,7 @@ function renderScoreTable(bets) {
       <td>${verTag}</td>
       <td>${cryptoTag(b.crypto)}</td>
       <td>${(b.side || '').toUpperCase()}</td>
-      <td>${(b.price * 100).toFixed(1)}c</td>
+      <td>${((b.fill_price || b.price) * 100).toFixed(1)}c</td>
       <td style="color:${scoreColor};font-weight:600">${scoreDisplay}</td>
       <td style="font-size:11px;max-width:280px;overflow:hidden;text-overflow:ellipsis">${reasons}</td>
       <td>${actionTag}</td>
