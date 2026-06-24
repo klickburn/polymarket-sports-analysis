@@ -914,6 +914,49 @@ def score_debug():
     })
 
 
+@app.post("/api/score-backfill-prices")
+def backfill_fill_prices():
+    """One-time backfill: fetch fill_price from API for all trades missing it."""
+    try:
+        with open(SCORE_BETS_FILE) as f:
+            bets = json.load(f)
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+
+    updated = 0
+    checked = 0
+    for bet in bets:
+        if (bet.get("action") == "trade" and bet.get("order_id")
+                and bet.get("result") in ("win", "loss")
+                and not bet.get("fill_price")):
+            checked += 1
+            try:
+                order_resp = auth_get(f"/portfolio/orders/{bet['order_id']}")
+                order_data = order_resp.get("order", {})
+                remaining = order_data.get("remaining_count", 0)
+                api_filled = order_data.get("count", 0) - remaining
+                avg_p = order_data.get("avg_price", 0)
+                if avg_p and avg_p > 1:
+                    avg_p = avg_p / 100
+                if avg_p and bet.get("side") == "no":
+                    avg_p = 1.0 - avg_p
+                if avg_p:
+                    bet["fill_price"] = avg_p
+                if api_filled > 0:
+                    bet["filled_count"] = api_filled
+                bet["filled_count_verified"] = True
+                updated += 1
+                time.sleep(0.2)
+            except Exception:
+                pass
+
+    if updated > 0:
+        with open(SCORE_BETS_FILE, "w") as f:
+            json.dump(bets, f)
+
+    return JSONResponse({"status": "ok", "checked": checked, "updated": updated})
+
+
 @app.post("/api/score-reset")
 def reset_score_data():
     """Clear all score bot trade history."""
