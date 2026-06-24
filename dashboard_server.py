@@ -914,48 +914,62 @@ def score_debug():
     })
 
 
+_backfill_running = False
+_backfill_status = {"checked": 0, "updated": 0, "errors": 0, "total": 0, "done": False}
+
 @app.post("/api/score-backfill-prices")
 def backfill_fill_prices():
-    """One-time backfill: fetch actual fill_price from API for all trades."""
-    try:
-        with open(SCORE_BETS_FILE) as f:
-            bets = json.load(f)
-    except Exception as e:
-        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+    """Trigger background backfill of fill_price for all trades."""
+    global _backfill_running
+    if _backfill_running:
+        return JSONResponse({"status": "running", **_backfill_status})
 
-    updated = 0
-    checked = 0
-    errors = 0
-    for bet in bets:
-        if (bet.get("action") == "trade" and bet.get("order_id")
-                and bet.get("result") in ("win", "loss")
-                and not bet.get("fill_price_backfilled")):
-            checked += 1
-            try:
-                order_resp = auth_get(f"/portfolio/orders/{bet['order_id']}")
-                order_data = order_resp.get("order", {})
-                remaining = order_data.get("remaining_count", 0)
-                api_filled = order_data.get("count", 0) - remaining
-                avg_p = order_data.get("avg_price", 0)
-                if avg_p and avg_p > 1:
-                    avg_p = avg_p / 100
-                if avg_p and bet.get("side") == "no":
-                    avg_p = 1.0 - avg_p
-                if avg_p:
-                    bet["fill_price"] = avg_p
-                    updated += 1
-                if api_filled > 0:
-                    bet["filled_count"] = api_filled
-                bet["fill_price_backfilled"] = True
-                time.sleep(0.2)
-            except Exception:
-                errors += 1
+    def _run_backfill():
+        global _backfill_running, _backfill_status
+        try:
+            with open(SCORE_BETS_FILE) as f:
+                bets = json.load(f)
+            pending = [b for b in bets if b.get("action") == "trade" and b.get("order_id")
+                       and b.get("result") in ("win", "loss") and not b.get("fill_price_backfilled")]
+            _backfill_status = {"checked": 0, "updated": 0, "errors": 0, "total": len(pending), "done": False}
+            for bet in pending:
+                _backfill_status["checked"] += 1
+                try:
+                    order_resp = auth_get(f"/portfolio/orders/{bet['order_id']}")
+                    order_data = order_resp.get("order", {})
+                    remaining = order_data.get("remaining_count", 0)
+                    api_filled = order_data.get("count", 0) - remaining
+                    avg_p = order_data.get("avg_price", 0)
+                    if avg_p and avg_p > 1:
+                        avg_p = avg_p / 100
+                    if avg_p and bet.get("side") == "no":
+                        avg_p = 1.0 - avg_p
+                    if avg_p:
+                        bet["fill_price"] = avg_p
+                        _backfill_status["updated"] += 1
+                    if api_filled > 0:
+                        bet["filled_count"] = api_filled
+                    bet["fill_price_backfilled"] = True
+                    time.sleep(0.2)
+                except Exception:
+                    _backfill_status["errors"] += 1
+                if _backfill_status["checked"] % 100 == 0:
+                    with open(SCORE_BETS_FILE, "w") as f:
+                        json.dump(bets, f)
+            with open(SCORE_BETS_FILE, "w") as f:
+                json.dump(bets, f)
+            _backfill_status["done"] = True
+        finally:
+            _backfill_running = False
 
-    if updated > 0 or checked > 0:
-        with open(SCORE_BETS_FILE, "w") as f:
-            json.dump(bets, f)
+    _backfill_running = True
+    import threading
+    threading.Thread(target=_run_backfill, daemon=True).start()
+    return JSONResponse({"status": "started", **_backfill_status})
 
-    return JSONResponse({"status": "ok", "checked": checked, "updated": updated, "errors": errors})
+@app.get("/api/score-backfill-status")
+def backfill_status():
+    return JSONResponse({"running": _backfill_running, **_backfill_status})
 
 
 @app.post("/api/score-reset")
