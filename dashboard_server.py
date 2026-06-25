@@ -467,8 +467,13 @@ def _resolve_score_bets():
                 bet["pnl"] = correct_pnl
                 changed = True
 
+    resolve_cutoff = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
     for bet in bets:
         if bet.get("result") == "open":
+            if bet.get("timestamp", "") < resolve_cutoff:
+                bet["result"] = "expired"
+                changed = True
+                continue
             # For traded bets, verify the order was actually filled before resolving
             if bet.get("action") == "trade" and bet.get("order_id"):
                 try:
