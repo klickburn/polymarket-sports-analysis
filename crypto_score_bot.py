@@ -716,7 +716,7 @@ def _fetch_github_bets():
             return data
         except Exception as e:
             P(f"  GitHub fetch failed ({url[:40]}...): {e}")
-    return []
+    return None
 
 
 def _merge_bets(local, remote):
@@ -776,7 +776,11 @@ def load_bets():
     if not _github_merged:
         _github_merged = True
         github_bets = _fetch_github_bets()
-        if github_bets:
+        if github_bets is not None and len(github_bets) == 0 and len(data) > 0:
+            P(f"  GitHub file is empty — reset detected, clearing {len(data)} local bets")
+            data = []
+            save_bets(data)
+        elif github_bets:
             before = len(data)
             data = _merge_bets(data, github_bets)
             added = len(data) - before
