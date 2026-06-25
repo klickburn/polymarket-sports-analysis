@@ -724,6 +724,8 @@ def _merge_bets(local, remote):
     seen = set()
     merged = []
     for b in local + remote:
+        if not b.get("ticker"):
+            continue
         key = (b.get("ticker", ""), b.get("timestamp", ""))
         if key not in seen:
             seen.add(key)
@@ -763,6 +765,11 @@ def load_bets():
 
     if data is None:
         data = []
+
+    before_filter = len(data)
+    data = [b for b in data if b.get("ticker")]
+    if len(data) < before_filter:
+        P(f"  Removed {before_filter - len(data)} entries with no ticker")
 
     # Merge with GitHub backup once on startup to recover missing historical bets
     if not _github_merged:
