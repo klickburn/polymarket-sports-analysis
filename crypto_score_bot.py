@@ -1317,8 +1317,9 @@ def run(live=False):
                     if order_status in ("executed", "partial"):
                         avg_p = order.get("avg_price")
                         tq["bet_record"]["fill_price"] = avg_p if avg_p else tq["price"]
-                        if order.get("fill_count"):
-                            tq["bet_record"]["filled_count"] = int(order["fill_count"])
+                        remaining = int(order.get("remaining_count", 0))
+                        total = int(order.get("count", tq["bet_record"].get("contracts", 1)))
+                        tq["bet_record"]["filled_count"] = total - remaining
                         bets.append(tq["bet_record"])
                         save_bets(bets)
                         total_new += 1
