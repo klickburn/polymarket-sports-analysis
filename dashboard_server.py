@@ -665,6 +665,23 @@ def _build_scaling_performance(resolved, status=None):
     }
 
 
+_SLIM_KEEP = {"crypto", "side", "price", "fill_price", "score", "action", "result",
+              "pnl", "contracts", "filled_count", "timestamp", "strategy_version",
+              "bet_amount", "would_have_won", "hypothetical_pnl", "market_result"}
+_DETAIL_KEYS = {"reasons", "score_breakdown", "indicators", "entry_minute", "window_end",
+                "order_id", "event_ticker", "ticker"}
+
+def _slim_bets(bets, recent=200):
+    """Strip heavy fields from older bets to reduce payload size."""
+    if len(bets) <= recent:
+        return bets
+    slim = []
+    for b in bets[:-recent]:
+        slim.append({k: v for k, v in b.items() if k not in _DETAIL_KEYS})
+    slim.extend(bets[-recent:])
+    return slim
+
+
 def _build_score_report(bets, status, balance_info=None):
     """Build the score data report from bets — no API calls, instant."""
     trades = [b for b in bets if b.get("action") == "trade" and b.get("result") != "unfilled"]
@@ -735,7 +752,7 @@ def _build_score_report(bets, status, balance_info=None):
         "scaling_performance": scaling_perf,
         "indicators": status.get("indicators", {}),
         "last_indicator_update": status.get("last_update", ""),
-        "recent_bets": bets,
+        "recent_bets": _slim_bets(bets),
         "strategy_version": os.environ.get("SCORE_VERSION", "v4"),
         "balance": (balance_info or {}).get("balance", 0),
         "portfolio_value": (balance_info or {}).get("portfolio_value", 0),
