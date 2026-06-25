@@ -667,22 +667,16 @@ let SR, CR, SPORTS_BETS, CRYPTO_BETS, DATA_REFRESHED_AT;
 async function loadData() {
   const empty = {total_bets:0,resolved:0,wins:0,losses:0,win_rate:0,total_pnl:0,total_wagered:0,open_count:0,open_cost:0,pending_count:0,balance:0,portfolio_value:0,bets:[]};
   try {
-    for (let i = 0; i < 15; i++) {
-      const resp = await fetch('/api/data');
-      if (resp.status === 503) {
-        document.querySelector('#loadingOverlay div:last-child').textContent = 'Server warming up... (' + (i+1) + ')';
-        await new Promise(r => setTimeout(r, 3000));
-        continue;
-      }
-      if (!resp.ok) throw new Error('API error');
+    const resp = await fetch('/api/data');
+    if (resp.ok) {
       const data = await resp.json();
       SR = data.sports_report;
       CR = data.crypto_report;
       DATA_REFRESHED_AT = data.refreshed_at;
       if (data.account_name) document.getElementById('accountBadge').textContent = data.account_name;
-      break;
+    } else {
+      throw new Error('API not ready');
     }
-    if (!SR) throw new Error('timeout');
   } catch(e) {
     const baked = window._BAKED_DATA || {};
     SR = baked.sports_report || empty;

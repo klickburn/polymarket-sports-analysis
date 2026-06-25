@@ -102,9 +102,12 @@ def _save_cache(path, data):
         P(f"  [CACHE] Save error: {e}")
 
 
+_first_load = True
+
 # ── Data fetching (incremental) ──────────────────────────────────────
 def _fetch_data():
     """Fetch dashboard data incrementally — only new fills + re-check open markets."""
+    global _first_load
     P("  [DATA] Refreshing dashboard data...")
     start = time.time()
 
@@ -233,35 +236,36 @@ def _fetch_data():
                 if total_cost > 0:
                     bet["roi"] = round(bet["pnl"] / total_cost * 100, 1)
             else:
-                # Only check API for unresolved markets
-                try:
-                    mkt = public_get(f"/markets/{ticker}")
-                    market = mkt.get("market", {})
-                    status = market.get("status", "")
-                    result_val = market.get("result", "")
-                    if status in ("settled", "finalized") and result_val:
-                        won = (result_val == "yes" and side == "yes") or \
-                              (result_val == "no" and side == "no")
-                        bet["result"] = "win" if won else "loss"
-                        bet["market_result"] = result_val
-                        if won:
-                            bet["pnl"] = round(total_count * (1.0 - avg_price) - total_fee, 2)
+                if _first_load:
+                    bet["result"] = "pending"
+                else:
+                    try:
+                        mkt = public_get(f"/markets/{ticker}")
+                        market = mkt.get("market", {})
+                        status = market.get("status", "")
+                        result_val = market.get("result", "")
+                        if status in ("settled", "finalized") and result_val:
+                            won = (result_val == "yes" and side == "yes") or \
+                                  (result_val == "no" and side == "no")
+                            bet["result"] = "win" if won else "loss"
+                            bet["market_result"] = result_val
+                            if won:
+                                bet["pnl"] = round(total_count * (1.0 - avg_price) - total_fee, 2)
+                            else:
+                                bet["pnl"] = round(-total_count * avg_price - total_fee, 2)
+                            if total_cost > 0:
+                                bet["roi"] = round(bet["pnl"] / total_cost * 100, 1)
+                            results_cache[ticker] = {
+                                "result": bet["result"],
+                                "market_result": result_val,
+                            }
+                        elif status == "open":
+                            bet["result"] = "open"
                         else:
-                            bet["pnl"] = round(-total_count * avg_price - total_fee, 2)
-                        if total_cost > 0:
-                            bet["roi"] = round(bet["pnl"] / total_cost * 100, 1)
-                        # Cache this resolved result
-                        results_cache[ticker] = {
-                            "result": bet["result"],
-                            "market_result": result_val,
-                        }
-                    elif status == "open":
-                        bet["result"] = "open"
-                    else:
-                        bet["result"] = "pending"
-                    time.sleep(0.2)
-                except Exception:
-                    pass
+                            bet["result"] = "pending"
+                        time.sleep(0.2)
+                    except Exception:
+                        pass
 
             bets.append(bet)
 
@@ -325,6 +329,7 @@ def _fetch_data():
         "refreshed_at": datetime.now(timezone.utc).isoformat(),
     }
 
+    _first_load = False
     elapsed = time.time() - start
     P(f"  [DATA] Done in {elapsed:.1f}s: {len(sports_bets)} sports, {len(crypto_bets)} crypto")
     return result
