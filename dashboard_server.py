@@ -676,14 +676,15 @@ _SLIM_KEEP = {"crypto", "side", "price", "fill_price", "score", "action", "resul
 _DETAIL_KEYS = {"reasons", "score_breakdown", "indicators", "entry_minute", "window_end",
                 "order_id", "event_ticker", "ticker"}
 
-def _slim_bets(bets, recent=200):
-    """Strip heavy fields from older bets to reduce payload size."""
-    if len(bets) <= recent:
-        return bets
+def _slim_bets(bets, recent=500):
+    """Strip heavy fields and filter out noise to reduce payload size."""
+    filtered = [b for b in bets if b.get("result") not in ("expired", "unfilled")]
+    if len(filtered) <= recent:
+        return filtered
     slim = []
-    for b in bets[:-recent]:
+    for b in filtered[:-recent]:
         slim.append({k: v for k, v in b.items() if k not in _DETAIL_KEYS})
-    slim.extend(bets[-recent:])
+    slim.extend(filtered[-recent:])
     return slim
 
 
