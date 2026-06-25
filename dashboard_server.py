@@ -20,8 +20,10 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
+from starlette.middleware.gzip import GZipMiddleware
 
 app = FastAPI()
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 from crypto_15m_bot import (
     auth_get, public_get, get_balance, get_existing_positions,
