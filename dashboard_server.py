@@ -907,15 +907,19 @@ def backfill_status():
 
 @app.post("/api/score-reset")
 def reset_score_data():
-    """Clear all score bot trade history."""
+    """Clear all score bot trade history and signal bot to reset."""
     try:
         with open(SCORE_BETS_FILE, "w") as f:
             json.dump([], f)
         with open(SCORE_STATUS_FILE, "w") as f:
             json.dump({}, f)
+        # Write reset flag so the bot clears its in-memory bets on next load
+        reset_flag = os.path.join(SCORE_DATA_DIR, ".reset_flag")
+        with open(reset_flag, "w") as f:
+            f.write("reset")
         with _score_lock:
             _score_cache["result"] = None
-        P("  [SCORE] Trade history reset")
+        P("  [SCORE] Trade history reset (flag written)")
         return JSONResponse({"status": "ok", "message": "Trade history cleared"})
     except Exception as e:
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)

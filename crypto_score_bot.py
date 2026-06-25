@@ -738,6 +738,14 @@ _github_merged = False
 
 def load_bets():
     global _github_merged
+    # Check for reset flag from dashboard
+    reset_flag = os.path.join(DATA_DIR, ".reset_flag")
+    if os.path.exists(reset_flag):
+        P("  [RESET] Reset flag detected — clearing all bets")
+        os.remove(reset_flag)
+        save_bets([])
+        return []
+
     # Try main file first
     data, err = _try_load_json(BETS_FILE)
 
