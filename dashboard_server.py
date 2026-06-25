@@ -919,7 +919,13 @@ def reset_score_data():
             f.write("reset")
         with _score_lock:
             _score_cache["result"] = None
-        P("  [SCORE] Trade history reset (flag written)")
+        # Also clear the git repo copy so it doesn't restore on next deploy
+        try:
+            from crypto_score_bot import git_backup_bets
+            git_backup_bets([], force=True)
+        except Exception:
+            pass
+        P("  [SCORE] Trade history reset (flag written, GitHub cleared)")
         return JSONResponse({"status": "ok", "message": "Trade history cleared"})
     except Exception as e:
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)

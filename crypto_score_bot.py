@@ -850,11 +850,11 @@ GIT_BETS_FILE = os.path.join(os.path.dirname(__file__) or ".", "crypto_score_bet
 _last_git_backup = 0
 GIT_BACKUP_INTERVAL = 900  # 15 min
 
-def git_backup_bets(bets):
+def git_backup_bets(bets, force=False):
     """Back up bets to GitHub repo via API (works without git CLI credentials)."""
     global _last_git_backup
     now = time.time()
-    if now - _last_git_backup < GIT_BACKUP_INTERVAL:
+    if not force and now - _last_git_backup < GIT_BACKUP_INTERVAL:
         return
     _last_git_backup = now
     gh_token = os.environ.get("GITHUB_TOKEN", "")
