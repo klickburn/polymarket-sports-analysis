@@ -443,10 +443,12 @@ def _resolve_score_bets():
 
     changed = False
 
-    # Fix: verify fill status for resolved trades that haven't been checked yet
-    # Catches: missing fill_price, "resting" orders that were resolved without verification
+    # Fix: verify fill status for recent resolved trades that haven't been checked yet
+    one_day_ago_fp = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
     for bet in bets:
-        if bet.get("action") == "trade" and bet.get("order_id") and not bet.get("fill_price_checked"):
+        if (bet.get("action") == "trade" and bet.get("order_id")
+                and not bet.get("fill_price_checked")
+                and bet.get("timestamp", "") >= one_day_ago_fp):
             needs_check = (
                 (bet.get("result") in ("win", "loss") and not bet.get("fill_price")) or
                 (bet.get("result") in ("win", "loss") and bet.get("status") == "resting")
