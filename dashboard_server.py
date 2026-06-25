@@ -448,7 +448,12 @@ def _resolve_score_bets():
         except Exception:
             return
 
-    changed = False
+    before_filter = len(bets)
+    bets = [b for b in bets if b.get("ticker")]
+    if len(bets) < before_filter:
+        P(f"  [SCORE-DATA] Removed {before_filter - len(bets)} entries with no ticker")
+
+    changed = len(bets) < before_filter
 
     # Normalize fill_price from cents to dollars if needed, recalculate P&L
     for bet in bets:

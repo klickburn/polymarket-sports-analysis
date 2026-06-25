@@ -770,6 +770,7 @@ def load_bets():
     data = [b for b in data if b.get("ticker")]
     if len(data) < before_filter:
         P(f"  Removed {before_filter - len(data)} entries with no ticker")
+        save_bets(data)
 
     # Merge with GitHub backup once on startup to recover missing historical bets
     if not _github_merged:
