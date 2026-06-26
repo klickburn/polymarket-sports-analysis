@@ -1430,8 +1430,8 @@ def run(live=False):
                         placed_this_window.add(po["crypto"])
                 save_bets(bets)
 
-            # Periodic git backup (disabled — triggers auto-deploys that restore old data)
-            # git_backup_bets(bets)
+            # Periodic git backup
+            git_backup_bets(bets)
 
             time.sleep(POLL_INTERVAL)
 
