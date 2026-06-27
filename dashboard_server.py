@@ -913,6 +913,31 @@ def backfill_status():
     return JSONResponse({"running": _backfill_running, **_backfill_status})
 
 
+@app.post("/api/fix-filled-counts")
+def fix_filled_counts():
+    """Fix trades where filled_count=1 but contracts>1 (no API calls needed)."""
+    try:
+        with open(SCORE_BETS_FILE) as f:
+            bets = json.load(f)
+        fixed = 0
+        for b in bets:
+            if (b.get("action") == "trade" and b.get("result") in ("win", "loss")
+                    and b.get("filled_count", 1) == 1 and b.get("contracts", 1) > 1):
+                b["filled_count"] = b["contracts"]
+                fp = b.get("fill_price", b.get("price", 0))
+                fc = b["filled_count"]
+                if b["result"] == "win":
+                    b["pnl"] = round(fc * (1.0 - fp), 2)
+                else:
+                    b["pnl"] = round(-fc * fp, 2)
+                fixed += 1
+        with open(SCORE_BETS_FILE, "w") as f:
+            json.dump(bets, f)
+        return JSONResponse({"fixed": fixed, "total_trades": len([b for b in bets if b.get("action") == "trade"])})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @app.post("/api/score-reset")
 def reset_score_data():
     """Clear all score bot trade history and signal bot to reset."""
