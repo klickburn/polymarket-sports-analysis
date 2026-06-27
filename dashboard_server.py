@@ -887,7 +887,7 @@ def backfill_fill_prices(force: bool = False):
                         _backfill_status["updated"] += 1
                     if api_filled > 0:
                         bet["filled_count"] = api_filled
-                    elif bet.get("status") == "executed" and bet.get("contracts", 1) > bet.get("filled_count", 1):
+                    elif bet.get("filled_count", 1) == 1 and bet.get("contracts", 1) > 1:
                         bet["filled_count"] = bet["contracts"]
                         _backfill_status["updated"] += 1
                     bet["fill_price_backfilled"] = True
