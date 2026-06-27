@@ -1343,7 +1343,6 @@ function renderScoreBot() {
     const labels = filtered.map(b => new Date(b.timestamp).toLocaleDateString('en-US', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}));
     const vals = filtered.map(b => { cum += (b.pnl || 0); return parseFloat(cum.toFixed(2)); });
     const ptColors = filtered.map(b => b.result === 'win' ? '#22c55e' : '#ef4444');
-    if (_scoreCharts.pnl) _scoreCharts.pnl.destroy();
     const pnlCtx = document.getElementById('scorePnlChart').getContext('2d');
     const pnlGrad = pnlCtx.createLinearGradient(0, 0, 0, 300);
     pnlGrad.addColorStop(0, 'rgba(168,85,247,0.3)');
@@ -1923,6 +1922,7 @@ async function loadAnalytics() {
 
 loadData();
 loadScoreData();
+setInterval(() => { loadScoreData(); }, 60000);
 </script>
 </body>
 </html>
