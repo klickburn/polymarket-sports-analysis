@@ -1336,6 +1336,10 @@ def run(live=False):
 
                     if order_status in ("executed", "partial"):
                         avg_p = order.get("avg_price")
+                        if avg_p is not None and avg_p > 1:
+                            avg_p = avg_p / 100
+                        if avg_p is not None and tq["side"] == "no":
+                            avg_p = 1.0 - avg_p
                         tq["bet_record"]["fill_price"] = avg_p if avg_p else tq["price"]
                         remaining = int(order.get("remaining_count", 0))
                         total = int(order.get("count", tq["bet_record"].get("contracts", 1)))

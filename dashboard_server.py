@@ -492,8 +492,8 @@ def _resolve_score_bets():
                     order_resp = auth_get(f"/portfolio/orders/{bet['order_id']}")
                     order_data = order_resp.get("order", {})
                     order_status = order_data.get("status", "")
-                    remaining = order_data.get("remaining_count", 0)
-                    filled_count = order_data.get("count", 0) - remaining
+                    remaining = int(order_data.get("remaining_count", 0))
+                    filled_count = int(order_data.get("count", 0)) - remaining
                     actual_price = order_data.get("avg_price", 0)
 
                     if order_status in ("canceled", "expired") and filled_count == 0:
@@ -508,8 +508,10 @@ def _resolve_score_bets():
                         time.sleep(0.3)
                         continue
                     elif filled_count > 0 and actual_price > 0:
-                        # Update with actual fill data
-                        bet["fill_price"] = actual_price / 100 if actual_price > 1 else actual_price
+                        avg_p = actual_price / 100 if actual_price > 1 else actual_price
+                        if bet.get("side") == "no":
+                            avg_p = 1.0 - avg_p
+                        bet["fill_price"] = avg_p
                         bet["filled_count"] = filled_count
                     time.sleep(0.3)
                 except Exception:
@@ -851,7 +853,7 @@ _backfill_running = False
 _backfill_status = {"checked": 0, "updated": 0, "errors": 0, "total": 0, "done": False}
 
 @app.post("/api/score-backfill-prices")
-def backfill_fill_prices():
+def backfill_fill_prices(force: bool = False):
     """Trigger background backfill of fill_price for all trades."""
     global _backfill_running
     if _backfill_running:
@@ -862,6 +864,9 @@ def backfill_fill_prices():
         try:
             with open(SCORE_BETS_FILE) as f:
                 bets = json.load(f)
+            if force:
+                for b in bets:
+                    b.pop("fill_price_backfilled", None)
             pending = [b for b in bets if b.get("action") == "trade" and b.get("order_id")
                        and b.get("result") in ("win", "loss") and not b.get("fill_price_backfilled")]
             _backfill_status = {"checked": 0, "updated": 0, "errors": 0, "total": len(pending), "done": False}
@@ -870,8 +875,8 @@ def backfill_fill_prices():
                 try:
                     order_resp = auth_get(f"/portfolio/orders/{bet['order_id']}")
                     order_data = order_resp.get("order", {})
-                    remaining = order_data.get("remaining_count", 0)
-                    api_filled = order_data.get("count", 0) - remaining
+                    remaining = int(order_data.get("remaining_count", 0))
+                    api_filled = int(order_data.get("count", 0)) - remaining
                     avg_p = order_data.get("avg_price", 0)
                     if avg_p and avg_p > 1:
                         avg_p = avg_p / 100
