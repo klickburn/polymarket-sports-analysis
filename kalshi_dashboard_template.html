@@ -526,7 +526,15 @@
       <div class="chart-container tall"><canvas id="scorePnlChart"></canvas></div>
     </div>
     <div class="card">
-      <h3>Win Rate & P&L by Score</h3>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <h3 style="margin:0">Win Rate & P&L by Score</h3>
+        <div class="a-tab-row" id="wrTimeFilters">
+          <button class="a-tab active" onclick="filterScoreWR('1d')">1D</button>
+          <button class="a-tab" onclick="filterScoreWR('1w')">1W</button>
+          <button class="a-tab" onclick="filterScoreWR('1m')">1M</button>
+          <button class="a-tab" onclick="filterScoreWR('all')">All</button>
+        </div>
+      </div>
       <div class="chart-container tall"><canvas id="scoreWinRateChart"></canvas></div>
     </div>
   </div>
@@ -1367,29 +1375,60 @@ function renderScoreBot() {
 
 
   // Win rate + PnL + count by score charts — use ALL resolved (trades+skips)
-  const allBetsResolved = (d.recent_bets || []).filter(b => b.result === 'win' || b.result === 'loss');
-  const scoreStats = {};
-  allBetsResolved.forEach(b => {
-    const raw = (b.score || 0) + 3;  // signal count
-    if (!scoreStats[raw]) scoreStats[raw] = { wins: 0, losses: 0, pnl: 0 };
-    const price = b.fill_price || b.price || 0;
-    const contracts = b.filled_count || b.contracts || 1;
-    const pnl = b.result === 'win' ? contracts * (1.0 - price) : -contracts * price;
-    scoreStats[raw].pnl += pnl;
-    if (b.result === 'win') scoreStats[raw].wins++;
-    else scoreStats[raw].losses++;
-  });
-  const ssKeys = Object.keys(scoreStats).map(Number).sort((a,b) => a - b);
-  const isV7 = (d.strategy_version || '') === 'v7';
+  const _allResolvedBets = (d.recent_bets || []).filter(b => b.result === 'win' || b.result === 'loss');
+  const _isV7 = (d.strategy_version || '') === 'v7';
+  window._scoreWRFilter = '1d';
 
-  if (ssKeys.length > 0) {
-    const labels = ssKeys.map(s => isV7 ? `${s}/8` : `${s >= 3 ? '+' : ''}${s-3}`);
+  function filterScoreWR(period) {
+    window._scoreWRFilter = period;
+    document.querySelectorAll('#wrTimeFilters .a-tab').forEach(t => t.classList.toggle('active', t.textContent === ({
+      '1d': '1D', '1w': '1W', '1m': '1M', 'all': 'All'
+    })[period]));
+    drawScoreWRChart();
+  }
+  window.filterScoreWR = filterScoreWR;
+
+  function drawScoreWRChart() {
+    const now = new Date();
+    let cutoff = null;
+    if (window._scoreWRFilter === '1d') cutoff = new Date(now - 24*60*60*1000);
+    else if (window._scoreWRFilter === '1w') cutoff = new Date(now - 7*24*60*60*1000);
+    else if (window._scoreWRFilter === '1m') cutoff = new Date(now - 30*24*60*60*1000);
+    const filtered = cutoff ? _allResolvedBets.filter(b => new Date(b.timestamp) >= cutoff) : _allResolvedBets;
+
+    const scoreStats = {};
+    filtered.forEach(b => {
+      const raw = (b.score || 0) + 3;
+      if (!scoreStats[raw]) scoreStats[raw] = { wins: 0, losses: 0, pnl: 0 };
+      const price = b.fill_price || b.price || 0;
+      const contracts = b.filled_count || b.contracts || 1;
+      const pnl = b.result === 'win' ? contracts * (1.0 - price) : -contracts * price;
+      scoreStats[raw].pnl += pnl;
+      if (b.result === 'win') scoreStats[raw].wins++;
+      else scoreStats[raw].losses++;
+    });
+    const ssKeys = Object.keys(scoreStats).map(Number).sort((a,b) => a - b);
+    const canvas = document.getElementById('scoreWinRateChart');
+
+    if (ssKeys.length === 0) {
+      if (_scoreCharts.winRate) { _scoreCharts.winRate.destroy(); _scoreCharts.winRate = null; }
+      canvas.style.display = 'none';
+      let msg = canvas.parentElement.querySelector('.no-data-msg');
+      if (!msg) { msg = document.createElement('div'); msg.className = 'no-data-msg'; msg.style.cssText = 'display:flex;align-items:center;justify-content:center;height:260px;color:var(--muted)'; canvas.parentElement.appendChild(msg); }
+      msg.textContent = 'No trades in this period';
+      return;
+    }
+    canvas.style.display = '';
+    const oldMsg = canvas.parentElement.querySelector('.no-data-msg');
+    if (oldMsg) oldMsg.remove();
+
+    const labels = ssKeys.map(s => _isV7 ? `${s}/8` : `${s >= 3 ? '+' : ''}${s-3}`);
     const wrData = ssKeys.map(s => { const t = scoreStats[s].wins + scoreStats[s].losses; return t > 0 ? +(scoreStats[s].wins / t * 100).toFixed(1) : 0; });
     const pnlData = ssKeys.map(s => +scoreStats[s].pnl.toFixed(2));
     const countData = ssKeys.map(s => scoreStats[s].wins + scoreStats[s].losses);
 
     if (_scoreCharts.winRate) _scoreCharts.winRate.destroy();
-    _scoreCharts.winRate = new Chart(document.getElementById('scoreWinRateChart'), {
+    _scoreCharts.winRate = new Chart(canvas, {
       type: 'bar',
       data: {
         labels,
@@ -1408,10 +1447,8 @@ function renderScoreBot() {
         }
       }
     });
-
-  } else {
-    document.getElementById('scoreWinRateChart').parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:260px;color:var(--muted)">No resolved trades yet</div>';
   }
+  drawScoreWRChart();
 
   // Daily P&L section
   const dailyMap = {};
