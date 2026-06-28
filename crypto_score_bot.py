@@ -969,7 +969,7 @@ def _restore_scale_state():
                                 up_at = i + 1
                     else:
                         since = g_trades[up_at:i+1]
-                        if len(since) >= cfg["down_window"]:
+                        if len(since) > 0:
                             losses = sum(1 for b in since[-cfg["down_window"]:] if b["result"] == "loss")
                             if losses >= cfg["down_thresh"]:
                                 scale = 1
@@ -1015,16 +1015,16 @@ def get_dynamic_contracts(bets, crypto, signal_count):
             _persist_scale_state()
             return SCALE_UP_COUNT
     else:
-        # Only check trades AFTER the scale-up transition
+        # Check trades AFTER the scale-up transition
         up_idx = _scale_up_at.get(group_name, 0)
         since_up = resolved[up_idx:]
-        if len(since_up) < cfg["down_window"]:
+        if len(since_up) == 0:
             return current
         last_n = since_up[-cfg["down_window"]:]
         losses = sum(1 for b in last_n if b["result"] == "loss")
         if losses >= cfg["down_thresh"]:
             _scale_state[group_name] = 1
-            P(f"  [SCALE] Group {group_name}: {losses}/{cfg['down_window']} losses (since scale-up) — DOWN to 1")
+            P(f"  [SCALE] Group {group_name}: {losses}/{len(last_n)} losses (since scale-up) — DOWN to 1")
             _persist_scale_state()
             return 1
 
