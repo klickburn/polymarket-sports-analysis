@@ -845,6 +845,7 @@ def score_debug():
         "file_exists": os.path.exists(SCORE_STATUS_FILE),
         "raw_status_keys": list(raw.keys()) if isinstance(raw, dict) else "not_dict",
         "scale_state": raw.get("scale_state") if isinstance(raw, dict) else None,
+        "scale_up_at": raw.get("scale_up_at") if isinstance(raw, dict) else None,
         "score_data_dir": SCORE_DATA_DIR,
     })
 
