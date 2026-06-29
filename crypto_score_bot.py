@@ -75,21 +75,23 @@ _cg_key_index = 0
 
 # ── CoinGecko data fetching ────────────────────────────────────────────
 def fetch_coingecko(url, retries=3):
-    # Rotate API keys
     global _cg_key_index
-    key = CG_API_KEYS[_cg_key_index % len(CG_API_KEYS)]
-    _cg_key_index += 1
     sep = "&" if "?" in url else "?"
-    url = f"{url}{sep}x_cg_demo_api_key={key}"
     for attempt in range(retries + 1):
+        key = CG_API_KEYS[_cg_key_index % len(CG_API_KEYS)]
+        _cg_key_index += 1
+        full_url = f"{url}{sep}x_cg_demo_api_key={key}"
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            req = urllib.request.Request(full_url, headers={"User-Agent": "Mozilla/5.0"})
             resp = urllib.request.urlopen(req, timeout=15)
-            return json.loads(resp.read().decode())
+            data = json.loads(resp.read().decode())
+            if isinstance(data, dict) and "status" in data and "error_code" in data.get("status", {}):
+                raise Exception(data["status"].get("error_message", "API error"))
+            return data
         except Exception as e:
             if attempt < retries:
-                wait = 1 + attempt * 2  # 1s, 3s, 5s backoff
-                P(f"    CoinGecko retry {attempt+1}/{retries} ({e}), waiting {wait}s...")
+                wait = 1 + attempt * 2
+                P(f"    CoinGecko retry {attempt+1}/{retries} with next key ({e})")
                 time.sleep(wait)
             else:
                 P(f"    CoinGecko FAILED for {url.split('/')[-2]}: {e}")
