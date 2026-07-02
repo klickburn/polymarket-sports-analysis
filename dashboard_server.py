@@ -590,19 +590,19 @@ def _build_scaling_performance(resolved, status=None):
             "pnl": round(pnl, 2),
         }
 
-    # Group A: signals 0,4,5 | Group B: signals 1,2,3,6,7
+    # Group A: signals 0,4,5 | Group B: signals 1,2,3 | sig 6,7 never scale
     group_a_sigs = {0, 4, 5}
-    group_b_sigs = {1, 2, 3, 6, 7}
+    group_b_sigs = {1, 2, 3}
     by_group = {
         "Group A (sig 0,4,5)": {"at_1": [], "at_scaled": []},
-        "Group B (sig 1,2,3,6,7)": {"at_1": [], "at_scaled": []},
+        "Group B (sig 1,2,3)": {"at_1": [], "at_scaled": []},
     }
     for b in filtered:
         sig = b.get("score", 0) + 3
         if sig in group_a_sigs:
             key = "Group A (sig 0,4,5)"
         elif sig in group_b_sigs:
-            key = "Group B (sig 1,2,3,6,7)"
+            key = "Group B (sig 1,2,3)"
         else:
             continue
         if b.get("contracts", 1) > 1:
@@ -620,7 +620,7 @@ def _build_scaling_performance(resolved, status=None):
     # Read actual scale state from bot's status file
     scale_configs = {
         "A": {"signals": {0, 4, 5}, "up_window": 6, "up_thresh": 4, "down_window": 16, "down_thresh": 4},
-        "B": {"signals": {1, 2, 3, 6, 7}, "up_window": 6, "up_thresh": 5, "down_window": 16, "down_thresh": 5},
+        "B": {"signals": {1, 2, 3}, "up_window": 6, "up_thresh": 5, "down_window": 16, "down_thresh": 5},
     }
     bot_scale_state = (status or {}).get("scale_state", {})
     bot_scale_up_at = (status or {}).get("scale_up_at", {})
