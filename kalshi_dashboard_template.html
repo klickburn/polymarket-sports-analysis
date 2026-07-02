@@ -1534,7 +1534,7 @@ function renderScoreBot() {
   `;
   // Scaling status cards
   const ss = sp.scaling_status || {};
-  const groupLabels = {A: "Group A (sig 0,4,5)", B: "Group B (sig 1,2,3,6,7)"};
+  const groupLabels = {A: "Group A (sig 4,5)", B: "Group B (sig 1,2,3)"};
   document.getElementById('scalingStatusCards').innerHTML = Object.entries(ss).map(([gname, s]) => {
     const isScaled = s.current > 1;
     const borderColor = isScaled ? 'var(--green)' : 'var(--yellow)';
