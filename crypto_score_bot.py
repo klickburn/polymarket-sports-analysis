@@ -916,6 +916,12 @@ SCALE_UP_COUNT = int(os.environ.get("SCALE_UP_COUNT", 5))
 _scale_state = {}
 _scale_up_at = {}  # group -> trade count when scaled up (for down-check offset)
 
+def _groups_signature():
+    """Fingerprint of group definitions; saved indexes are invalid if this changes."""
+    return json.dumps({k: [sorted(v["signals"]), v["up_window"], v["up_thresh"],
+                           v["down_window"], v["down_thresh"]]
+                       for k, v in sorted(SCALE_GROUPS.items())})
+
 def _persist_scale_state():
     """Save scale state to status file so dashboard can read it."""
     try:
@@ -926,6 +932,7 @@ def _persist_scale_state():
             status = {}
         status["scale_state"] = dict(_scale_state)
         status["scale_up_at"] = dict(_scale_up_at)
+        status["scale_groups_sig"] = _groups_signature()
         save_status(status)
     except Exception:
         pass
@@ -939,6 +946,9 @@ def _restore_scale_state():
                 status = json.load(f)
             saved = status.get("scale_state", {})
             saved_up_at = status.get("scale_up_at", {})
+            if status.get("scale_groups_sig") != _groups_signature():
+                P("  [SCALE] Group config changed — discarding saved state, replaying history")
+                saved = {}
             if saved and saved_up_at:
                 _scale_state = {k: int(v) for k, v in saved.items()}
                 _scale_up_at = {k: int(v) for k, v in saved_up_at.items()}
