@@ -133116,5 +133116,101 @@
     "status": "resting",
     "fill_price": 0.75,
     "filled_count": 10
+  },
+  {
+    "crypto": "BTC",
+    "ticker": "KXBTC15M-26JUL022130-30",
+    "event_ticker": "KXBTC15M-26JUL022130",
+    "side": "no",
+    "price": 0.85,
+    "score": 1,
+    "reasons": [
+      [
+        "Signal Score",
+        "4/8",
+        "4"
+      ],
+      [
+        "RSI Aligned",
+        "NO RSI=54.8",
+        "+2"
+      ],
+      [
+        "1h MeanRev",
+        "ret=+0.45%",
+        "+1"
+      ],
+      [
+        "Strong MR",
+        "|+0.45%|>0.3%",
+        "+1"
+      ],
+      [
+        "BTC Same",
+        "btc=+0.00%",
+        "0"
+      ],
+      [
+        "Consensus",
+        "all NO",
+        "0"
+      ],
+      [
+        "Stoch High",
+        "96.0",
+        "0"
+      ]
+    ],
+    "score_breakdown": {
+      "Signal Score": {
+        "detail": "4/8",
+        "points": 4
+      },
+      "RSI Aligned": {
+        "detail": "NO RSI=54.8",
+        "points": 2
+      },
+      "1h MeanRev": {
+        "detail": "ret=+0.45%",
+        "points": 1
+      },
+      "Strong MR": {
+        "detail": "|+0.45%|>0.3%",
+        "points": 1
+      },
+      "BTC Same": {
+        "detail": "btc=+0.00%",
+        "points": 0
+      },
+      "Consensus": {
+        "detail": "all NO",
+        "points": 0
+      },
+      "Stoch High": {
+        "detail": "96.0",
+        "points": 0
+      }
+    },
+    "indicators": {
+      "ret_1h": 0.4509,
+      "ret_3h": 0.1087,
+      "vol_6h": 0.1728,
+      "rsi": 54.78,
+      "stoch": 96.0,
+      "pack_agreement": 1.0,
+      "btc_ret_1h": 0.4509
+    },
+    "bet_amount": 0.1,
+    "contracts": 10,
+    "entry_minute": 3.1,
+    "timestamp": "2026-07-03T01:18:17.334265+00:00",
+    "window_end": "2026-07-03T01:30:00+00:00",
+    "result": "open",
+    "strategy_version": "v7",
+    "action": "trade",
+    "order_id": "f357f04c-231b-4a85-86b7-ba914dcab9c6",
+    "status": "executed",
+    "fill_price": 0.86,
+    "filled_count": 10
   }
 ]
