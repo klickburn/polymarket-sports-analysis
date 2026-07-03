@@ -1391,8 +1391,9 @@ def run(live=False):
                         check_order = check.get("order", check)
                         check_status = check_order.get("status", "")
                         remaining = int(check_order.get("remaining_count", 0))
-                        total_count = int(check_order.get("count", CONTRACT_COUNT))
-                        filled_count = total_count - remaining
+                        ordered = po["bet_record"].get("contracts", 1)
+                        total_count = int(check_order.get("count", ordered))
+                        filled_count = min(total_count - remaining, ordered)
 
                         if check_status == "executed" or filled_count > 0:
                             # Filled

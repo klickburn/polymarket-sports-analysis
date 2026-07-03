@@ -512,7 +512,7 @@ def _resolve_score_bets():
                         if bet.get("side") == "no":
                             avg_p = 1.0 - avg_p
                         bet["fill_price"] = avg_p
-                        bet["filled_count"] = filled_count
+                        bet["filled_count"] = min(filled_count, bet.get("contracts", filled_count))
                     time.sleep(0.3)
                 except Exception:
                     pass
@@ -887,7 +887,7 @@ def backfill_fill_prices(force: bool = False):
                         bet["fill_price"] = avg_p
                         _backfill_status["updated"] += 1
                     if api_filled > 0:
-                        bet["filled_count"] = api_filled
+                        bet["filled_count"] = min(api_filled, bet.get("contracts", api_filled))
                     elif bet.get("filled_count", 1) == 1 and bet.get("contracts", 1) > 1:
                         bet["filled_count"] = bet["contracts"]
                         _backfill_status["updated"] += 1
@@ -922,16 +922,24 @@ def fix_filled_counts():
             bets = json.load(f)
         fixed = 0
         for b in bets:
-            if (b.get("action") == "trade" and b.get("result") in ("win", "loss")
-                    and b.get("filled_count", 1) == 1 and b.get("contracts", 1) > 1):
-                b["filled_count"] = b["contracts"]
-                fp = b.get("fill_price", b.get("price", 0))
-                fc = b["filled_count"]
-                if b["result"] == "win":
-                    b["pnl"] = round(fc * (1.0 - fp), 2)
-                else:
-                    b["pnl"] = round(-fc * fp, 2)
-                fixed += 1
+            if b.get("action") != "trade" or b.get("result") not in ("win", "loss"):
+                continue
+            c = b.get("contracts", 1)
+            fc = b.get("filled_count", 1)
+            if fc == 1 and c > 1:
+                b["filled_count"] = c
+            elif fc > c:
+                # Can't fill more than ordered
+                b["filled_count"] = c
+            else:
+                continue
+            fp = b.get("fill_price", b.get("price", 0))
+            fc = b["filled_count"]
+            if b["result"] == "win":
+                b["pnl"] = round(fc * (1.0 - fp), 2)
+            else:
+                b["pnl"] = round(-fc * fp, 2)
+            fixed += 1
         with open(SCORE_BETS_FILE, "w") as f:
             json.dump(bets, f)
         return JSONResponse({"fixed": fixed, "total_trades": len([b for b in bets if b.get("action") == "trade"])})
