@@ -747,13 +747,18 @@ def _reset_cutoff():
         return ""
 
 def load_bets():
-    global _github_merged
+    global _github_merged, _scale_state, _scale_up_at
     # Check for reset flag from dashboard
     reset_flag = os.path.join(DATA_DIR, ".reset_flag")
     if os.path.exists(reset_flag):
-        P("  [RESET] Reset flag detected — clearing all bets")
+        P("  [RESET] Reset flag detected — clearing all bets and scale state")
         os.remove(reset_flag)
         save_bets([])
+        # Streak history is gone; scale state derived from it must reset too,
+        # otherwise a group stuck at 10x could never scale down
+        _scale_state = {k: 1 for k in SCALE_GROUPS}
+        _scale_up_at = {}
+        _persist_scale_state()
         return []
 
     # Try main file first
