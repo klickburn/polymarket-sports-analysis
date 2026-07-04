@@ -156476,5 +156476,101 @@
     "status": "executed",
     "fill_price": 0.5900000000000001,
     "filled_count": 1
+  },
+  {
+    "crypto": "ETH",
+    "ticker": "KXETH15M-26JUL040145-45",
+    "event_ticker": "KXETH15M-26JUL040145",
+    "side": "yes",
+    "price": 0.64,
+    "score": -1,
+    "reasons": [
+      [
+        "Signal Score",
+        "2/8",
+        "2"
+      ],
+      [
+        "RSI Misalign",
+        "YES RSI=52.2",
+        "0"
+      ],
+      [
+        "1h MeanRev",
+        "ret=-0.35%",
+        "+1"
+      ],
+      [
+        "Strong MR",
+        "|-0.35%|>0.3%",
+        "+1"
+      ],
+      [
+        "BTC Same",
+        "btc=+0.00%",
+        "0"
+      ],
+      [
+        "Consensus",
+        "all YES",
+        "0"
+      ],
+      [
+        "Stoch High",
+        "55.1",
+        "0"
+      ]
+    ],
+    "score_breakdown": {
+      "Signal Score": {
+        "detail": "2/8",
+        "points": 2
+      },
+      "RSI Misalign": {
+        "detail": "YES RSI=52.2",
+        "points": 0
+      },
+      "1h MeanRev": {
+        "detail": "ret=-0.35%",
+        "points": 1
+      },
+      "Strong MR": {
+        "detail": "|-0.35%|>0.3%",
+        "points": 1
+      },
+      "BTC Same": {
+        "detail": "btc=+0.00%",
+        "points": 0
+      },
+      "Consensus": {
+        "detail": "all YES",
+        "points": 0
+      },
+      "Stoch High": {
+        "detail": "55.1",
+        "points": 0
+      }
+    },
+    "indicators": {
+      "ret_1h": -0.3451,
+      "ret_3h": 0.3418,
+      "vol_6h": 0.275,
+      "rsi": 52.15,
+      "stoch": 55.14,
+      "pack_agreement": 1.0,
+      "btc_ret_1h": -0.2264
+    },
+    "bet_amount": 0.1,
+    "contracts": 1,
+    "entry_minute": 2.3,
+    "timestamp": "2026-07-04T05:32:28.563196+00:00",
+    "window_end": "2026-07-04T05:45:00+00:00",
+    "result": "open",
+    "strategy_version": "v7",
+    "action": "trade",
+    "order_id": "ef5fae52-4d3d-443d-acf0-30b690e26efb",
+    "status": "executed",
+    "fill_price": 0.65,
+    "filled_count": 1
   }
 ]
