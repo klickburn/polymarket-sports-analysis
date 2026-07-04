@@ -1351,6 +1351,11 @@ def run(live=False):
                 })
 
             # ── Phase 2: Fire all orders at once ──────────────────────
+            # Re-resolve open bets right before sizing: markets from the previous
+            # window often haven't settled at window start but have by entry time,
+            # and a stale open loss would be invisible to the scale-down check
+            if trade_queue:
+                bets = _resolve_open_bets(bets)
             pending_orders = []  # [{crypto, ticker, side, price, order_id, bet_record}, ...]
             for tq in trade_queue:
                 sig_count = tq["score"] + 3
