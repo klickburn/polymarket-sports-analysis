@@ -852,6 +852,13 @@ def score_debug():
                 raw = json.load(f)
     except Exception as e:
         raw = {"error": str(e)}
+    reset_ts_path = os.path.join(SCORE_DATA_DIR, ".reset_ts")
+    reset_ts = None
+    try:
+        with open(reset_ts_path) as f:
+            reset_ts = f.read().strip()
+    except Exception:
+        pass
     return JSONResponse({
         "status_file_path": SCORE_STATUS_FILE,
         "file_exists": os.path.exists(SCORE_STATUS_FILE),
@@ -859,6 +866,7 @@ def score_debug():
         "scale_state": raw.get("scale_state") if isinstance(raw, dict) else None,
         "scale_up_at": raw.get("scale_up_at") if isinstance(raw, dict) else None,
         "score_data_dir": SCORE_DATA_DIR,
+        "reset_ts": reset_ts,
     })
 
 
