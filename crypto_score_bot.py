@@ -738,6 +738,14 @@ def _merge_bets(local, remote):
 
 _github_merged = False
 
+def _reset_cutoff():
+    """Timestamp of the last reset; bets older than this are permanently dropped."""
+    try:
+        with open(os.path.join(DATA_DIR, ".reset_ts")) as f:
+            return f.read().strip()
+    except Exception:
+        return ""
+
 def load_bets():
     global _github_merged
     # Check for reset flag from dashboard
@@ -804,6 +812,16 @@ def load_bets():
                 P(f"  GitHub backup checked — no missing bets ({len(data)} total)")
         elif len(data) == 0:
             P(f"  No local or GitHub bets found — starting fresh")
+
+    # Permanently drop anything older than the last reset (guards against
+    # resurrection from GitHub backups or stale in-memory copies)
+    cutoff = _reset_cutoff()
+    if cutoff:
+        before = len(data)
+        data = [b for b in data if b.get("timestamp", "") >= cutoff]
+        if len(data) < before:
+            P(f"  [RESET] Dropped {before - len(data)} bets older than reset at {cutoff}")
+            save_bets(data)
 
     return data
 

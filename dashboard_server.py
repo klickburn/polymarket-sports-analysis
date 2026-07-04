@@ -453,6 +453,18 @@ def _resolve_score_bets():
     if len(bets) < before_filter:
         P(f"  [SCORE-DATA] Removed {before_filter - len(bets)} entries with no ticker")
 
+    # Drop bets older than the last reset (resurrection guard)
+    try:
+        with open(os.path.join(SCORE_DATA_DIR, ".reset_ts")) as f:
+            cutoff = f.read().strip()
+        if cutoff:
+            n = len(bets)
+            bets = [b for b in bets if b.get("timestamp", "") >= cutoff]
+            if len(bets) < n:
+                P(f"  [SCORE-DATA] Dropped {n - len(bets)} bets older than reset at {cutoff}")
+    except Exception:
+        pass
+
     changed = len(bets) < before_filter
 
     # Normalize fill_price from cents to dollars if needed, recalculate P&L
@@ -959,6 +971,11 @@ def reset_score_data():
         reset_flag = os.path.join(SCORE_DATA_DIR, ".reset_flag")
         with open(reset_flag, "w") as f:
             f.write("reset")
+        # Persist reset timestamp: bets older than this are dropped on every
+        # load, so stale in-memory copies or GitHub backups can't resurrect them
+        reset_ts = os.path.join(SCORE_DATA_DIR, ".reset_ts")
+        with open(reset_ts, "w") as f:
+            f.write(datetime.now(timezone.utc).isoformat())
         with _score_lock:
             _score_cache["result"] = None
         # Also clear the git repo copy so it doesn't restore on next deploy
