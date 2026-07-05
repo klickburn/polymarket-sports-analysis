@@ -936,6 +936,8 @@ SCALE_GROUPS = {
     "B": {"signals": {1, 2, 3}, "up_window": 6, "up_thresh": 4, "down_window": 16, "down_thresh": 4},
 }
 SCALE_UP_COUNT = int(os.environ.get("SCALE_UP_COUNT", 5))
+COOL_OFF_WR = float(os.environ.get("COOL_OFF_WR", "0.8"))       # 0 disables
+COOL_OFF_WINDOW = int(os.environ.get("COOL_OFF_WINDOW", "10"))
 _scale_state = {}
 _scale_up_at = {}  # group -> trade count when scaled up (for down-check offset)
 
@@ -1025,7 +1027,23 @@ def _get_scale_group(signal_count):
     return None, None
 
 def get_dynamic_contracts(bets, crypto, signal_count):
-    """Grouped scaling: BTC+ETH combined, split up/down windows."""
+    """Grouped scaling with cool-off lid: BTC+ETH combined, split up/down windows."""
+    contracts = _group_scale_contracts(bets, crypto, signal_count)
+    # Cool-off: trailing WR >= threshold means the run is euphoric — forward
+    # edge is ~zero there, so cap at 1x until it cools (group states unaffected)
+    if contracts > 1 and COOL_OFF_WR > 0:
+        resolved = [b for b in bets if b.get("action") == "trade"
+                    and b.get("result") in ("win", "loss")
+                    and b.get("crypto") in ("BTC", "ETH")]
+        last = resolved[-COOL_OFF_WINDOW:]
+        if len(last) >= COOL_OFF_WINDOW:
+            wr = sum(1 for b in last if b["result"] == "win") / len(last)
+            if wr >= COOL_OFF_WR:
+                P(f"  [SCALE] Cool-off: trailing WR {wr:.0%} >= {COOL_OFF_WR:.0%} — trading 1x")
+                return 1
+    return contracts
+
+def _group_scale_contracts(bets, crypto, signal_count):
     if signal_count == 0:
         return 1
 
