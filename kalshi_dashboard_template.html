@@ -1535,7 +1535,20 @@ function renderScoreBot() {
   // Scaling status cards
   const ss = sp.scaling_status || {};
   const groupLabels = {A: "Group A (sig 4,5)", B: "Group B (sig 1,2,3)"};
-  document.getElementById('scalingStatusCards').innerHTML = Object.entries(ss).map(([gname, s]) => {
+  const co = sp.cool_off;
+  let coBanner = '';
+  if (co) {
+    const need = Math.ceil(co.threshold * co.window);
+    if (co.active) {
+      coBanner = `<div class="card" style="flex-basis:100%;border-left:3px solid var(--blue, #3b82f6);padding:10px 16px">
+        <span style="background:rgba(59,130,246,0.15);color:#3b82f6;padding:3px 10px;border-radius:6px;font-weight:700;font-size:13px">❄️ COOL-OFF ACTIVE</span>
+        <span style="margin-left:10px;font-size:13px;color:var(--text)">${co.wins}/${co.window} recent wins ≥ ${need} — trading 1x until the run cools (group states unaffected)</span>
+      </div>`;
+    } else {
+      coBanner = `<div style="flex-basis:100%;font-size:12px;color:var(--muted);padding:0 4px">Cool-off: ${co.wins}/${co.window} recent wins — arms at ${need}</div>`;
+    }
+  }
+  document.getElementById('scalingStatusCards').innerHTML = coBanner + Object.entries(ss).map(([gname, s]) => {
     const isScaled = s.current > 1;
     const borderColor = isScaled ? 'var(--green)' : 'var(--yellow)';
     const statusLabel = isScaled ? `${s.current}x SCALED UP` : '1x BASE';

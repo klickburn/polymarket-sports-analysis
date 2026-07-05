@@ -685,6 +685,23 @@ def _build_scaling_performance(resolved, status=None):
                 "recent": [t["result"][0].upper() for t in since_up[-8:]],
             }
 
+    # Cool-off lid state (mirrors bot logic: trailing WR over last N resolved)
+    cool_off = None
+    try:
+        from crypto_score_bot import COOL_OFF_WR, COOL_OFF_WINDOW
+        if COOL_OFF_WR > 0:
+            last = all_resolved[-COOL_OFF_WINDOW:]
+            wins = sum(1 for b in last if b.get("result") == "win")
+            wr = wins / len(last) if last else 0
+            cool_off = {
+                "active": len(last) >= COOL_OFF_WINDOW and wr >= COOL_OFF_WR,
+                "wins": wins,
+                "window": COOL_OFF_WINDOW,
+                "threshold": COOL_OFF_WR,
+            }
+    except Exception:
+        pass
+
     return {
         "overall_at_1": calc_stats(trades_at_1),
         "overall_at_scaled": calc_stats(trades_at_scaled),
@@ -693,6 +710,7 @@ def _build_scaling_performance(resolved, status=None):
         "scale_up_count": SCALE_UP_COUNT,
         "breakdown": breakdown,
         "scaling_status": scaling_status,
+        "cool_off": cool_off,
     }
 
 
