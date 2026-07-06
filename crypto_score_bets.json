@@ -188726,5 +188726,101 @@
     "status": "executed",
     "fill_price": 0.77,
     "filled_count": 20
+  },
+  {
+    "crypto": "BTC",
+    "ticker": "KXBTC15M-26JUL052215-15",
+    "event_ticker": "KXBTC15M-26JUL052215",
+    "side": "yes",
+    "price": 0.66,
+    "score": 0,
+    "reasons": [
+      [
+        "Signal Score",
+        "3/8",
+        "3"
+      ],
+      [
+        "RSI Misalign",
+        "YES RSI=58.3",
+        "0"
+      ],
+      [
+        "1h MeanRev",
+        "ret=-0.13%",
+        "+1"
+      ],
+      [
+        "BTC Same",
+        "btc=+0.00%",
+        "0"
+      ],
+      [
+        "High Vol",
+        "0.58\u22650.3",
+        "+1"
+      ],
+      [
+        "Consensus",
+        "all YES",
+        "0"
+      ],
+      [
+        "Stoch OS",
+        "29.8<30",
+        "+1"
+      ]
+    ],
+    "score_breakdown": {
+      "Signal Score": {
+        "detail": "3/8",
+        "points": 3
+      },
+      "RSI Misalign": {
+        "detail": "YES RSI=58.3",
+        "points": 0
+      },
+      "1h MeanRev": {
+        "detail": "ret=-0.13%",
+        "points": 1
+      },
+      "BTC Same": {
+        "detail": "btc=+0.00%",
+        "points": 0
+      },
+      "High Vol": {
+        "detail": "0.58\u22650.3",
+        "points": 1
+      },
+      "Consensus": {
+        "detail": "all YES",
+        "points": 0
+      },
+      "Stoch OS": {
+        "detail": "29.8<30",
+        "points": 1
+      }
+    },
+    "indicators": {
+      "ret_1h": -0.1284,
+      "ret_3h": -0.189,
+      "vol_6h": 0.5805,
+      "rsi": 58.28,
+      "stoch": 29.85,
+      "pack_agreement": 1.0,
+      "btc_ret_1h": -0.1284
+    },
+    "bet_amount": 0.1,
+    "contracts": 20,
+    "entry_minute": 2.2,
+    "timestamp": "2026-07-06T02:02:26.148433+00:00",
+    "window_end": "2026-07-06T02:15:00+00:00",
+    "result": "open",
+    "strategy_version": "v7",
+    "action": "trade",
+    "order_id": "51eaafea-9c88-4804-bc57-31dbcba92afc",
+    "status": "resting",
+    "fill_price": 0.66,
+    "filled_count": 20
   }
 ]
