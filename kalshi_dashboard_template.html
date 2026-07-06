@@ -569,7 +569,7 @@
     </div>
     <div class="scroll-table" style="margin-top:12px">
       <table>
-        <thead><tr><th>Date</th><th>Ver</th><th>Crypto</th><th>Side</th><th>Price</th><th>Score</th><th>Reasons</th><th>Action</th><th>P&L</th><th>Status</th></tr></thead>
+        <thead><tr><th>Date</th><th>Ver</th><th>Crypto</th><th>Side</th><th>Price</th><th>Score</th><th>Qty</th><th>Reasons</th><th>Action</th><th>P&L</th><th>Status</th></tr></thead>
         <tbody id="scoreBetsBody"></tbody>
       </table>
     </div>
@@ -1297,9 +1297,18 @@ function renderScoreBot() {
   const avgPnl = d.resolved > 0 ? d.total_pnl / d.resolved : 0;
   const sBal = d.balance || 0;
   const sPort = d.portfolio_value || 0;
+  // Reconciliation: account change since reset vs recorded P&L
+  let pnlSub = `Avg $${avgPnl >= 0 ? '+' : ''}${avgPnl.toFixed(2)}/trade`;
+  const rb = d.reset_baseline;
+  if (rb && rb.account_value > 0 && (sBal + sPort) > 0) {
+    const acctChange = (sBal + sPort) - rb.account_value;
+    const drift = acctChange - d.total_pnl;
+    const ok = Math.abs(drift) <= Math.max(5, Math.abs(d.total_pnl) * 0.05);
+    pnlSub = `Account ${acctChange >= 0 ? '+' : ''}$${acctChange.toFixed(2)} since reset ${ok ? '✓' : `⚠ drift $${drift.toFixed(2)}`}`;
+  }
   const kpis = [
     { label: 'Account Value', value: (sBal + sPort) > 0 ? `$${(sBal + sPort).toFixed(2)}` : '--', cls: 'cyan', sub: `$${sBal.toFixed(2)} cash + $${sPort.toFixed(2)} portfolio` },
-    { label: 'Total P&L', value: `$${d.total_pnl >= 0 ? '+' : ''}${d.total_pnl.toFixed(2)}`, cls: d.total_pnl >= 0 ? 'green' : 'red', sub: `Avg $${avgPnl >= 0 ? '+' : ''}${avgPnl.toFixed(2)}/trade` },
+    { label: 'Total P&L', value: `$${d.total_pnl >= 0 ? '+' : ''}${d.total_pnl.toFixed(2)}`, cls: d.total_pnl >= 0 ? 'green' : 'red', sub: pnlSub },
     { label: 'Win Rate', value: d.resolved > 0 ? `${wr}%` : '--', cls: wr >= 55 ? 'green' : wr >= 45 ? 'orange' : 'red', sub: `${d.wins}W - ${d.losses}L of ${d.resolved}` },
     { label: 'Total Trades', value: `${d.total_trades}`, cls: 'purple', sub: `${d.resolved} resolved` },
   ];
@@ -1511,7 +1520,23 @@ function renderScoreBot() {
       tblHtml += `<td style="border-left:2px solid var(--border);color:${ctpc};font-weight:700">$${cryptoTotals[c] >= 0 ? '+' : ''}${cryptoTotals[c].toFixed(2)}</td>`;
     });
     tblHtml += '</tr></tbody></table></div></div>';
-    document.getElementById('scoreDailyContent').innerHTML = tblHtml;
+    const chartHtml = '<div class="card" style="margin-bottom:16px"><div class="chart-container med"><canvas id="scoreDailyChart"></canvas></div></div>';
+    document.getElementById('scoreDailyContent').innerHTML = chartHtml + tblHtml;
+    // Daily P&L bar chart (ascending dates)
+    const chartDates = [...dailyDates].reverse();
+    const chartVals = chartDates.map(dt => parseFloat(dailyMap[dt].pnl.toFixed(2)));
+    if (_scoreCharts.daily) { _scoreCharts.daily.destroy(); _scoreCharts.daily = null; }
+    _scoreCharts.daily = new Chart(document.getElementById('scoreDailyChart'), {
+      type: 'bar',
+      data: {
+        labels: chartDates.map(dt => new Date(dt + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })),
+        datasets: [{ data: chartVals, backgroundColor: chartVals.map(v => v >= 0 ? 'rgba(34,197,94,0.75)' : 'rgba(239,68,68,0.75)') }]
+      },
+      options: { responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `P&L: ${ctx.raw >= 0 ? '+' : ''}$${ctx.raw.toFixed(2)}` } } },
+        scales: { x: { ticks: { color: '#8b8fa3', maxTicksLimit: 12 }, grid: { display: false } },
+                  y: { ticks: { color: '#8b8fa3', callback: v => '$' + v }, grid: { color: 'rgba(42,45,58,0.3)' } } } }
+    });
   }
 
   // Scaling performance
@@ -1539,13 +1564,18 @@ function renderScoreBot() {
   let coBanner = '';
   if (co) {
     const need = Math.ceil(co.threshold * co.window);
+    let lidStats = '';
+    if (co.lid_trades) {
+      const savedCls = co.saved >= 0 ? '#22c55e' : '#ef4444';
+      lidStats = ` <span style="color:var(--muted)">·</span> <span style="font-size:12px;color:var(--muted)">lid history: ${co.lid_trades} trades, ${co.lid_win_rate}% WR, <span style="color:${savedCls};font-weight:600">${co.saved >= 0 ? 'saved' : 'cost'} $${Math.abs(co.saved).toFixed(2)}</span> vs staying scaled</span>`;
+    }
     if (co.active) {
       coBanner = `<div class="card" style="flex-basis:100%;border-left:3px solid var(--blue, #3b82f6);padding:10px 16px">
         <span style="background:rgba(59,130,246,0.15);color:#3b82f6;padding:3px 10px;border-radius:6px;font-weight:700;font-size:13px">❄️ COOL-OFF ACTIVE</span>
-        <span style="margin-left:10px;font-size:13px;color:var(--text)">${co.wins}/${co.window} recent wins ≥ ${need} — trading 1x until the run cools (group states unaffected)</span>
+        <span style="margin-left:10px;font-size:13px;color:var(--text)">${co.wins}/${co.window} recent wins ≥ ${need} — trading 1x until the run cools (group states unaffected)</span>${lidStats}
       </div>`;
     } else {
-      coBanner = `<div style="flex-basis:100%;font-size:12px;color:var(--muted);padding:0 4px">Cool-off: ${co.wins}/${co.window} recent wins — arms at ${need}</div>`;
+      coBanner = `<div style="flex-basis:100%;font-size:12px;color:var(--muted);padding:0 4px">Cool-off: ${co.wins}/${co.window} recent wins — arms at ${need}${lidStats}</div>`;
     }
   }
   document.getElementById('scalingStatusCards').innerHTML = coBanner + Object.entries(ss).map(([gname, s]) => {
@@ -1616,6 +1646,14 @@ function renderScoreTable(bets) {
     const pnl = b.result === 'win' || b.result === 'loss' ? pnlHtml(b.pnl) : '-';
     const status = b.result ? `<span class="tag ${b.result}">${b.result.toUpperCase()}</span>` : '-';
     const verTag = b.strategy_version ? `<span class="badge badge-bot" style="font-size:10px">${b.strategy_version.toUpperCase()}</span>` : '-';
+    let qty = '-';
+    if (b.action === 'trade') {
+      const c = b.contracts || 1;
+      const fc = b.filled_count || c;
+      const scaled = c > 1;
+      qty = `<span style="font-weight:600;color:${scaled ? 'var(--purple)' : 'var(--muted)'}">${fc}${fc !== c ? '/' + c : ''}</span>`;
+      if (b.cool_off) qty += ` <span title="cool-off capped this trade at 1x (would be ${b.blocked_scale}x)" style="font-size:11px">❄️</span>`;
+    }
     return `<tr>
       <td>${b.timestamp ? getDate(b.timestamp) : '-'}</td>
       <td>${verTag}</td>
@@ -1623,6 +1661,7 @@ function renderScoreTable(bets) {
       <td>${(b.side || '').toUpperCase()}</td>
       <td>${((b.fill_price || b.price) * 100).toFixed(1)}c</td>
       <td style="color:${scoreColor};font-weight:600">${scoreDisplay}</td>
+      <td>${qty}</td>
       <td style="font-size:11px;max-width:280px;overflow:hidden;text-overflow:ellipsis">${reasons}</td>
       <td>${actionTag}</td>
       <td>${pnl}</td>

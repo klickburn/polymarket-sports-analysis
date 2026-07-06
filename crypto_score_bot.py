@@ -1026,8 +1026,12 @@ def _get_scale_group(signal_count):
             return name, cfg
     return None, None
 
+_cool_off_blocked = 0  # >0: last get_dynamic_contracts call was capped by the lid
+
 def get_dynamic_contracts(bets, crypto, signal_count):
     """Grouped scaling with cool-off lid: BTC+ETH combined, split up/down windows."""
+    global _cool_off_blocked
+    _cool_off_blocked = 0
     contracts = _group_scale_contracts(bets, crypto, signal_count)
     # Cool-off: trailing WR >= threshold means the run is euphoric — forward
     # edge is ~zero there, so cap at 1x until it cools (group states unaffected)
@@ -1040,6 +1044,7 @@ def get_dynamic_contracts(bets, crypto, signal_count):
             wr = sum(1 for b in last if b["result"] == "win") / len(last)
             if wr >= COOL_OFF_WR:
                 P(f"  [SCALE] Cool-off: trailing WR {wr:.0%} >= {COOL_OFF_WR:.0%} — trading 1x")
+                _cool_off_blocked = contracts
                 return 1
     return contracts
 
@@ -1379,6 +1384,9 @@ def run(live=False):
                 sig_count = tq["score"] + 3
                 current_contracts = get_dynamic_contracts(bets, tq["crypto"], sig_count)
                 tq["bet_record"]["contracts"] = current_contracts
+                if _cool_off_blocked > 0:
+                    tq["bet_record"]["cool_off"] = True
+                    tq["bet_record"]["blocked_scale"] = _cool_off_blocked
                 try:
                     result = place_order(tq["ticker"], tq["side"], tq["price"], BET_AMOUNT, count=current_contracts)
                     if not result:

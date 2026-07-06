@@ -699,6 +699,19 @@ def _build_scaling_performance(resolved, status=None):
                 "window": COOL_OFF_WINDOW,
                 "threshold": COOL_OFF_WR,
             }
+            # Lid effectiveness: trades placed while the lid was on
+            lid = [b for b in resolved if b.get("cool_off")]
+            if lid:
+                lid_wins = sum(1 for b in lid if b.get("result") == "win")
+                lid_pnl = sum(b.get("pnl", 0) for b in lid)
+                # What those trades would have made at the blocked scale;
+                # negative saved = the lid cost money (hot run continued)
+                saved = -sum(b.get("pnl", 0) * (b.get("blocked_scale", SCALE_UP_COUNT) - 1)
+                             for b in lid)
+                cool_off["lid_trades"] = len(lid)
+                cool_off["lid_win_rate"] = round(lid_wins / len(lid) * 100, 1)
+                cool_off["lid_pnl"] = round(lid_pnl, 2)
+                cool_off["saved"] = round(saved, 2)
     except Exception:
         pass
 
@@ -716,7 +729,8 @@ def _build_scaling_performance(resolved, status=None):
 
 _SLIM_KEEP = {"crypto", "side", "price", "fill_price", "score", "action", "result",
               "pnl", "contracts", "filled_count", "timestamp", "strategy_version",
-              "bet_amount", "would_have_won", "hypothetical_pnl", "market_result"}
+              "bet_amount", "would_have_won", "hypothetical_pnl", "market_result",
+              "cool_off", "blocked_scale"}
 _DETAIL_KEYS = {"reasons", "score_breakdown", "indicators", "entry_minute", "window_end",
                 "order_id", "event_ticker", "ticker"}
 
@@ -806,7 +820,28 @@ def _build_score_report(bets, status, balance_info=None):
         "strategy_version": os.environ.get("SCORE_VERSION", "v4"),
         "balance": (balance_info or {}).get("balance", 0),
         "portfolio_value": (balance_info or {}).get("portfolio_value", 0),
+        "reset_baseline": _load_reset_baseline(),
     }
+
+
+def _load_reset_baseline():
+    try:
+        with open(os.path.join(SCORE_DATA_DIR, ".reset_baseline")) as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+@app.post("/api/set-reset-baseline")
+def set_reset_baseline(value: float):
+    """Manually set the account-value baseline (for resets before this feature)."""
+    try:
+        with open(os.path.join(SCORE_DATA_DIR, ".reset_baseline"), "w") as f:
+            json.dump({"ts": datetime.now(timezone.utc).isoformat(),
+                       "account_value": round(value, 2), "manual": True}, f)
+        return JSONResponse({"status": "ok", "account_value": round(value, 2)})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 def score_resolve_loop():
@@ -1002,6 +1037,16 @@ def reset_score_data():
         reset_ts = os.path.join(SCORE_DATA_DIR, ".reset_ts")
         with open(reset_ts, "w") as f:
             f.write(datetime.now(timezone.utc).isoformat())
+        # Snapshot account value so the dashboard can reconcile P&L vs balance
+        try:
+            bal = get_balance() or {}
+            with open(os.path.join(SCORE_DATA_DIR, ".reset_baseline"), "w") as f:
+                json.dump({
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                    "account_value": round(bal.get("balance", 0) + bal.get("portfolio_value", 0), 2),
+                }, f)
+        except Exception:
+            pass
         with _score_lock:
             _score_cache["result"] = None
         # Also clear the git repo copy so it doesn't restore on next deploy
