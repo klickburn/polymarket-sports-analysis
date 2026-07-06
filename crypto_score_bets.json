@@ -188822,5 +188822,101 @@
     "status": "resting",
     "fill_price": 0.66,
     "filled_count": 20
+  },
+  {
+    "crypto": "ETH",
+    "ticker": "KXETH15M-26JUL052215-15",
+    "event_ticker": "KXETH15M-26JUL052215",
+    "side": "yes",
+    "price": 0.74,
+    "score": -1,
+    "reasons": [
+      [
+        "Signal Score",
+        "2/8",
+        "2"
+      ],
+      [
+        "RSI Misalign",
+        "YES RSI=51.2",
+        "0"
+      ],
+      [
+        "1h MeanRev",
+        "ret=-0.07%",
+        "+1"
+      ],
+      [
+        "BTC Same",
+        "btc=+0.00%",
+        "0"
+      ],
+      [
+        "High Vol",
+        "0.68\u22650.3",
+        "+1"
+      ],
+      [
+        "Consensus",
+        "all YES",
+        "0"
+      ],
+      [
+        "Stoch High",
+        "35.1",
+        "0"
+      ]
+    ],
+    "score_breakdown": {
+      "Signal Score": {
+        "detail": "2/8",
+        "points": 2
+      },
+      "RSI Misalign": {
+        "detail": "YES RSI=51.2",
+        "points": 0
+      },
+      "1h MeanRev": {
+        "detail": "ret=-0.07%",
+        "points": 1
+      },
+      "BTC Same": {
+        "detail": "btc=+0.00%",
+        "points": 0
+      },
+      "High Vol": {
+        "detail": "0.68\u22650.3",
+        "points": 1
+      },
+      "Consensus": {
+        "detail": "all YES",
+        "points": 0
+      },
+      "Stoch High": {
+        "detail": "35.1",
+        "points": 0
+      }
+    },
+    "indicators": {
+      "ret_1h": -0.0747,
+      "ret_3h": -0.3325,
+      "vol_6h": 0.683,
+      "rsi": 51.17,
+      "stoch": 35.12,
+      "pack_agreement": 1.0,
+      "btc_ret_1h": -0.1284
+    },
+    "bet_amount": 0.1,
+    "contracts": 20,
+    "entry_minute": 3.0,
+    "timestamp": "2026-07-06T02:03:09.371139+00:00",
+    "window_end": "2026-07-06T02:15:00+00:00",
+    "result": "open",
+    "strategy_version": "v7",
+    "action": "trade",
+    "order_id": "1729ef9f-87ca-4ab0-8cbb-d3c7d888c13f",
+    "status": "executed",
+    "fill_price": 0.76,
+    "filled_count": 20
   }
 ]
