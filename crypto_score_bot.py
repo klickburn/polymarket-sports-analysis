@@ -938,6 +938,9 @@ SCALE_GROUPS = {
 SCALE_UP_COUNT = int(os.environ.get("SCALE_UP_COUNT", 5))
 COOL_OFF_WR = float(os.environ.get("COOL_OFF_WR", "0.8"))       # 0 disables
 COOL_OFF_WINDOW = int(os.environ.get("COOL_OFF_WINDOW", "10"))
+# Bypass the lid during a clean consecutive win streak of >= N (0 disables).
+# Distinguishes a durable run (ride it at full size) from choppy euphoria.
+COOL_OFF_BYPASS_STREAK = int(os.environ.get("COOL_OFF_BYPASS_STREAK", "6"))
 _scale_state = {}
 _scale_up_at = {}  # group -> trade count when scaled up (for down-check offset)
 
@@ -1043,9 +1046,20 @@ def get_dynamic_contracts(bets, crypto, signal_count):
         if len(last) >= COOL_OFF_WINDOW:
             wr = sum(1 for b in last if b["result"] == "win") / len(last)
             if wr >= COOL_OFF_WR:
-                P(f"  [SCALE] Cool-off: trailing WR {wr:.0%} >= {COOL_OFF_WR:.0%} — trading 1x")
-                _cool_off_blocked = contracts
-                return 1
+                # Bypass the lid on a clean consecutive win streak — a durable
+                # run keeps its edge, unlike choppy 80% (wins with losses mixed)
+                streak = 0
+                for b in reversed(resolved):
+                    if b["result"] == "win":
+                        streak += 1
+                    else:
+                        break
+                if COOL_OFF_BYPASS_STREAK > 0 and streak >= COOL_OFF_BYPASS_STREAK:
+                    P(f"  [SCALE] Cool-off bypass: {streak}-win streak — staying {contracts}x")
+                else:
+                    P(f"  [SCALE] Cool-off: trailing WR {wr:.0%} >= {COOL_OFF_WR:.0%} — trading 1x")
+                    _cool_off_blocked = contracts
+                    return 1
     return contracts
 
 def _group_scale_contracts(bets, crypto, signal_count):

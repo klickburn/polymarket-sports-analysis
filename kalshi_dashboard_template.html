@@ -1569,13 +1569,19 @@ function renderScoreBot() {
       const savedCls = co.saved >= 0 ? '#22c55e' : '#ef4444';
       lidStats = ` <span style="color:var(--muted)">·</span> <span style="font-size:12px;color:var(--muted)">lid history: ${co.lid_trades} trades, ${co.lid_win_rate}% WR, <span style="color:${savedCls};font-weight:600">${co.saved >= 0 ? 'saved' : 'cost'} $${Math.abs(co.saved).toFixed(2)}</span> vs staying scaled</span>`;
     }
-    if (co.active) {
+    if (co.bypassing) {
+      coBanner = `<div class="card" style="flex-basis:100%;border-left:3px solid #22c55e;padding:10px 16px">
+        <span style="background:rgba(34,197,94,0.15);color:#22c55e;padding:3px 10px;border-radius:6px;font-weight:700;font-size:13px">🔥 STREAK BYPASS</span>
+        <span style="margin-left:10px;font-size:13px;color:var(--text)">${co.win_streak}-win streak ≥ ${co.bypass_streak} — riding the run at full scale (lid would fire at ${co.wins}/${co.window})</span>${lidStats}
+      </div>`;
+    } else if (co.active) {
       coBanner = `<div class="card" style="flex-basis:100%;border-left:3px solid var(--blue, #3b82f6);padding:10px 16px">
         <span style="background:rgba(59,130,246,0.15);color:#3b82f6;padding:3px 10px;border-radius:6px;font-weight:700;font-size:13px">❄️ COOL-OFF ACTIVE</span>
         <span style="margin-left:10px;font-size:13px;color:var(--text)">${co.wins}/${co.window} recent wins ≥ ${need} — trading 1x until the run cools (group states unaffected)</span>${lidStats}
       </div>`;
     } else {
-      coBanner = `<div style="flex-basis:100%;font-size:12px;color:var(--muted);padding:0 4px">Cool-off: ${co.wins}/${co.window} recent wins — arms at ${need}${lidStats}</div>`;
+      const streakNote = co.win_streak ? ` · streak ${co.win_streak} (bypass at ${co.bypass_streak})` : '';
+      coBanner = `<div style="flex-basis:100%;font-size:12px;color:var(--muted);padding:0 4px">Cool-off: ${co.wins}/${co.window} recent wins — arms at ${need}${streakNote}${lidStats}</div>`;
     }
   }
   document.getElementById('scalingStatusCards').innerHTML = coBanner + Object.entries(ss).map(([gname, s]) => {

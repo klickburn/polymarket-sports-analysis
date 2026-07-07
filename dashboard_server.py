@@ -718,16 +718,26 @@ def _build_scaling_performance(resolved, status=None):
     # Cool-off lid state (mirrors bot logic: trailing WR over last N resolved)
     cool_off = None
     try:
-        from crypto_score_bot import COOL_OFF_WR, COOL_OFF_WINDOW
+        from crypto_score_bot import COOL_OFF_WR, COOL_OFF_WINDOW, COOL_OFF_BYPASS_STREAK
         if COOL_OFF_WR > 0:
             last = all_resolved[-COOL_OFF_WINDOW:]
             wins = sum(1 for b in last if b.get("result") == "win")
             wr = wins / len(last) if last else 0
+            streak = 0
+            for b in reversed(all_resolved):
+                if b.get("result") == "win":
+                    streak += 1
+                else:
+                    break
+            bypassing = (COOL_OFF_BYPASS_STREAK > 0 and streak >= COOL_OFF_BYPASS_STREAK)
             cool_off = {
-                "active": len(last) >= COOL_OFF_WINDOW and wr >= COOL_OFF_WR,
+                "active": len(last) >= COOL_OFF_WINDOW and wr >= COOL_OFF_WR and not bypassing,
                 "wins": wins,
                 "window": COOL_OFF_WINDOW,
                 "threshold": COOL_OFF_WR,
+                "win_streak": streak,
+                "bypass_streak": COOL_OFF_BYPASS_STREAK,
+                "bypassing": bool(len(last) >= COOL_OFF_WINDOW and wr >= COOL_OFF_WR and bypassing),
             }
             # Lid effectiveness: trades placed while the lid was on
             lid = [b for b in resolved if b.get("cool_off")]
