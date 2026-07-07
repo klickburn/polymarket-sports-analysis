@@ -958,6 +958,21 @@ def audit_pnl(limit: int = 150, repair: bool = False):
                                        "recorded_fc": b.get("filled_count"), "actual_fc": fc,
                                        "recorded_pnl": rec, "actual_pnl": round(actual, 2),
                                        "fee": round(fees, 2)})
+        # Independent cross-check: query orders API for a sample of phantoms
+        phantom_verify = []
+        for b in phantoms[:20]:
+            try:
+                od = auth_get(f"/portfolio/orders/{b['order_id']}").get("order", {})
+                phantom_verify.append({
+                    "ts": b.get("timestamp", "")[:19], "crypto": b.get("crypto"),
+                    "order_status": od.get("status"),
+                    "count": od.get("count"), "remaining": od.get("remaining_count"),
+                    "taker_filled": od.get("taker_fill_count"),
+                })
+                time.sleep(0.1)
+            except Exception as e:
+                phantom_verify.append({"ts": b.get("timestamp", "")[:19], "error": str(e)[:40]})
+
         if repair and (phantoms or mismatches):
             with open(SCORE_BETS_FILE, "w") as f:
                 json.dump(bets, f)
@@ -972,8 +987,10 @@ def audit_pnl(limit: int = 150, repair: bool = False):
             "actual_pnl": round(actual_sum, 2),
             "total_fees": round(fees_sum, 2),
             "overstatement": round(recorded_sum - actual_sum, 2),
+            "phantom_count": len(phantoms),
+            "phantom_verify": phantom_verify,
             "phantom_trades": [{"ts": b.get("timestamp", "")[:19], "crypto": b.get("crypto"),
-                                "pnl_was": b.get("pnl"), "c": b.get("contracts")} for b in phantoms],
+                                "pnl_was": b.get("pnl"), "c": b.get("contracts")} for b in phantoms[:15]],
             "mismatches": mismatches[:25],
             "repaired": bool(repair and (phantoms or mismatches)),
         })
