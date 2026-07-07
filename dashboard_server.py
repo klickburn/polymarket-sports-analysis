@@ -879,23 +879,33 @@ def audit_pnl(limit: int = 150, repair: bool = False):
         mismatches, phantoms = [], []
         checked = 0
         recorded_sum = actual_sum = 0.0
+        fees_sum = 0.0
         for b in sample:
             fills = fills_by_order.get(b["order_id"], [])
             if not fills and not covered and b.get("timestamp", "") < (oldest_fill or ""):
                 continue  # fills feed didn't reach back this far — can't judge
-            fc = sum(int(f.get("count", 0)) for f in fills)
-            if fc > 0:
+            buys = sells = fees = 0.0
+            qty_buy = qty_sell = 0.0
+            for f in fills:
+                q = float(f.get("count_fp") or f.get("count") or 0)
                 if b.get("side") == "no":
-                    cost = sum(int(f.get("count", 0)) * (f.get("no_price", 0) / 100.0) for f in fills)
+                    px = float(f.get("no_price_dollars") or 0)
                 else:
-                    cost = sum(int(f.get("count", 0)) * (f.get("yes_price", 0) / 100.0) for f in fills)
-                actual = (fc - cost) if b["result"] == "win" else -cost
-            else:
-                actual = 0.0
+                    px = float(f.get("yes_price_dollars") or 0)
+                fees += float(f.get("fee_cost") or 0)
+                if f.get("action") == "sell":
+                    qty_sell += q; sells += q * px
+                else:
+                    qty_buy += q; buys += q * px
+            fc = int(qty_buy)
+            held = qty_buy - qty_sell
+            payout = held if b["result"] == "win" else 0.0
+            actual = payout + sells - buys - fees
             rec = b.get("pnl", 0)
             checked += 1
             recorded_sum += rec
             actual_sum += actual
+            fees_sum += fees
             if fc == 0:
                 phantoms.append(b)
                 if repair:
@@ -924,6 +934,7 @@ def audit_pnl(limit: int = 150, repair: bool = False):
             "debug_sample_order_id": sample[-1].get("order_id") if sample else None,
             "recorded_pnl": round(recorded_sum, 2),
             "actual_pnl": round(actual_sum, 2),
+            "total_fees": round(fees_sum, 2),
             "overstatement": round(recorded_sum - actual_sum, 2),
             "phantom_trades": [{"ts": b.get("timestamp", "")[:19], "crypto": b.get("crypto"),
                                 "pnl_was": b.get("pnl"), "c": b.get("contracts")} for b in phantoms],
