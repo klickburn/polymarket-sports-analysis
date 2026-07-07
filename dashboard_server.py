@@ -864,135 +864,69 @@ def _load_reset_baseline():
 
 @app.get("/api/audit-pnl")
 def audit_pnl(limit: int = 150, repair: bool = False):
-    """Verify recorded resolved trades against Kalshi's actual fills.
-    With repair=true, phantom trades (zero real fills) are marked unfilled."""
+    """Authoritative fill check via the orders API status field.
+    Only orders that are canceled/expired with zero fills are genuine
+    phantoms; with repair=true those are marked unfilled (P&L zeroed).
+    Fees are handled separately by the live resolve loop's estimate."""
     try:
         with open(SCORE_BETS_FILE) as f:
             bets = json.load(f)
-        def _epoch(ts):
-            if not ts:
-                return None
-            try:
-                return datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
-            except Exception:
-                return None
-
         resolved = [b for b in bets if b.get("action") == "trade" and b.get("order_id")
                     and b.get("result") in ("win", "loss")]
         sample = resolved[-min(limit, 400):]
         if not sample:
             return JSONResponse({"checked": 0, "note": "no resolved trades with order_id"})
-        oldest_needed = min((_epoch(b.get("timestamp")) or 1e18) for b in sample)
 
-        # Bulk-fetch the fills feed (per-order lookups return empty after settlement)
-        fills_by_order = {}
-        oldest_fill_e = None
-        cursor = None
-        for _ in range(60):
-            params = {"limit": 200}
-            if cursor:
-                params["cursor"] = cursor
-            resp = auth_get("/portfolio/fills", params=params)
-            fl = resp.get("fills", [])
-            for f in fl:
-                fills_by_order.setdefault(f.get("order_id"), []).append(f)
-                e = _epoch(f.get("created_time"))
-                if e and (oldest_fill_e is None or e < oldest_fill_e):
-                    oldest_fill_e = e
-            cursor = resp.get("cursor")
-            # Stop once the feed reaches older than our oldest sampled trade
-            if not fl or not cursor or (oldest_fill_e and oldest_fill_e <= oldest_needed):
-                break
-            time.sleep(0.2)
-
-        covered = oldest_fill_e is not None and oldest_fill_e <= oldest_needed
-        mismatches, phantoms = [], []
-        checked = skipped = 0
-        recorded_sum = actual_sum = 0.0
-        fees_sum = 0.0
+        from collections import Counter
+        status_counts = Counter()
+        phantoms, not_found = [], []
+        checked = 0
         for b in sample:
-            fills = fills_by_order.get(b["order_id"], [])
-            be = _epoch(b.get("timestamp"))
-            in_range = covered or (oldest_fill_e is not None and be is not None and be >= oldest_fill_e)
-            if not fills and not in_range:
-                skipped += 1  # feed didn't reach this trade — can't judge
+            try:
+                od = auth_get(f"/portfolio/orders/{b['order_id']}").get("order", {})
+            except Exception as e:
+                if "404" in str(e):
+                    status_counts["not_found"] += 1
+                    not_found.append(b)
+                else:
+                    status_counts["error"] += 1
+                time.sleep(0.05)
                 continue
-            buys = sells = fees = 0.0
-            qty_buy = qty_sell = 0.0
-            for f in fills:
-                q = float(f.get("count_fp") or f.get("count") or 0)
-                if b.get("side") == "no":
-                    px = float(f.get("no_price_dollars") or 0)
-                else:
-                    px = float(f.get("yes_price_dollars") or 0)
-                fees += float(f.get("fee_cost") or 0)
-                if f.get("action") == "sell":
-                    qty_sell += q; sells += q * px
-                else:
-                    qty_buy += q; buys += q * px
-            fc = int(round(qty_buy))
-            held = qty_buy - qty_sell
-            payout = held if b["result"] == "win" else 0.0
-            actual = payout + sells - buys - fees
-            rec = b.get("pnl", 0)
             checked += 1
-            recorded_sum += rec
-            actual_sum += actual
-            fees_sum += fees
-            if fc == 0:
+            status = od.get("status", "unknown")
+            status_counts[status] += 1
+            # Genuine phantom: order resolved without executing
+            remaining = od.get("remaining_count")
+            count = od.get("count")
+            never_filled = status in ("canceled", "expired")
+            if count is not None and remaining is not None:
+                never_filled = never_filled and (int(count) - int(remaining) == 0)
+            if never_filled:
                 phantoms.append(b)
                 if repair:
                     b["result"] = "unfilled"
                     b["pnl"] = 0
                     b["filled_count"] = 0
                     b["audited"] = True
-            else:
-                if repair:
-                    b["filled_count"] = fc
-                    b["fee"] = round(fees, 4)
-                    b["pnl"] = round(actual, 2)
-                    b["audited"] = True
-                if abs(rec - actual) > 0.05:
-                    mismatches.append({"ts": b.get("timestamp", "")[:19], "crypto": b.get("crypto"),
-                                       "side": b.get("side"), "result": b.get("result"),
-                                       "recorded_fc": b.get("filled_count"), "actual_fc": fc,
-                                       "recorded_pnl": rec, "actual_pnl": round(actual, 2),
-                                       "fee": round(fees, 2)})
-        # Independent cross-check: query orders API for a sample of phantoms
-        phantom_verify = []
-        for b in phantoms[:20]:
-            try:
-                od = auth_get(f"/portfolio/orders/{b['order_id']}").get("order", {})
-                phantom_verify.append({
-                    "ts": b.get("timestamp", "")[:19], "crypto": b.get("crypto"),
-                    "order_status": od.get("status"),
-                    "count": od.get("count"), "remaining": od.get("remaining_count"),
-                    "taker_filled": od.get("taker_fill_count"),
-                })
-                time.sleep(0.1)
-            except Exception as e:
-                phantom_verify.append({"ts": b.get("timestamp", "")[:19], "error": str(e)[:40]})
+            time.sleep(0.05)
 
-        if repair and (phantoms or mismatches):
+        if repair and phantoms:
             with open(SCORE_BETS_FILE, "w") as f:
                 json.dump(bets, f)
             with _score_lock:
-                _score_cache["result"] = None  # force rebuild with corrected P&L
+                _score_cache["result"] = None
+
+        phantom_pnl = round(sum(b.get("pnl", 0) for b in phantoms), 2)
         return JSONResponse({
             "checked": checked,
-            "skipped_out_of_range": skipped,
-            "fills_fetched": sum(len(v) for v in fills_by_order.values()),
-            "fills_cover_sample": covered,
-            "recorded_pnl": round(recorded_sum, 2),
-            "actual_pnl": round(actual_sum, 2),
-            "total_fees": round(fees_sum, 2),
-            "overstatement": round(recorded_sum - actual_sum, 2),
-            "phantom_count": len(phantoms),
-            "phantom_verify": phantom_verify,
-            "phantom_trades": [{"ts": b.get("timestamp", "")[:19], "crypto": b.get("crypto"),
-                                "pnl_was": b.get("pnl"), "c": b.get("contracts")} for b in phantoms[:15]],
-            "mismatches": mismatches[:25],
-            "repaired": bool(repair and (phantoms or mismatches)),
+            "status_distribution": dict(status_counts),
+            "genuine_phantoms": len(phantoms),
+            "phantom_pnl_removed": phantom_pnl if repair else None,
+            "phantom_pnl_if_repaired": phantom_pnl,
+            "not_found_orders": len(not_found),
+            "phantom_samples": [{"ts": b.get("timestamp", "")[:19], "crypto": b.get("crypto"),
+                                 "pnl": b.get("pnl"), "c": b.get("contracts")} for b in phantoms[:15]],
+            "repaired": bool(repair and phantoms),
         })
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
