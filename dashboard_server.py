@@ -849,54 +849,74 @@ def audit_pnl(limit: int = 150, repair: bool = False):
         resolved = [b for b in bets if b.get("action") == "trade" and b.get("order_id")
                     and b.get("result") in ("win", "loss")]
         sample = resolved[-min(limit, 300):]
+        if not sample:
+            return JSONResponse({"checked": 0, "note": "no resolved trades with order_id"})
+        oldest_needed = min(b.get("timestamp", "") for b in sample)
+
+        # Bulk-fetch the fills feed (per-order lookups don't work after settlement)
+        fills_by_order = {}
+        oldest_fill = None
+        cursor = None
+        for _ in range(40):
+            params = {"limit": 200}
+            if cursor:
+                params["cursor"] = cursor
+            resp = auth_get("/portfolio/fills", params=params)
+            fl = resp.get("fills", [])
+            if not fl:
+                break
+            for f in fl:
+                fills_by_order.setdefault(f.get("order_id"), []).append(f)
+                ct = f.get("created_time", "")
+                if ct and (oldest_fill is None or ct < oldest_fill):
+                    oldest_fill = ct
+            cursor = resp.get("cursor")
+            if not cursor or (oldest_fill and oldest_fill < oldest_needed):
+                break
+            time.sleep(0.2)
+
+        covered = oldest_fill is not None and oldest_fill <= oldest_needed
         mismatches, phantoms = [], []
         checked = 0
         recorded_sum = actual_sum = 0.0
         for b in sample:
-            try:
-                resp = auth_get(f"/portfolio/orders/{b['order_id']}")
-                order = resp.get("order", {})
-                if not order.get("order_id"):
-                    continue  # order data unavailable — can't judge, skip
-                total = int(order.get("count", 0))
-                remaining = int(order.get("remaining_count", 0))
-                fc = max(0, total - remaining)
-                if fc > 0:
-                    avg_p = order.get("avg_price") or 0
-                    if avg_p > 1:
-                        avg_p = avg_p / 100.0
-                    if avg_p and b.get("side") == "no":
-                        avg_p = 1.0 - avg_p
-                    price = avg_p or b.get("fill_price", b.get("price", 0))
-                    cost = fc * price
-                    actual = (fc - cost) if b["result"] == "win" else -cost
+            fills = fills_by_order.get(b["order_id"], [])
+            if not fills and not covered and b.get("timestamp", "") < (oldest_fill or ""):
+                continue  # fills feed didn't reach back this far — can't judge
+            fc = sum(int(f.get("count", 0)) for f in fills)
+            if fc > 0:
+                if b.get("side") == "no":
+                    cost = sum(int(f.get("count", 0)) * (f.get("no_price", 0) / 100.0) for f in fills)
                 else:
-                    actual = 0.0
-                rec = b.get("pnl", 0)
-                checked += 1
-                recorded_sum += rec
-                actual_sum += actual
-                if fc == 0:
-                    phantoms.append(b)
-                    if repair:
-                        b["result"] = "unfilled"
-                        b["pnl"] = 0
-                elif abs(rec - actual) > 0.05:
-                    mismatches.append({"ts": b.get("timestamp", "")[:19], "crypto": b.get("crypto"),
-                                       "side": b.get("side"), "result": b.get("result"),
-                                       "recorded_fc": b.get("filled_count"), "actual_fc": fc,
-                                       "recorded_pnl": rec, "actual_pnl": round(actual, 2)})
-                    if repair:
-                        b["filled_count"] = fc
-                        b["pnl"] = round(actual, 2)
-                time.sleep(0.15)
-            except Exception:
-                pass
+                    cost = sum(int(f.get("count", 0)) * (f.get("yes_price", 0) / 100.0) for f in fills)
+                actual = (fc - cost) if b["result"] == "win" else -cost
+            else:
+                actual = 0.0
+            rec = b.get("pnl", 0)
+            checked += 1
+            recorded_sum += rec
+            actual_sum += actual
+            if fc == 0:
+                phantoms.append(b)
+                if repair:
+                    b["result"] = "unfilled"
+                    b["pnl"] = 0
+            elif abs(rec - actual) > 0.05:
+                mismatches.append({"ts": b.get("timestamp", "")[:19], "crypto": b.get("crypto"),
+                                   "side": b.get("side"), "result": b.get("result"),
+                                   "recorded_fc": b.get("filled_count"), "actual_fc": fc,
+                                   "recorded_pnl": rec, "actual_pnl": round(actual, 2)})
+                if repair:
+                    b["filled_count"] = fc
+                    b["pnl"] = round(actual, 2)
         if repair and (phantoms or mismatches):
             with open(SCORE_BETS_FILE, "w") as f:
                 json.dump(bets, f)
         return JSONResponse({
             "checked": checked,
+            "fills_fetched": sum(len(v) for v in fills_by_order.values()),
+            "fills_cover_sample": covered,
+            "oldest_fill": oldest_fill,
             "recorded_pnl": round(recorded_sum, 2),
             "actual_pnl": round(actual_sum, 2),
             "overstatement": round(recorded_sum - actual_sum, 2),
