@@ -1116,10 +1116,13 @@ def _resolve_open_bets(bets):
                 bet["market_result"] = result_val
                 price = bet.get("fill_price", bet.get("price", 0))
                 contracts = bet.get("filled_count", bet.get("contracts", 1))
+                fee = bet.get("fee")
+                if fee is None:
+                    fee = math.ceil(0.07 * contracts * price * (1 - price) * 100) / 100.0 if 0 < price < 1 else 0.0
                 if won:
-                    bet["pnl"] = round(contracts * (1.0 - price), 2)
+                    bet["pnl"] = round(contracts * (1.0 - price) - fee, 2)
                 else:
-                    bet["pnl"] = round(-contracts * price, 2)
+                    bet["pnl"] = round(-contracts * price - fee, 2)
                 changed = True
                 P(f"  [RESOLVE] {bet.get('crypto','')} {ticker}: {bet['result']}")
             time.sleep(0.3)

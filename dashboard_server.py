@@ -424,6 +424,25 @@ SCORE_STATUS_FILE = os.path.join(SCORE_DATA_DIR, "crypto_score_status.json")
 _score_cache = {"result": None, "last_resolve": 0}
 _score_lock = threading.Lock()
 
+import math
+
+def kalshi_fee(contracts, price):
+    """Estimate Kalshi taker fee: ceil(0.07 * C * P * (1-P)) rounded up to cent.
+    Used for live P&L; the audit overwrites with exact fee_cost from fills."""
+    try:
+        p = float(price)
+        c = int(contracts)
+        if c <= 0 or p <= 0 or p >= 1:
+            return 0.0
+        return math.ceil(0.07 * c * p * (1 - p) * 100) / 100.0
+    except Exception:
+        return 0.0
+
+def _bet_fee(bet, contracts, price):
+    """Real fee if reconciled from fills, else estimate."""
+    f = bet.get("fee")
+    return f if f is not None else kalshi_fee(contracts, price)
+
 
 def _resolve_score_bets():
     """Background: resolve open score bot bets via Kalshi API."""
@@ -480,13 +499,16 @@ def _resolve_score_bets():
                 bet["fill_price"] = round(1.0 - fp, 4)
                 bet["fill_price_checked"] = False
                 changed = True
+        if bet.get("audited"):
+            continue  # P&L already reconciled from actual fills — don't recompute
         if bet.get("action") == "trade" and bet.get("result") in ("win", "loss"):
             actual_price = bet.get("fill_price", bet.get("price", 0))
             contracts = bet.get("filled_count", bet.get("contracts", 1))
+            fee = _bet_fee(bet, contracts, actual_price)
             if bet["result"] == "win":
-                correct_pnl = round(contracts * (1.0 - actual_price), 2)
+                correct_pnl = round(contracts * (1.0 - actual_price) - fee, 2)
             else:
-                correct_pnl = round(-contracts * actual_price, 2)
+                correct_pnl = round(-contracts * actual_price - fee, 2)
             if abs((bet.get("pnl", 0)) - correct_pnl) > 0.001:
                 bet["pnl"] = correct_pnl
                 changed = True
@@ -551,10 +573,11 @@ def _resolve_score_bets():
                     # Use actual Kalshi fill price for traded bets, bot price for skips
                     price = bet.get("fill_price", bet.get("price", 0)) if bet.get("action") == "trade" else bet.get("price", 0)
                     contracts = bet.get("filled_count", bet.get("contracts", 1))
+                    fee = _bet_fee(bet, contracts, price) if bet.get("action") == "trade" else 0.0
                     if won:
-                        bet["pnl"] = round(contracts * (1.0 - price), 2)
+                        bet["pnl"] = round(contracts * (1.0 - price) - fee, 2)
                     else:
-                        bet["pnl"] = round(-contracts * price, 2)
+                        bet["pnl"] = round(-contracts * price - fee, 2)
                     if bet.get("action") == "skip":
                         bet["hypothetical_pnl"] = bet["pnl"]
                         bet["would_have_won"] = won
@@ -737,7 +760,7 @@ def _build_scaling_performance(resolved, status=None):
 _SLIM_KEEP = {"crypto", "side", "price", "fill_price", "score", "action", "result",
               "pnl", "contracts", "filled_count", "timestamp", "strategy_version",
               "bet_amount", "would_have_won", "hypothetical_pnl", "market_result",
-              "cool_off", "blocked_scale"}
+              "cool_off", "blocked_scale", "fee", "audited"}
 _DETAIL_KEYS = {"reasons", "score_breakdown", "indicators", "entry_minute", "window_end",
                 "order_id", "event_ticker", "ticker"}
 
@@ -846,44 +869,54 @@ def audit_pnl(limit: int = 150, repair: bool = False):
     try:
         with open(SCORE_BETS_FILE) as f:
             bets = json.load(f)
+        def _epoch(ts):
+            if not ts:
+                return None
+            try:
+                return datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
+            except Exception:
+                return None
+
         resolved = [b for b in bets if b.get("action") == "trade" and b.get("order_id")
                     and b.get("result") in ("win", "loss")]
-        sample = resolved[-min(limit, 300):]
+        sample = resolved[-min(limit, 400):]
         if not sample:
             return JSONResponse({"checked": 0, "note": "no resolved trades with order_id"})
-        oldest_needed = min(b.get("timestamp", "") for b in sample)
+        oldest_needed = min((_epoch(b.get("timestamp")) or 1e18) for b in sample)
 
-        # Bulk-fetch the fills feed (per-order lookups don't work after settlement)
+        # Bulk-fetch the fills feed (per-order lookups return empty after settlement)
         fills_by_order = {}
-        oldest_fill = None
+        oldest_fill_e = None
         cursor = None
-        for _ in range(40):
+        for _ in range(60):
             params = {"limit": 200}
             if cursor:
                 params["cursor"] = cursor
             resp = auth_get("/portfolio/fills", params=params)
             fl = resp.get("fills", [])
-            if not fl:
-                break
             for f in fl:
                 fills_by_order.setdefault(f.get("order_id"), []).append(f)
-                ct = f.get("created_time", "")
-                if ct and (oldest_fill is None or ct < oldest_fill):
-                    oldest_fill = ct
+                e = _epoch(f.get("created_time"))
+                if e and (oldest_fill_e is None or e < oldest_fill_e):
+                    oldest_fill_e = e
             cursor = resp.get("cursor")
-            if not cursor or (oldest_fill and oldest_fill < oldest_needed):
+            # Stop once the feed reaches older than our oldest sampled trade
+            if not fl or not cursor or (oldest_fill_e and oldest_fill_e <= oldest_needed):
                 break
             time.sleep(0.2)
 
-        covered = oldest_fill is not None and oldest_fill <= oldest_needed
+        covered = oldest_fill_e is not None and oldest_fill_e <= oldest_needed
         mismatches, phantoms = [], []
-        checked = 0
+        checked = skipped = 0
         recorded_sum = actual_sum = 0.0
         fees_sum = 0.0
         for b in sample:
             fills = fills_by_order.get(b["order_id"], [])
-            if not fills and not covered and b.get("timestamp", "") < (oldest_fill or ""):
-                continue  # fills feed didn't reach back this far — can't judge
+            be = _epoch(b.get("timestamp"))
+            in_range = covered or (oldest_fill_e is not None and be is not None and be >= oldest_fill_e)
+            if not fills and not in_range:
+                skipped += 1  # feed didn't reach this trade — can't judge
+                continue
             buys = sells = fees = 0.0
             qty_buy = qty_sell = 0.0
             for f in fills:
@@ -897,7 +930,7 @@ def audit_pnl(limit: int = 150, repair: bool = False):
                     qty_sell += q; sells += q * px
                 else:
                     qty_buy += q; buys += q * px
-            fc = int(qty_buy)
+            fc = int(round(qty_buy))
             held = qty_buy - qty_sell
             payout = held if b["result"] == "win" else 0.0
             actual = payout + sells - buys - fees
@@ -911,27 +944,30 @@ def audit_pnl(limit: int = 150, repair: bool = False):
                 if repair:
                     b["result"] = "unfilled"
                     b["pnl"] = 0
-            elif abs(rec - actual) > 0.05:
-                mismatches.append({"ts": b.get("timestamp", "")[:19], "crypto": b.get("crypto"),
-                                   "side": b.get("side"), "result": b.get("result"),
-                                   "recorded_fc": b.get("filled_count"), "actual_fc": fc,
-                                   "recorded_pnl": rec, "actual_pnl": round(actual, 2)})
+                    b["filled_count"] = 0
+                    b["audited"] = True
+            else:
                 if repair:
                     b["filled_count"] = fc
+                    b["fee"] = round(fees, 4)
                     b["pnl"] = round(actual, 2)
+                    b["audited"] = True
+                if abs(rec - actual) > 0.05:
+                    mismatches.append({"ts": b.get("timestamp", "")[:19], "crypto": b.get("crypto"),
+                                       "side": b.get("side"), "result": b.get("result"),
+                                       "recorded_fc": b.get("filled_count"), "actual_fc": fc,
+                                       "recorded_pnl": rec, "actual_pnl": round(actual, 2),
+                                       "fee": round(fees, 2)})
         if repair and (phantoms or mismatches):
             with open(SCORE_BETS_FILE, "w") as f:
                 json.dump(bets, f)
-        sample_fill = None
-        for v in fills_by_order.values():
-            if v: sample_fill = v[0]; break
+            with _score_lock:
+                _score_cache["result"] = None  # force rebuild with corrected P&L
         return JSONResponse({
             "checked": checked,
+            "skipped_out_of_range": skipped,
             "fills_fetched": sum(len(v) for v in fills_by_order.values()),
             "fills_cover_sample": covered,
-            "oldest_fill": oldest_fill,
-            "debug_sample_fill": sample_fill,
-            "debug_sample_order_id": sample[-1].get("order_id") if sample else None,
             "recorded_pnl": round(recorded_sum, 2),
             "actual_pnl": round(actual_sum, 2),
             "total_fees": round(fees_sum, 2),
@@ -1121,10 +1157,11 @@ def fix_filled_counts():
                 continue
             fp = b.get("fill_price", b.get("price", 0))
             fc = b["filled_count"]
+            fee = _bet_fee(b, fc, fp)
             if b["result"] == "win":
-                b["pnl"] = round(fc * (1.0 - fp), 2)
+                b["pnl"] = round(fc * (1.0 - fp) - fee, 2)
             else:
-                b["pnl"] = round(-fc * fp, 2)
+                b["pnl"] = round(-fc * fp - fee, 2)
             fixed += 1
         with open(SCORE_BETS_FILE, "w") as f:
             json.dump(bets, f)
