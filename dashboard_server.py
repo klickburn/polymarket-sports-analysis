@@ -912,11 +912,16 @@ def audit_pnl(limit: int = 150, repair: bool = False):
         if repair and (phantoms or mismatches):
             with open(SCORE_BETS_FILE, "w") as f:
                 json.dump(bets, f)
+        sample_fill = None
+        for v in fills_by_order.values():
+            if v: sample_fill = v[0]; break
         return JSONResponse({
             "checked": checked,
             "fills_fetched": sum(len(v) for v in fills_by_order.values()),
             "fills_cover_sample": covered,
             "oldest_fill": oldest_fill,
+            "debug_sample_fill": sample_fill,
+            "debug_sample_order_id": sample[-1].get("order_id") if sample else None,
             "recorded_pnl": round(recorded_sum, 2),
             "actual_pnl": round(actual_sum, 2),
             "overstatement": round(recorded_sum - actual_sum, 2),
