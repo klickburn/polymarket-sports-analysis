@@ -854,7 +854,7 @@ def audit_pnl(limit: int = 150, repair: bool = False):
         recorded_sum = actual_sum = 0.0
         for b in sample:
             try:
-                resp = auth_get(f"/portfolio/fills?order_id={b['order_id']}")
+                resp = auth_get("/portfolio/fills", params={"order_id": b["order_id"]})
                 fills = resp.get("fills", [])
                 fc = sum(int(f.get("count", 0)) for f in fills)
                 if fc > 0:
