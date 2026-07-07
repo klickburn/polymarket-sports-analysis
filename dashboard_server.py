@@ -500,6 +500,7 @@ def _resolve_score_bets():
                 continue
             # For traded bets, verify the order was actually filled before resolving
             if bet.get("action") == "trade" and bet.get("order_id"):
+                verified = bet.get("filled_count", 0) > 0  # fill already confirmed at placement
                 try:
                     order_resp = auth_get(f"/portfolio/orders/{bet['order_id']}")
                     order_data = order_resp.get("order", {})
@@ -519,15 +520,21 @@ def _resolve_score_bets():
                         # Still sitting in orderbook — skip for now
                         time.sleep(0.3)
                         continue
-                    elif filled_count > 0 and actual_price > 0:
-                        avg_p = actual_price / 100 if actual_price > 1 else actual_price
-                        if bet.get("side") == "no":
-                            avg_p = 1.0 - avg_p
-                        bet["fill_price"] = avg_p
+                    elif filled_count > 0:
+                        verified = True
+                        if actual_price > 0:
+                            avg_p = actual_price / 100 if actual_price > 1 else actual_price
+                            if bet.get("side") == "no":
+                                avg_p = 1.0 - avg_p
+                            bet["fill_price"] = avg_p
                         bet["filled_count"] = min(filled_count, bet.get("contracts", filled_count))
                     time.sleep(0.3)
                 except Exception:
                     pass
+                if not verified:
+                    # No evidence this order ever filled — never book settlement
+                    # P&L on it; retry verification next cycle
+                    continue
 
             ticker = bet.get("ticker", "")
             try:
@@ -830,6 +837,69 @@ def _load_reset_baseline():
             return json.load(f)
     except Exception:
         return None
+
+
+@app.get("/api/audit-pnl")
+def audit_pnl(limit: int = 150, repair: bool = False):
+    """Verify recorded resolved trades against Kalshi's actual fills.
+    With repair=true, phantom trades (zero real fills) are marked unfilled."""
+    try:
+        with open(SCORE_BETS_FILE) as f:
+            bets = json.load(f)
+        resolved = [b for b in bets if b.get("action") == "trade" and b.get("order_id")
+                    and b.get("result") in ("win", "loss")]
+        sample = resolved[-min(limit, 300):]
+        mismatches, phantoms = [], []
+        checked = 0
+        recorded_sum = actual_sum = 0.0
+        for b in sample:
+            try:
+                resp = auth_get(f"/portfolio/fills?order_id={b['order_id']}")
+                fills = resp.get("fills", [])
+                fc = sum(int(f.get("count", 0)) for f in fills)
+                if fc > 0:
+                    if b.get("side") == "no":
+                        cost = sum(int(f.get("count", 0)) * (f.get("no_price", 0) / 100.0) for f in fills)
+                    else:
+                        cost = sum(int(f.get("count", 0)) * (f.get("yes_price", 0) / 100.0) for f in fills)
+                    actual = (fc - cost) if b["result"] == "win" else -cost
+                else:
+                    actual = 0.0
+                rec = b.get("pnl", 0)
+                checked += 1
+                recorded_sum += rec
+                actual_sum += actual
+                if fc == 0:
+                    phantoms.append(b)
+                    if repair:
+                        b["result"] = "unfilled"
+                        b["pnl"] = 0
+                elif abs(rec - actual) > 0.05:
+                    mismatches.append({"ts": b.get("timestamp", "")[:19], "crypto": b.get("crypto"),
+                                       "side": b.get("side"), "result": b.get("result"),
+                                       "recorded_fc": b.get("filled_count"), "actual_fc": fc,
+                                       "recorded_pnl": rec, "actual_pnl": round(actual, 2)})
+                    if repair:
+                        b["filled_count"] = fc
+                        b["pnl"] = round(actual, 2)
+                time.sleep(0.15)
+            except Exception:
+                pass
+        if repair and (phantoms or mismatches):
+            with open(SCORE_BETS_FILE, "w") as f:
+                json.dump(bets, f)
+        return JSONResponse({
+            "checked": checked,
+            "recorded_pnl": round(recorded_sum, 2),
+            "actual_pnl": round(actual_sum, 2),
+            "overstatement": round(recorded_sum - actual_sum, 2),
+            "phantom_trades": [{"ts": b.get("timestamp", "")[:19], "crypto": b.get("crypto"),
+                                "pnl_was": b.get("pnl"), "c": b.get("contracts")} for b in phantoms],
+            "mismatches": mismatches[:25],
+            "repaired": bool(repair and (phantoms or mismatches)),
+        })
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 @app.post("/api/set-reset-baseline")

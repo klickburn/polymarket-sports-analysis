@@ -1097,6 +1097,10 @@ def _resolve_open_bets(bets):
     for bet in bets:
         if bet.get("result") != "open" or bet.get("action") != "trade":
             continue
+        # Never book settlement P&L without confirmed fill evidence — the
+        # dashboard resolver verifies unconfirmed orders against the API
+        if bet.get("filled_count", 0) <= 0:
+            continue
         # Only resolve bets whose window has ended (ticker encodes the time)
         ticker = bet.get("ticker", "")
         try:
@@ -1461,6 +1465,9 @@ def run(live=False):
                             po["bet_record"]["fill_price"] = avg_p if avg_p else po["price"]
                             if filled_count > 0:
                                 po["bet_record"]["filled_count"] = filled_count
+                            elif check_status == "executed":
+                                # Executed but count fields missing — fully filled
+                                po["bet_record"]["filled_count"] = po["bet_record"].get("contracts", 1)
                             bets.append(po["bet_record"])
                             save_bets(bets)
                             total_new += 1
