@@ -854,14 +854,21 @@ def audit_pnl(limit: int = 150, repair: bool = False):
         recorded_sum = actual_sum = 0.0
         for b in sample:
             try:
-                resp = auth_get("/portfolio/fills", params={"order_id": b["order_id"]})
-                fills = resp.get("fills", [])
-                fc = sum(int(f.get("count", 0)) for f in fills)
+                resp = auth_get(f"/portfolio/orders/{b['order_id']}")
+                order = resp.get("order", {})
+                if not order.get("order_id"):
+                    continue  # order data unavailable — can't judge, skip
+                total = int(order.get("count", 0))
+                remaining = int(order.get("remaining_count", 0))
+                fc = max(0, total - remaining)
                 if fc > 0:
-                    if b.get("side") == "no":
-                        cost = sum(int(f.get("count", 0)) * (f.get("no_price", 0) / 100.0) for f in fills)
-                    else:
-                        cost = sum(int(f.get("count", 0)) * (f.get("yes_price", 0) / 100.0) for f in fills)
+                    avg_p = order.get("avg_price") or 0
+                    if avg_p > 1:
+                        avg_p = avg_p / 100.0
+                    if avg_p and b.get("side") == "no":
+                        avg_p = 1.0 - avg_p
+                    price = avg_p or b.get("fill_price", b.get("price", 0))
+                    cost = fc * price
                     actual = (fc - cost) if b["result"] == "win" else -cost
                 else:
                     actual = 0.0
