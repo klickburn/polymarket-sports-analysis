@@ -1584,7 +1584,13 @@ function renderScoreBot() {
       coBanner = `<div style="flex-basis:100%;font-size:12px;color:var(--muted);padding:0 4px">Cool-off: ${co.wins}/${co.window} recent wins — arms at ${need}${streakNote}${lidStats}</div>`;
     }
   }
-  document.getElementById('scalingStatusCards').innerHTML = coBanner + Object.entries(ss).map(([gname, s]) => {
+  const dip = sp.dip_add;
+  let dipBanner = '';
+  if (dip && dip.count) {
+    const dc = dip.pnl >= 0 ? '#22c55e' : '#ef4444';
+    dipBanner = `<div style="flex-basis:100%;font-size:12px;color:var(--muted);padding:0 4px">🎯 Split-dip adds: ${dip.count} filled, ${dip.win_rate}% won, net <span style="color:${dc};font-weight:600">$${dip.pnl.toFixed(2)}</span></div>`;
+  }
+  document.getElementById('scalingStatusCards').innerHTML = coBanner + dipBanner + Object.entries(ss).map(([gname, s]) => {
     const isScaled = s.current > 1;
     const borderColor = isScaled ? 'var(--green)' : 'var(--yellow)';
     const statusLabel = isScaled ? `${s.current}x SCALED UP` : '1x BASE';
@@ -1657,8 +1663,9 @@ function renderScoreTable(bets) {
       const c = b.contracts || 1;
       const fc = b.filled_count || c;
       const scaled = c > 1;
-      qty = `<span style="font-weight:600;color:${scaled ? 'var(--purple)' : 'var(--muted)'}">${fc}${fc !== c ? '/' + c : ''}</span>`;
+      qty = `<span style="font-weight:600;color:${b.dip_add ? 'var(--cyan, #06b6d4)' : (scaled ? 'var(--purple)' : 'var(--muted)')}">${fc}${fc !== c ? '/' + c : ''}</span>`;
       if (b.cool_off) qty += ` <span title="cool-off capped this trade at 1x (would be ${b.blocked_scale}x)" style="font-size:11px">❄️</span>`;
+      if (b.dip_add) qty += ` <span title="split-window dip add — bought on the dip at ${(b.fill_price*100).toFixed(0)}c" style="font-size:11px">🎯</span>`;
     }
     return `<tr>
       <td>${b.timestamp ? getDate(b.timestamp) : '-'}</td>

@@ -42,6 +42,12 @@ MIN_SCORE = int(os.environ.get("SCORE_MIN_SCORE", "-3"))  # Signal count 0 = pts
 MAX_SCORE = int(os.environ.get("SCORE_MAX_SCORE", "4"))  # Signal count 7 = pts-3 = 4
 TAKE_PROFIT_PRICE = float(os.environ.get("SCORE_TAKE_PROFIT", "0.95"))
 SCORE_VERSION = os.environ.get("SCORE_VERSION", "v4")
+# Split-window dip orders: in windows where BTC and ETH are on opposite sides,
+# rest a limit buy of N contracts at DIP_PRICE on each crypto's own side —
+# a cheap bounded-risk contrarian add that fills only if that side collapses.
+SPLIT_DIP_ENABLED = os.environ.get("SPLIT_DIP_ENABLED", "0") == "1"
+SPLIT_DIP_PRICE = float(os.environ.get("SPLIT_DIP_PRICE", "0.10"))
+SPLIT_DIP_COUNT = int(os.environ.get("SPLIT_DIP_COUNT", "10"))
 
 DATA_DIR = os.environ.get("SCORE_DATA_DIR", "/data")
 if not os.path.isdir(DATA_DIR):
@@ -632,6 +638,34 @@ def compute_score(sym, side, price, indicators):
 
 
 # ── Take profit ────────────────────────────────────────────────────────
+def place_dip_order(ticker, side, count, dip_price):
+    """Rest a limit BUY of `count` contracts of `side` at `dip_price` (fills at
+    that price or cheaper). Bounded-risk contrarian add for split windows."""
+    # V2 API price is always the YES price
+    api_side = "bid" if side == "yes" else "ask"
+    if side == "yes":
+        cents = max(1, int(round(dip_price * 100)))
+    else:
+        cents = min(99, int(round((1.0 - dip_price) * 100)))
+    order = {
+        "ticker": ticker,
+        "side": api_side,
+        "count": str(count),
+        "price": f"{cents / 100:.2f}",
+        "time_in_force": "good_till_canceled",
+        "self_trade_prevention_type": "taker_at_cross",
+        "client_order_id": str(uuid.uuid4()),
+    }
+    try:
+        P(f"    [DIP] resting BUY {count} {side.upper()} @ {dip_price*100:.0f}c ({ticker})")
+        result = auth_post("/portfolio/events/orders", data=order)
+        oid = result.get("order_id", "")
+        return oid or None
+    except Exception as e:
+        P(f"    [DIP] order failed: {e}")
+        return None
+
+
 def place_take_profit(ticker, side, count):
     """Place a limit sell order at TAKE_PROFIT_PRICE to lock in gains."""
     if TAKE_PROFIT_PRICE <= 0:
@@ -996,7 +1030,7 @@ def _restore_scale_state():
                 bets = json.load(f)
             resolved = [b for b in bets
                         if b.get("action") == "trade" and b.get("result") in ("win", "loss")
-                        and b.get("crypto") in ("BTC", "ETH")]
+                        and b.get("crypto") in ("BTC", "ETH") and not b.get("dip_add")]
             for gname, cfg in SCALE_GROUPS.items():
                 g_trades = [b for b in resolved if (b.get("score", 0) + 3) in cfg["signals"]]
                 scale = 1
@@ -1041,7 +1075,7 @@ def get_dynamic_contracts(bets, crypto, signal_count):
     if contracts > 1 and COOL_OFF_WR > 0:
         resolved = [b for b in bets if b.get("action") == "trade"
                     and b.get("result") in ("win", "loss")
-                    and b.get("crypto") in ("BTC", "ETH")]
+                    and b.get("crypto") in ("BTC", "ETH") and not b.get("dip_add")]
         last = resolved[-COOL_OFF_WINDOW:]
         if len(last) >= COOL_OFF_WINDOW:
             wr = sum(1 for b in last if b["result"] == "win") / len(last)
@@ -1074,7 +1108,7 @@ def _group_scale_contracts(bets, crypto, signal_count):
 
     resolved = [b for b in bets
                 if b.get("action") == "trade" and b.get("result") in ("win", "loss")
-                and b.get("crypto") in ("BTC", "ETH")
+                and b.get("crypto") in ("BTC", "ETH") and not b.get("dip_add")
                 and (b.get("score", 0) + 3) in cfg["signals"]]
 
     if current == 1:
@@ -1104,9 +1138,51 @@ def _group_scale_contracts(bets, crypto, signal_count):
 
     return current
 
+def _resolve_dip_orders(bets):
+    """Check resting split-window dip orders: filled -> becomes an open position,
+    unfilled+closed -> discarded. Called at window start."""
+    changed = False
+    for bet in bets:
+        if bet.get("result") != "dip_pending":
+            continue
+        oid = bet.get("order_id")
+        if not oid:
+            bet["result"] = "dip_expired"; changed = True; continue
+        try:
+            od = auth_get(f"/portfolio/orders/{oid}").get("order", {})
+            status = od.get("status", "")
+            remaining = int(od.get("remaining_count", 0))
+            total = int(od.get("count", bet.get("contracts", SPLIT_DIP_COUNT)))
+            filled = total - remaining
+            if filled > 0:
+                avg_p = od.get("avg_price")
+                if avg_p is not None and avg_p > 1:
+                    avg_p = avg_p / 100
+                if avg_p is not None and bet.get("side") == "no":
+                    avg_p = 1.0 - avg_p
+                bet["fill_price"] = avg_p if avg_p else bet.get("price", SPLIT_DIP_PRICE)
+                bet["filled_count"] = filled
+                bet["result"] = "open"   # normal settlement resolves it next
+                P(f"  [DIP] {bet.get('crypto','')} filled {filled} @ {bet['fill_price']:.2f}")
+                changed = True
+            elif status in ("canceled", "expired") or remaining == total:
+                # market closed without the dip triggering
+                bet["result"] = "dip_expired"
+                changed = True
+            time.sleep(0.2)
+        except Exception:
+            pass
+    if changed:
+        save_bets(bets)
+    return bets
+
 def _resolve_open_bets(bets):
     """Quickly resolve open bets from past windows so scaling has fresh data."""
     now = datetime.now(timezone.utc)
+    # Always run (no-op when none pending) so dips resolve even if the feature
+    # is toggled off while orders are still outstanding
+    if any(b.get("result") == "dip_pending" for b in bets):
+        bets = _resolve_dip_orders(bets)
     changed = False
     for bet in bets:
         if bet.get("result") != "open" or bet.get("action") != "trade":
@@ -1454,6 +1530,30 @@ def run(live=False):
                     bets.append(tq["bet_record"])
                     placed_this_window.add(tq["crypto"])
                 time.sleep(0.3)  # Small delay between orders to avoid rate limits
+
+            # ── Split-window dip orders: opposite sides -> rest a cheap add ──
+            if SPLIT_DIP_ENABLED and len(trade_queue) == 2:
+                q_sides = [tq["side"] for tq in trade_queue]
+                if q_sides[0] != q_sides[1]:  # split window
+                    P(f"  [DIP] Split window detected — resting {SPLIT_DIP_COUNT}x @ "
+                      f"{SPLIT_DIP_PRICE*100:.0f}c on both sides")
+                    for tq in trade_queue:
+                        oid = place_dip_order(tq["ticker"], tq["side"],
+                                              SPLIT_DIP_COUNT, SPLIT_DIP_PRICE)
+                        if oid:
+                            bets.append({
+                                "crypto": tq["crypto"], "ticker": tq["ticker"],
+                                "side": tq["side"], "price": SPLIT_DIP_PRICE,
+                                "score": tq["score"], "action": "trade",
+                                "result": "dip_pending", "dip_add": True,
+                                "order_id": oid, "contracts": SPLIT_DIP_COUNT,
+                                "event_ticker": tq["bet_record"].get("event_ticker", ""),
+                                "window_end": tq["bet_record"].get("window_end", ""),
+                                "timestamp": datetime.now(timezone.utc).isoformat(),
+                                "strategy_version": SCORE_VERSION,
+                            })
+                            save_bets(bets)
+                        time.sleep(0.3)
 
             # ── Phase 3: Check pending orders once, cancel unfilled ──
             if pending_orders:

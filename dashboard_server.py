@@ -610,11 +610,12 @@ def _build_scaling_performance(resolved, status=None):
     if not resolved:
         return {}
 
-    # Only BTC/ETH, only after scaling was deployed
+    # Only BTC/ETH, only after scaling was deployed; exclude split-dip adds
     scaling_deployed = "2026-06-17T19:40"
     filtered = [b for b in resolved
                 if b.get("crypto") in ("BTC", "ETH")
-                and b.get("timestamp", "") >= scaling_deployed]
+                and b.get("timestamp", "") >= scaling_deployed
+                and not b.get("dip_add")]
 
     trades_at_1 = [b for b in filtered if b.get("contracts", 1) == 1]
     trades_at_scaled = [b for b in filtered if b.get("contracts", 1) > 1]
@@ -676,7 +677,8 @@ def _build_scaling_performance(resolved, status=None):
         except Exception:
             pass
 
-    all_resolved = [b for b in resolved if b.get("crypto") in ("BTC", "ETH")]
+    all_resolved = [b for b in resolved if b.get("crypto") in ("BTC", "ETH")
+                    and not b.get("dip_add")]
     scaling_status = {}
     for gname, cfg in scale_configs.items():
         g_trades = [b for b in all_resolved if (b.get("score", 0) + 3) in cfg["signals"]]
@@ -755,6 +757,18 @@ def _build_scaling_performance(resolved, status=None):
     except Exception:
         pass
 
+    # Split-window dip-add effectiveness
+    dip = None
+    dip_trades = [b for b in resolved if b.get("dip_add") and b.get("result") in ("win", "loss")]
+    if dip_trades:
+        dw = sum(1 for b in dip_trades if b["result"] == "win")
+        dip = {
+            "count": len(dip_trades),
+            "wins": dw,
+            "win_rate": round(dw / len(dip_trades) * 100, 1),
+            "pnl": round(sum(b.get("pnl", 0) for b in dip_trades), 2),
+        }
+
     return {
         "overall_at_1": calc_stats(trades_at_1),
         "overall_at_scaled": calc_stats(trades_at_scaled),
@@ -764,19 +778,20 @@ def _build_scaling_performance(resolved, status=None):
         "breakdown": breakdown,
         "scaling_status": scaling_status,
         "cool_off": cool_off,
+        "dip_add": dip,
     }
 
 
 _SLIM_KEEP = {"crypto", "side", "price", "fill_price", "score", "action", "result",
               "pnl", "contracts", "filled_count", "timestamp", "strategy_version",
               "bet_amount", "would_have_won", "hypothetical_pnl", "market_result",
-              "cool_off", "blocked_scale", "fee", "audited"}
+              "cool_off", "blocked_scale", "fee", "audited", "dip_add"}
 _DETAIL_KEYS = {"reasons", "score_breakdown", "indicators", "entry_minute", "window_end",
                 "order_id", "event_ticker", "ticker"}
 
 def _slim_bets(bets, recent=500):
     """Strip heavy fields and filter out noise to reduce payload size."""
-    filtered = [b for b in bets if b.get("result") not in ("expired", "unfilled")]
+    filtered = [b for b in bets if b.get("result") not in ("expired", "unfilled", "dip_expired", "dip_pending")]
     if len(filtered) <= recent:
         return filtered
     slim = []
