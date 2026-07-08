@@ -29,7 +29,8 @@ from crypto_15m_bot import (
     auth_get, public_get, get_balance, get_existing_positions,
     run as run_bot, P,
 )
-from crypto_score_bot import run as run_score_bot, SCALE_UP_COUNT
+from crypto_score_bot import (run as run_score_bot, SCALE_UP_COUNT,
+                              SPLIT_DIP_ENABLED, SPLIT_DIP_PRICE, SPLIT_DIP_COUNT)
 # History data is committed as kalshi_history.json — no live fetch on Railway
 HISTORY_FILE = "kalshi_history.json"
 
@@ -1045,6 +1046,9 @@ def score_debug():
         "scale_up_at": raw.get("scale_up_at") if isinstance(raw, dict) else None,
         "score_data_dir": SCORE_DATA_DIR,
         "reset_ts": reset_ts,
+        "split_dip_enabled": SPLIT_DIP_ENABLED,
+        "split_dip_price": SPLIT_DIP_PRICE,
+        "split_dip_count": SPLIT_DIP_COUNT,
     })
 
 
