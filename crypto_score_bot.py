@@ -675,6 +675,10 @@ def _place_split_dips(bets, window_end_iso):
       - non-split (same side):  NONSPLIT_DIP_COUNT each (if NONSPLIT_DIP_ENABLED)
     Detects from recorded trades (legs land in separate polls). Returns True
     once dips are placed for the window."""
+    # Idempotency: if a dip already exists for this window, don't place again
+    # (survives bot restarts mid-window, unlike the in-memory flag)
+    if any(b.get("dip_add") and b.get("window_end") == window_end_iso for b in bets):
+        return True
     wtr = {}
     for b in bets:
         if (b.get("action") == "trade" and b.get("crypto") in ("BTC", "ETH")
