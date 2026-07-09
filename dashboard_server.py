@@ -809,9 +809,15 @@ def _slim_bets(bets, recent=500):
 
 def _build_score_report(bets, status, balance_info=None):
     """Build the score data report from bets — no API calls, instant."""
-    trades = [b for b in bets if b.get("action") == "trade" and b.get("result") != "unfilled"]
+    # Core strategy excludes dip-add trades (a separate experiment that
+    # otherwise pollutes win rate / counts); dips shown in their own tracker
+    trades = [b for b in bets if b.get("action") == "trade"
+              and b.get("result") != "unfilled" and not b.get("dip_add")]
     skips = [b for b in bets if b.get("action") == "skip"]
 
+    # Dips-inclusive set for the scaling-performance dip tracker only
+    resolved_all = [b for b in bets if b.get("action") == "trade"
+                    and b.get("result") in ("win", "loss")]
     resolved = [b for b in trades if b.get("result") in ("win", "loss")]
     wins = [b for b in resolved if b["result"] == "win"]
     losses = [b for b in resolved if b["result"] == "loss"]
@@ -856,7 +862,7 @@ def _build_score_report(bets, status, balance_info=None):
             by_crypto[c]["skip_hypothetical_pnl"] += b.get("hypothetical_pnl", 0)
 
     # ── Scaling performance breakdown ──────────────────────────────────
-    scaling_perf = _build_scaling_performance(resolved, status)
+    scaling_perf = _build_scaling_performance(resolved_all, status)
 
     return {
         "total_trades": len(trades),
