@@ -963,6 +963,71 @@ def audit_pnl(limit: int = 150, repair: bool = False):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@app.get("/api/check-dips")
+def check_dips(repair: bool = False):
+    """Verify dip trades against Kalshi's actual fills feed. Dips whose order_id
+    never appears in the feed never filled (phantom); repair marks them unfilled."""
+    try:
+        def _epoch(ts):
+            try:
+                return datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
+            except Exception:
+                return None
+        with open(SCORE_BETS_FILE) as f:
+            bets = json.load(f)
+        dips = [b for b in bets if b.get("dip_add") and b.get("order_id")
+                and b.get("result") in ("win", "loss", "open")]
+        if not dips:
+            return JSONResponse({"dips_checked": 0, "note": "no resolved dip trades"})
+        oldest = min((_epoch(b.get("timestamp")) or 1e18) for b in dips)
+
+        # Page the fills feed back to the oldest dip
+        filled_orders = set()
+        cursor = None
+        for _ in range(60):
+            params = {"limit": 200}
+            if cursor:
+                params["cursor"] = cursor
+            resp = auth_get("/portfolio/fills", params=params)
+            fl = resp.get("fills", [])
+            oldest_f = None
+            for f in fl:
+                filled_orders.add(f.get("order_id"))
+                e = _epoch(f.get("created_time"))
+                if e and (oldest_f is None or e < oldest_f):
+                    oldest_f = e
+            cursor = resp.get("cursor")
+            if not fl or not cursor or (oldest_f and oldest_f <= oldest):
+                break
+            time.sleep(0.2)
+
+        phantom = [b for b in dips if b["order_id"] not in filled_orders]
+        real = [b for b in dips if b["order_id"] in filled_orders]
+        phantom_pnl = round(sum(b.get("pnl", 0) for b in phantom), 2)
+        if repair:
+            for b in phantom:
+                b["result"] = "dip_expired"
+                b["pnl"] = 0
+                b["filled_count"] = 0
+            if phantom:
+                with open(SCORE_BETS_FILE, "w") as f:
+                    json.dump(bets, f)
+                with _score_lock:
+                    _score_cache["result"] = None
+        return JSONResponse({
+            "dips_checked": len(dips),
+            "real_fills": len(real),
+            "phantom_dips": len(phantom),
+            "phantom_pnl_removed": phantom_pnl,
+            "real_dip_pnl": round(sum(b.get("pnl", 0) for b in real), 2),
+            "repaired": bool(repair and phantom),
+            "phantom_sample": [{"ts": b.get("timestamp", "")[:16], "crypto": b.get("crypto"),
+                                "type": b.get("dip_type"), "pnl_was": b.get("pnl")} for b in phantom[:15]],
+        })
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @app.get("/api/reconcile")
 def reconcile():
     """Compare every Kalshi fill since reset against our recorded order_ids to

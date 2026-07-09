@@ -1205,9 +1205,12 @@ def _resolve_dip_orders(bets):
         try:
             od = auth_get(f"/portfolio/orders/{oid}").get("order", {})
             status = od.get("status", "")
-            remaining = int(od.get("remaining_count", 0))
-            total = int(od.get("count", bet.get("contracts", SPLIT_DIP_COUNT)))
-            filled = total - remaining
+            # Require POSITIVE fill confirmation — never default remaining to 0,
+            # or a canceled order (minimal API record) is falsely booked as filled
+            has_counts = od.get("count") is not None and od.get("remaining_count") is not None
+            filled = 0
+            if has_counts:
+                filled = int(od["count"]) - int(od["remaining_count"])
             if filled > 0:
                 avg_p = od.get("avg_price")
                 if avg_p is not None and avg_p > 1:
@@ -1219,10 +1222,11 @@ def _resolve_dip_orders(bets):
                 bet["result"] = "open"   # normal settlement resolves it next
                 P(f"  [DIP] {bet.get('crypto','')} filled {filled} @ {bet['fill_price']:.2f}")
                 changed = True
-            elif status in ("canceled", "expired") or remaining == total:
-                # market closed without the dip triggering
+            elif status in ("canceled", "expired") or (has_counts and filled == 0):
+                # market closed / order canceled without the dip triggering
                 bet["result"] = "dip_expired"
                 changed = True
+            # else: unknown (no counts, still open) — leave pending, retry next
             time.sleep(0.2)
         except Exception:
             pass
