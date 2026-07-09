@@ -1587,8 +1587,12 @@ function renderScoreBot() {
   const dip = sp.dip_add;
   let dipBanner = '';
   if (dip && dip.count) {
-    const dc = dip.pnl >= 0 ? '#22c55e' : '#ef4444';
-    dipBanner = `<div style="flex-basis:100%;font-size:12px;color:var(--muted);padding:0 4px">🎯 Split-dip adds: ${dip.count} filled, ${dip.win_rate}% won, net <span style="color:${dc};font-weight:600">$${dip.pnl.toFixed(2)}</span></div>`;
+    const line = (label, s) => {
+      if (!s || !s.count) return '';
+      const c = s.pnl >= 0 ? '#22c55e' : '#ef4444';
+      return `<span style="margin-right:14px">${label}: ${s.count} filled, ${s.win_rate}% won, net <span style="color:${c};font-weight:600">$${s.pnl.toFixed(2)}</span></span>`;
+    };
+    dipBanner = `<div style="flex-basis:100%;font-size:12px;color:var(--muted);padding:0 4px">🎯 Dip adds — ${line('split(10x)', dip.split)}${line('non-split(1x)', dip.nonsplit)}</div>`;
   }
   document.getElementById('scalingStatusCards').innerHTML = coBanner + dipBanner + Object.entries(ss).map(([gname, s]) => {
     const isScaled = s.current > 1;

@@ -48,6 +48,9 @@ SCORE_VERSION = os.environ.get("SCORE_VERSION", "v4")
 SPLIT_DIP_ENABLED = os.environ.get("SPLIT_DIP_ENABLED", "0") == "1"
 SPLIT_DIP_PRICE = float(os.environ.get("SPLIT_DIP_PRICE", "0.10"))
 SPLIT_DIP_COUNT = int(os.environ.get("SPLIT_DIP_COUNT", "10"))
+# Non-split (same-side) dip orders: smaller bounded-risk add on consensus windows
+NONSPLIT_DIP_ENABLED = os.environ.get("NONSPLIT_DIP_ENABLED", "0") == "1"
+NONSPLIT_DIP_COUNT = int(os.environ.get("NONSPLIT_DIP_COUNT", "1"))
 
 DATA_DIR = os.environ.get("SCORE_DATA_DIR", "/data")
 if not os.path.isdir(DATA_DIR):
@@ -667,9 +670,11 @@ def place_dip_order(ticker, side, count, dip_price):
 
 
 def _place_split_dips(bets, window_end_iso):
-    """If this window now has BTC and ETH on opposite sides, rest a dip buy on
-    each side. Detects splits from recorded trades (legs land in separate polls).
-    Returns True once dips are placed for the window."""
+    """Rest dip buys for the window once both BTC/ETH legs exist:
+      - split (opposite sides): SPLIT_DIP_COUNT each (if SPLIT_DIP_ENABLED)
+      - non-split (same side):  NONSPLIT_DIP_COUNT each (if NONSPLIT_DIP_ENABLED)
+    Detects from recorded trades (legs land in separate polls). Returns True
+    once dips are placed for the window."""
     wtr = {}
     for b in bets:
         if (b.get("action") == "trade" and b.get("crypto") in ("BTC", "ETH")
@@ -679,18 +684,28 @@ def _place_split_dips(bets, window_end_iso):
     if len(wtr) < 2:
         return False
     sides = [wtr["BTC"].get("side"), wtr["ETH"].get("side")]
-    if not all(sides) or sides[0] == sides[1]:
-        return False  # same side or missing — not a split
-    P(f"  [DIP] Split window ({sides[0]}/{sides[1]}) — resting {SPLIT_DIP_COUNT}x "
+    if not all(sides):
+        return False
+    is_split = sides[0] != sides[1]
+    if is_split:
+        if not SPLIT_DIP_ENABLED:
+            return False
+        count, dip_type = SPLIT_DIP_COUNT, "split"
+    else:
+        if not NONSPLIT_DIP_ENABLED:
+            return False
+        count, dip_type = NONSPLIT_DIP_COUNT, "nonsplit"
+    P(f"  [DIP] {dip_type} window ({sides[0]}/{sides[1]}) — resting {count}x "
       f"@ {SPLIT_DIP_PRICE*100:.0f}c on both sides")
     for cr, b in wtr.items():
-        oid = place_dip_order(b["ticker"], b["side"], SPLIT_DIP_COUNT, SPLIT_DIP_PRICE)
+        oid = place_dip_order(b["ticker"], b["side"], count, SPLIT_DIP_PRICE)
         if oid:
             bets.append({
                 "crypto": cr, "ticker": b["ticker"], "side": b["side"],
                 "price": SPLIT_DIP_PRICE, "score": b.get("score", 0),
                 "action": "trade", "result": "dip_pending", "dip_add": True,
-                "order_id": oid, "contracts": SPLIT_DIP_COUNT,
+                "dip_type": dip_type,
+                "order_id": oid, "contracts": count,
                 "event_ticker": b.get("event_ticker", ""),
                 "window_end": window_end_iso,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -1571,7 +1586,7 @@ def run(live=False):
             # ── Split-window dip orders ──
             # The two legs of a split are usually placed in separate polls, so
             # detect from this window's RECORDED trades, not the same-poll queue.
-            if SPLIT_DIP_ENABLED and not dips_done_this_window:
+            if (SPLIT_DIP_ENABLED or NONSPLIT_DIP_ENABLED) and not dips_done_this_window:
                 if _place_split_dips(bets, window_end.isoformat()):
                     dips_done_this_window = True
 
