@@ -257499,5 +257499,200 @@
     "status": "executed",
     "fill_price": 0.61,
     "filled_count": 30
+  },
+  {
+    "crypto": "ETH",
+    "ticker": "KXETH15M-26JUL091630-30",
+    "side": "no",
+    "price": 0.1,
+    "score": -2,
+    "action": "trade",
+    "result": "loss",
+    "dip_add": true,
+    "dip_type": "split",
+    "order_id": "ba469275-fbfa-43b9-bc4b-0cd56e86b9b1",
+    "contracts": 10,
+    "event_ticker": "KXETH15M-26JUL091630",
+    "window_end": "2026-07-09T20:30:00+00:00",
+    "timestamp": "2026-07-09T20:18:46.127176+00:00",
+    "strategy_version": "v7",
+    "fill_price": 0.1,
+    "filled_count": 10,
+    "market_result": "yes",
+    "pnl": -1.07
+  },
+  {
+    "crypto": "BTC",
+    "ticker": "KXBTC15M-26JUL091645-45",
+    "event_ticker": "KXBTC15M-26JUL091645",
+    "side": "no",
+    "price": 0.62,
+    "score": 0,
+    "reasons": [
+      [
+        "Signal Score",
+        "3/8",
+        "3"
+      ],
+      [
+        "RSI Aligned",
+        "NO RSI=59.6",
+        "+2"
+      ],
+      [
+        "1h MeanRev",
+        "ret=+0.05%",
+        "+1"
+      ],
+      [
+        "BTC Same",
+        "btc=+0.00%",
+        "0"
+      ],
+      [
+        "Consensus",
+        "all NO",
+        "0"
+      ],
+      [
+        "Stoch High",
+        "80.6",
+        "0"
+      ]
+    ],
+    "score_breakdown": {
+      "Signal Score": {
+        "detail": "3/8",
+        "points": 3
+      },
+      "RSI Aligned": {
+        "detail": "NO RSI=59.6",
+        "points": 2
+      },
+      "1h MeanRev": {
+        "detail": "ret=+0.05%",
+        "points": 1
+      },
+      "BTC Same": {
+        "detail": "btc=+0.00%",
+        "points": 0
+      },
+      "Consensus": {
+        "detail": "all NO",
+        "points": 0
+      },
+      "Stoch High": {
+        "detail": "80.6",
+        "points": 0
+      }
+    },
+    "indicators": {
+      "ret_1h": 0.0462,
+      "ret_3h": 0.2458,
+      "vol_6h": 0.2662,
+      "rsi": 59.62,
+      "stoch": 80.59,
+      "pack_agreement": 0.0,
+      "btc_ret_1h": 0.0462
+    },
+    "bet_amount": 0.1,
+    "contracts": 1,
+    "entry_minute": 2.2,
+    "timestamp": "2026-07-09T20:32:21.909330+00:00",
+    "window_end": "2026-07-09T20:45:00+00:00",
+    "result": "open",
+    "strategy_version": "v7",
+    "action": "trade",
+    "order_id": "927352b3-7237-4361-987d-b6ce9a2e21c9",
+    "status": "executed",
+    "fill_price": 0.52,
+    "filled_count": 1
+  },
+  {
+    "crypto": "ETH",
+    "ticker": "KXETH15M-26JUL091645-45",
+    "event_ticker": "KXETH15M-26JUL091645",
+    "side": "yes",
+    "price": 0.72,
+    "score": -2,
+    "reasons": [
+      [
+        "Signal Score",
+        "1/8",
+        "1"
+      ],
+      [
+        "RSI Misalign",
+        "YES RSI=52.4",
+        "0"
+      ],
+      [
+        "1h MeanRev",
+        "ret=-0.01%",
+        "+1"
+      ],
+      [
+        "BTC Same",
+        "btc=+0.00%",
+        "0"
+      ],
+      [
+        "Consensus",
+        "all YES",
+        "0"
+      ],
+      [
+        "Stoch High",
+        "53.3",
+        "0"
+      ]
+    ],
+    "score_breakdown": {
+      "Signal Score": {
+        "detail": "1/8",
+        "points": 1
+      },
+      "RSI Misalign": {
+        "detail": "YES RSI=52.4",
+        "points": 0
+      },
+      "1h MeanRev": {
+        "detail": "ret=-0.01%",
+        "points": 1
+      },
+      "BTC Same": {
+        "detail": "btc=+0.00%",
+        "points": 0
+      },
+      "Consensus": {
+        "detail": "all YES",
+        "points": 0
+      },
+      "Stoch High": {
+        "detail": "53.3",
+        "points": 0
+      }
+    },
+    "indicators": {
+      "ret_1h": -0.0078,
+      "ret_3h": 0.0029,
+      "vol_6h": 0.2368,
+      "rsi": 52.43,
+      "stoch": 53.33,
+      "pack_agreement": 0.0,
+      "btc_ret_1h": 0.0462
+    },
+    "bet_amount": 0.1,
+    "contracts": 1,
+    "entry_minute": 2.7,
+    "timestamp": "2026-07-09T20:32:49.703320+00:00",
+    "window_end": "2026-07-09T20:45:00+00:00",
+    "result": "open",
+    "strategy_version": "v7",
+    "action": "trade",
+    "order_id": "a2c16cef-09d5-4713-bc46-5fa9bbfba0c3",
+    "status": "executed",
+    "fill_price": 0.71,
+    "filled_count": 1
   }
 ]
