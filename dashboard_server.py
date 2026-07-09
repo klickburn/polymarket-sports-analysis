@@ -771,7 +771,8 @@ def _build_scaling_performance(resolved, status=None):
                     "win_rate": round(w / len(ts) * 100, 1),
                     "pnl": round(sum(b.get("pnl", 0) for b in ts), 2)}
         dip = _stat(dip_trades)
-        dip["split"] = _stat([b for b in dip_trades if b.get("dip_type") == "split"])
+        # Dips placed before the dip_type field existed were all splits
+        dip["split"] = _stat([b for b in dip_trades if b.get("dip_type") != "nonsplit"])
         dip["nonsplit"] = _stat([b for b in dip_trades if b.get("dip_type") == "nonsplit"])
 
     return {
