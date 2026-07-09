@@ -666,6 +666,41 @@ def place_dip_order(ticker, side, count, dip_price):
         return None
 
 
+def _place_split_dips(bets, window_end_iso):
+    """If this window now has BTC and ETH on opposite sides, rest a dip buy on
+    each side. Detects splits from recorded trades (legs land in separate polls).
+    Returns True once dips are placed for the window."""
+    wtr = {}
+    for b in bets:
+        if (b.get("action") == "trade" and b.get("crypto") in ("BTC", "ETH")
+                and not b.get("dip_add") and b.get("window_end") == window_end_iso
+                and b.get("result") not in ("unfilled",)):
+            wtr[b["crypto"]] = b
+    if len(wtr) < 2:
+        return False
+    sides = [wtr["BTC"].get("side"), wtr["ETH"].get("side")]
+    if not all(sides) or sides[0] == sides[1]:
+        return False  # same side or missing — not a split
+    P(f"  [DIP] Split window ({sides[0]}/{sides[1]}) — resting {SPLIT_DIP_COUNT}x "
+      f"@ {SPLIT_DIP_PRICE*100:.0f}c on both sides")
+    for cr, b in wtr.items():
+        oid = place_dip_order(b["ticker"], b["side"], SPLIT_DIP_COUNT, SPLIT_DIP_PRICE)
+        if oid:
+            bets.append({
+                "crypto": cr, "ticker": b["ticker"], "side": b["side"],
+                "price": SPLIT_DIP_PRICE, "score": b.get("score", 0),
+                "action": "trade", "result": "dip_pending", "dip_add": True,
+                "order_id": oid, "contracts": SPLIT_DIP_COUNT,
+                "event_ticker": b.get("event_ticker", ""),
+                "window_end": window_end_iso,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "strategy_version": SCORE_VERSION,
+            })
+            save_bets(bets)
+        time.sleep(0.3)
+    return True
+
+
 def place_take_profit(ticker, side, count):
     """Place a limit sell order at TAKE_PROFIT_PRICE to lock in gains."""
     if TAKE_PROFIT_PRICE <= 0:
@@ -1244,6 +1279,7 @@ def run(live=False):
     total_new = 0
     last_window_end = None
     placed_this_window = set()
+    dips_done_this_window = False
     skip_tickers = set()
 
     # Indicators cache
@@ -1264,6 +1300,7 @@ def run(live=False):
             if window_end != last_window_end:
                 last_window_end = window_end
                 placed_this_window = set()
+                dips_done_this_window = False
                 locked_side = None  # Lock direction after first trade
                 checked_positions = False
                 fetched_indicators = False
@@ -1531,29 +1568,12 @@ def run(live=False):
                     placed_this_window.add(tq["crypto"])
                 time.sleep(0.3)  # Small delay between orders to avoid rate limits
 
-            # ── Split-window dip orders: opposite sides -> rest a cheap add ──
-            if SPLIT_DIP_ENABLED and len(trade_queue) == 2:
-                q_sides = [tq["side"] for tq in trade_queue]
-                if q_sides[0] != q_sides[1]:  # split window
-                    P(f"  [DIP] Split window detected — resting {SPLIT_DIP_COUNT}x @ "
-                      f"{SPLIT_DIP_PRICE*100:.0f}c on both sides")
-                    for tq in trade_queue:
-                        oid = place_dip_order(tq["ticker"], tq["side"],
-                                              SPLIT_DIP_COUNT, SPLIT_DIP_PRICE)
-                        if oid:
-                            bets.append({
-                                "crypto": tq["crypto"], "ticker": tq["ticker"],
-                                "side": tq["side"], "price": SPLIT_DIP_PRICE,
-                                "score": tq["score"], "action": "trade",
-                                "result": "dip_pending", "dip_add": True,
-                                "order_id": oid, "contracts": SPLIT_DIP_COUNT,
-                                "event_ticker": tq["bet_record"].get("event_ticker", ""),
-                                "window_end": tq["bet_record"].get("window_end", ""),
-                                "timestamp": datetime.now(timezone.utc).isoformat(),
-                                "strategy_version": SCORE_VERSION,
-                            })
-                            save_bets(bets)
-                        time.sleep(0.3)
+            # ── Split-window dip orders ──
+            # The two legs of a split are usually placed in separate polls, so
+            # detect from this window's RECORDED trades, not the same-poll queue.
+            if SPLIT_DIP_ENABLED and not dips_done_this_window:
+                if _place_split_dips(bets, window_end.isoformat()):
+                    dips_done_this_window = True
 
             # ── Phase 3: Check pending orders once, cancel unfilled ──
             if pending_orders:
