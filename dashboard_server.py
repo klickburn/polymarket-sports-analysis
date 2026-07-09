@@ -958,6 +958,94 @@ def audit_pnl(limit: int = 150, repair: bool = False):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@app.get("/api/reconcile")
+def reconcile():
+    """Compare every Kalshi fill since reset against our recorded order_ids to
+    find uncaptured trades (e.g. take-profit sells) that cause account drift."""
+    try:
+        def _epoch(ts):
+            try:
+                return datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
+            except Exception:
+                return None
+        cutoff = None
+        try:
+            with open(os.path.join(SCORE_DATA_DIR, ".reset_ts")) as f:
+                cutoff = _epoch(f.read().strip())
+        except Exception:
+            pass
+
+        from collections import defaultdict
+        with open(SCORE_BETS_FILE) as f:
+            bets = json.load(f)
+        # Every order_id we know about: main orders, take-profits, dip orders
+        known = set()
+        for b in bets:
+            for k in ("order_id", "tp_order_id"):
+                if b.get(k):
+                    known.add(b[k])
+
+        # Page fills feed back to reset
+        fills = []
+        cursor = None
+        for _ in range(60):
+            params = {"limit": 200}
+            if cursor:
+                params["cursor"] = cursor
+            resp = auth_get("/portfolio/fills", params=params)
+            fl = resp.get("fills", [])
+            fills.extend(fl)
+            oldest = min((_epoch(f.get("created_time")) or 1e18) for f in fl) if fl else None
+            cursor = resp.get("cursor")
+            if not fl or not cursor or (cutoff and oldest and oldest <= cutoff):
+                break
+            time.sleep(0.2)
+
+        # Keep fills after reset
+        if cutoff:
+            fills = [f for f in fills if (_epoch(f.get("created_time")) or 0) >= cutoff]
+
+        by_order = defaultdict(lambda: {"buy_qty": 0.0, "buy_cost": 0.0,
+                                        "sell_qty": 0.0, "sell_proceeds": 0.0, "fees": 0.0, "action": ""})
+        for f in fills:
+            oid = f.get("order_id")
+            q = float(f.get("count_fp") or f.get("count") or 0)
+            yp = float(f.get("yes_price_dollars") or 0)
+            price = yp  # value fills in YES terms for a consistent cash measure
+            o = by_order[oid]
+            o["fees"] += float(f.get("fee_cost") or 0)
+            if f.get("action") == "sell":
+                o["sell_qty"] += q; o["sell_proceeds"] += q * price; o["action"] = "sell"
+            else:
+                o["buy_qty"] += q; o["buy_cost"] += q * price
+                if not o["action"]:
+                    o["action"] = "buy"
+
+        uncaptured = []
+        unc_cash = 0.0
+        for oid, o in by_order.items():
+            if oid in known:
+                continue
+            # cash flow of this uncaptured order: proceeds - cost - fees
+            cash = o["sell_proceeds"] - o["buy_cost"] - o["fees"]
+            unc_cash += cash
+            uncaptured.append({"order_id": oid[:12], "action": o["action"],
+                               "buy_qty": round(o["buy_qty"]), "sell_qty": round(o["sell_qty"]),
+                               "cash": round(cash, 2)})
+        uncaptured.sort(key=lambda x: x["cash"])
+
+        return JSONResponse({
+            "fills_since_reset": len(fills),
+            "distinct_orders": len(by_order),
+            "known_orders_matched": sum(1 for oid in by_order if oid in known),
+            "uncaptured_orders": len(uncaptured),
+            "uncaptured_net_cash": round(unc_cash, 2),
+            "sample": uncaptured[:25],
+        })
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @app.post("/api/set-reset-baseline")
 def set_reset_baseline(value: float):
     """Manually set the account-value baseline (for resets before this feature)."""
