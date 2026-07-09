@@ -1015,12 +1015,12 @@ def git_backup_bets(bets, force=False):
 
 # ── Dynamic contract sizing (grouped signals, BTC+ETH combined) ────────
 # Split up/down windows; down-check only counts trades since last scale-up
-# Group A: signals 4,5 — up: 3/4 wins, down: 4 losses in 16 (since scale-up)
+# Group A: signals 4,5 — up: 3/4 wins, down: 3 losses in 16 (since scale-up)
 # Group B: signals 1,2,3 — up: 4/6 wins, down: 4 losses in 16 (since scale-up)
 # Signals 0,6,7 never scale and don't feed streak history
 # (0 = coin-flip noise; 6,7 = negative EV in both halves of backtest data)
 SCALE_GROUPS = {
-    "A": {"signals": {4, 5}, "up_window": 4, "up_thresh": 3, "down_window": 16, "down_thresh": 4},
+    "A": {"signals": {4, 5}, "up_window": 4, "up_thresh": 3, "down_window": 16, "down_thresh": 3},
     "B": {"signals": {1, 2, 3}, "up_window": 6, "up_thresh": 4, "down_window": 16, "down_thresh": 4},
 }
 SCALE_UP_COUNT = int(os.environ.get("SCALE_UP_COUNT", 5))

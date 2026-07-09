@@ -664,7 +664,7 @@ def _build_scaling_performance(resolved, status=None):
 
     # Read actual scale state from bot's status file
     scale_configs = {
-        "A": {"signals": {4, 5}, "up_window": 4, "up_thresh": 3, "down_window": 16, "down_thresh": 4},
+        "A": {"signals": {4, 5}, "up_window": 4, "up_thresh": 3, "down_window": 16, "down_thresh": 3},
         "B": {"signals": {1, 2, 3}, "up_window": 6, "up_thresh": 4, "down_window": 16, "down_thresh": 4},
     }
     bot_scale_state = (status or {}).get("scale_state", {})
