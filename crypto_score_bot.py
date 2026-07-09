@@ -1193,43 +1193,53 @@ def _group_scale_contracts(bets, crypto, signal_count):
     return current
 
 def _resolve_dip_orders(bets):
-    """Check resting split-window dip orders: filled -> becomes an open position,
-    unfilled+closed -> discarded. Called at window start."""
-    changed = False
-    for bet in bets:
-        if bet.get("result") != "dip_pending":
-            continue
-        oid = bet.get("order_id")
-        if not oid:
-            bet["result"] = "dip_expired"; changed = True; continue
+    """Resolve resting dip orders against the FILLS feed (ground truth): an
+    order in the feed filled -> becomes an open position; a dip whose window
+    has closed with no fill -> expired. The orders API returns minimal records
+    post-close and can't be trusted, so we match order_ids in the fills feed."""
+    pending = [b for b in bets if b.get("result") == "dip_pending"]
+    if not pending:
+        return bets
+    # Pull recent fills once, aggregate filled qty per order_id
+    fills_qty = {}
+    cursor = None
+    for _ in range(4):  # ~800 recent fills covers many windows
         try:
-            od = auth_get(f"/portfolio/orders/{oid}").get("order", {})
-            status = od.get("status", "")
-            # Require POSITIVE fill confirmation — never default remaining to 0,
-            # or a canceled order (minimal API record) is falsely booked as filled
-            has_counts = od.get("count") is not None and od.get("remaining_count") is not None
-            filled = 0
-            if has_counts:
-                filled = int(od["count"]) - int(od["remaining_count"])
-            if filled > 0:
-                avg_p = od.get("avg_price")
-                if avg_p is not None and avg_p > 1:
-                    avg_p = avg_p / 100
-                if avg_p is not None and bet.get("side") == "no":
-                    avg_p = 1.0 - avg_p
-                bet["fill_price"] = avg_p if avg_p else bet.get("price", SPLIT_DIP_PRICE)
-                bet["filled_count"] = filled
-                bet["result"] = "open"   # normal settlement resolves it next
-                P(f"  [DIP] {bet.get('crypto','')} filled {filled} @ {bet['fill_price']:.2f}")
-                changed = True
-            elif status in ("canceled", "expired") or (has_counts and filled == 0):
-                # market closed / order canceled without the dip triggering
-                bet["result"] = "dip_expired"
-                changed = True
-            # else: unknown (no counts, still open) — leave pending, retry next
-            time.sleep(0.2)
+            params = {"limit": 200}
+            if cursor:
+                params["cursor"] = cursor
+            resp = auth_get("/portfolio/fills", params=params)
         except Exception:
-            pass
+            break
+        fl = resp.get("fills", [])
+        for f in fl:
+            oid = f.get("order_id")
+            q = float(f.get("count_fp") or f.get("count") or 0)
+            fills_qty[oid] = fills_qty.get(oid, 0.0) + q
+        cursor = resp.get("cursor")
+        if not fl or not cursor:
+            break
+        time.sleep(0.2)
+
+    now = datetime.now(timezone.utc)
+    changed = False
+    for bet in pending:
+        qty = fills_qty.get(bet.get("order_id"), 0.0)
+        if qty > 0:
+            bet["fill_price"] = bet.get("price", SPLIT_DIP_PRICE)
+            bet["filled_count"] = int(round(qty))
+            bet["result"] = "open"   # normal settlement resolves it next
+            P(f"  [DIP] {bet.get('crypto','')} filled {bet['filled_count']} @ {bet['fill_price']:.2f}")
+            changed = True
+        else:
+            we = bet.get("window_end", "")
+            try:
+                closed = bool(we) and datetime.fromisoformat(we) < now
+            except Exception:
+                closed = True
+            if closed:
+                bet["result"] = "dip_expired"   # window closed, never filled
+                changed = True
     if changed:
         save_bets(bets)
     return bets
