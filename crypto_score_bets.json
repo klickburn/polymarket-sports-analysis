@@ -268862,5 +268862,103 @@
     "status": "executed",
     "fill_price": 0.62,
     "filled_count": 1
+  },
+  {
+    "crypto": "ETH",
+    "ticker": "KXETH15M-26JUL100715-15",
+    "event_ticker": "KXETH15M-26JUL100715",
+    "side": "yes",
+    "price": 0.65,
+    "score": -1,
+    "reasons": [
+      [
+        "Signal Score",
+        "2/8",
+        "2"
+      ],
+      [
+        "RSI Misalign",
+        "YES RSI=73.1",
+        "0"
+      ],
+      [
+        "1h MeanRev",
+        "ret=-0.10%",
+        "+1"
+      ],
+      [
+        "BTC Same",
+        "btc=+0.00%",
+        "0"
+      ],
+      [
+        "High Vol",
+        "0.31\u22650.3",
+        "+1"
+      ],
+      [
+        "No Consensus",
+        "{'ETH': 'yes', 'XRP': 'no', 'DOGE': 'no'}",
+        "0"
+      ],
+      [
+        "Stoch High",
+        "93.2",
+        "0"
+      ]
+    ],
+    "score_breakdown": {
+      "Signal Score": {
+        "detail": "2/8",
+        "points": 2
+      },
+      "RSI Misalign": {
+        "detail": "YES RSI=73.1",
+        "points": 0
+      },
+      "1h MeanRev": {
+        "detail": "ret=-0.10%",
+        "points": 1
+      },
+      "BTC Same": {
+        "detail": "btc=+0.00%",
+        "points": 0
+      },
+      "High Vol": {
+        "detail": "0.31\u22650.3",
+        "points": 1
+      },
+      "No Consensus": {
+        "detail": "{'ETH': 'yes', 'XRP': 'no', 'DOGE': 'no'}",
+        "points": 0
+      },
+      "Stoch High": {
+        "detail": "93.2",
+        "points": 0
+      }
+    },
+    "indicators": {
+      "ret_1h": -0.1015,
+      "ret_3h": 0.7071,
+      "vol_6h": 0.3144,
+      "rsi": 73.11,
+      "stoch": 93.21,
+      "pack_agreement": 0.0,
+      "btc_ret_1h": 0.0414
+    },
+    "bet_amount": 0.1,
+    "contracts": 1,
+    "entry_minute": 2.1,
+    "timestamp": "2026-07-10T11:02:15.548289+00:00",
+    "window_end": "2026-07-10T11:15:00+00:00",
+    "result": "open",
+    "strategy_version": "v7",
+    "action": "trade",
+    "cool_off": true,
+    "blocked_scale": 30,
+    "order_id": "5d422372-e417-4907-af89-32f0ac155d43",
+    "status": "executed",
+    "fill_price": 0.66,
+    "filled_count": 1
   }
 ]
