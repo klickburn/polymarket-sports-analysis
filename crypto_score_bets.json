@@ -287804,5 +287804,113 @@
     "status": "executed",
     "fill_price": 0.63,
     "filled_count": 1
+  },
+  {
+    "crypto": "ETH",
+    "ticker": "KXETH15M-26JUL110730-30",
+    "side": "no",
+    "price": 0.1,
+    "score": -2,
+    "action": "trade",
+    "result": "loss",
+    "dip_add": true,
+    "dip_type": "nonsplit",
+    "order_id": "97228517-5388-42f3-9f40-b63f27b14929",
+    "contracts": 1,
+    "event_ticker": "KXETH15M-26JUL110730",
+    "window_end": "2026-07-11T11:30:00+00:00",
+    "timestamp": "2026-07-11T11:18:30.156805+00:00",
+    "strategy_version": "v7",
+    "fill_price": 0.1,
+    "filled_count": 1,
+    "market_result": "yes",
+    "pnl": -0.11
+  },
+  {
+    "crypto": "ETH",
+    "ticker": "KXETH15M-26JUL110745-45",
+    "event_ticker": "KXETH15M-26JUL110745",
+    "side": "yes",
+    "price": 0.6,
+    "score": -3,
+    "reasons": [
+      [
+        "Signal Score",
+        "0/8",
+        "0"
+      ],
+      [
+        "RSI Misalign",
+        "YES RSI=52.3",
+        "0"
+      ],
+      [
+        "1h NoRev",
+        "ret=+0.06%",
+        "0"
+      ],
+      [
+        "BTC Same",
+        "btc=+0.00%",
+        "0"
+      ],
+      [
+        "Consensus",
+        "all YES",
+        "0"
+      ],
+      [
+        "Stoch High",
+        "40.3",
+        "0"
+      ]
+    ],
+    "score_breakdown": {
+      "Signal Score": {
+        "detail": "0/8",
+        "points": 0
+      },
+      "RSI Misalign": {
+        "detail": "YES RSI=52.3",
+        "points": 0
+      },
+      "1h NoRev": {
+        "detail": "ret=+0.06%",
+        "points": 0
+      },
+      "BTC Same": {
+        "detail": "btc=+0.00%",
+        "points": 0
+      },
+      "Consensus": {
+        "detail": "all YES",
+        "points": 0
+      },
+      "Stoch High": {
+        "detail": "40.3",
+        "points": 0
+      }
+    },
+    "indicators": {
+      "ret_1h": 0.0554,
+      "ret_3h": -0.1227,
+      "vol_6h": 0.0901,
+      "rsi": 52.29,
+      "stoch": 40.29,
+      "pack_agreement": 0.0,
+      "btc_ret_1h": -0.0028
+    },
+    "bet_amount": 0.1,
+    "contracts": 1,
+    "entry_minute": 2.2,
+    "timestamp": "2026-07-11T11:32:22.502821+00:00",
+    "window_end": "2026-07-11T11:45:00+00:00",
+    "result": "open",
+    "strategy_version": "v7",
+    "action": "trade",
+    "order_id": "e861606f-0db8-46a0-9493-646d3e840e3d",
+    "status": "executed",
+    "fill_price": 0.61,
+    "filled_count": 1
   }
 ]
