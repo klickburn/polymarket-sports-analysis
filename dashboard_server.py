@@ -853,7 +853,11 @@ def _build_score_report(bets, status, balance_info=None):
     resolved = [b for b in trades if b.get("result") in ("win", "loss")]
     wins = [b for b in resolved if b["result"] == "win"]
     losses = [b for b in resolved if b["result"] == "loss"]
-    total_pnl = sum(b.get("pnl", 0) for b in resolved)
+    # Win rate / counts stay core-only; total P&L includes split-dip P&L so the
+    # headline reflects the actual account movement (dips are real money too).
+    core_pnl = sum(b.get("pnl", 0) for b in resolved)
+    dip_pnl = sum(b.get("pnl", 0) for b in resolved_all if b.get("dip_add"))
+    total_pnl = core_pnl + dip_pnl
 
     resolved_skips = [b for b in skips if b.get("result") in ("win", "loss")]
     skip_would_won = [b for b in resolved_skips if b.get("would_have_won")]
@@ -904,6 +908,8 @@ def _build_score_report(bets, status, balance_info=None):
         "losses": len(losses),
         "win_rate": round(len(wins) / len(resolved) * 100, 1) if resolved else 0,
         "total_pnl": round(total_pnl, 2),
+        "core_pnl": round(core_pnl, 2),
+        "dip_pnl": round(dip_pnl, 2),
         "skip_resolved": len(resolved_skips),
         "skip_would_won": len(skip_would_won),
         "skip_would_lost": len(skip_would_lost),

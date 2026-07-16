@@ -1361,17 +1361,21 @@ function renderScoreBot() {
   const skipResolved = d.skip_resolved || 0;
   const netFilterValue = lossesSaved - missedGains;
   const ver = (d.strategy_version || 'v4').toUpperCase();
-  const avgPnl = d.resolved > 0 ? d.total_pnl / d.resolved : 0;
+  // Total P&L now includes split-dip P&L; core_pnl/dip_pnl give the breakdown.
+  const corePnl = (d.core_pnl != null ? d.core_pnl : d.total_pnl);
+  const dipPnl = (d.dip_pnl != null ? d.dip_pnl : 0);
+  const avgPnl = d.resolved > 0 ? corePnl / d.resolved : 0;
   const sBal = d.balance || 0;
   const sPort = d.portfolio_value || 0;
-  // Reconciliation: account change since reset vs recorded P&L
-  let pnlSub = `Avg $${avgPnl >= 0 ? '+' : ''}${avgPnl.toFixed(2)}/trade`;
+  const breakdown = `core $${corePnl >= 0 ? '+' : ''}${corePnl.toFixed(2)} · dips $${dipPnl >= 0 ? '+' : ''}${dipPnl.toFixed(2)}`;
+  // Reconciliation: account change since reset vs recorded P&L (dips-inclusive)
+  let pnlSub = breakdown;
   const rb = d.reset_baseline;
   if (rb && rb.account_value > 0 && (sBal + sPort) > 0) {
     const acctChange = (sBal + sPort) - rb.account_value;
     const drift = acctChange - d.total_pnl;
     const ok = Math.abs(drift) <= Math.max(5, Math.abs(d.total_pnl) * 0.05);
-    pnlSub = `Account ${acctChange >= 0 ? '+' : ''}$${acctChange.toFixed(2)} since reset ${ok ? '✓' : `⚠ drift $${drift.toFixed(2)}`}`;
+    pnlSub = `${breakdown} · Account ${acctChange >= 0 ? '+' : ''}$${acctChange.toFixed(2)} since reset ${ok ? '✓' : `⚠ drift $${drift.toFixed(2)}`}`;
   }
   const kpis = [
     { label: 'Account Value', value: (sBal + sPort) > 0 ? `$${(sBal + sPort).toFixed(2)}` : '--', cls: 'cyan', sub: `$${sBal.toFixed(2)} cash + $${sPort.toFixed(2)} portfolio` },
