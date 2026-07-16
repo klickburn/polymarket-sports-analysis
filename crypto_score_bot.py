@@ -1048,23 +1048,36 @@ _trailing_stopped = False
 def _update_trailing_stop(bets):
     """Track today's realized CORE (non-dip) P&L, arm at TRAIL_STOP_ARM, and set
     the stop flag once it gives back TRAIL_STOP_GIVEBACK from the day's peak.
-    Split-dip P&L is excluded so dips can't accidentally arm/trigger the stop."""
+    Split-dip P&L is excluded so dips can't accidentally arm/trigger the stop.
+
+    The peak and latch are recomputed each poll by replaying the day's persisted
+    trades in timestamp order, NOT carried in mutable globals. This makes the stop
+    deterministic and immune to bot restarts/redeploys — a restart used to zero the
+    in-memory peak and un-latch the stop, letting it re-arm and scale back to 30x."""
     global _trail_day, _trail_peak, _trailing_stopped
     if not TRAIL_STOP_ENABLED:
         _trailing_stopped = False
         return
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    if today != _trail_day:
-        _trail_day = today; _trail_peak = 0.0; _trailing_stopped = False
-    day_pnl = sum(b.get("pnl", 0) for b in bets
-                  if b.get("action") == "trade" and b.get("result") in ("win", "loss")
-                  and b.get("crypto") in ("BTC", "ETH") and not b.get("dip_add")
-                  and b.get("timestamp", "")[:10] == today)
-    _trail_peak = max(_trail_peak, day_pnl)
-    if (not _trailing_stopped and _trail_peak >= TRAIL_STOP_ARM
-            and (_trail_peak - day_pnl) >= TRAIL_STOP_GIVEBACK):
-        _trailing_stopped = True
-        P(f"  [TRAIL] Day peaked +${_trail_peak:.0f}, gave back to +${day_pnl:.0f} "
+    was_stopped = _trailing_stopped and _trail_day == today
+    # Replay today's core trades in order -> true running peak + latch (redeploy-proof)
+    day_trades = sorted(
+        (b for b in bets
+         if b.get("action") == "trade" and b.get("result") in ("win", "loss")
+         and b.get("crypto") in ("BTC", "ETH") and not b.get("dip_add")
+         and b.get("timestamp", "")[:10] == today),
+        key=lambda b: b.get("timestamp", ""))
+    cum = 0.0; peak = 0.0; stopped = False
+    for b in day_trades:
+        cum += b.get("pnl", 0)
+        if cum > peak:
+            peak = cum
+        if peak >= TRAIL_STOP_ARM and (peak - cum) >= TRAIL_STOP_GIVEBACK:
+            stopped = True  # latched: stays true for the rest of the day
+    day_pnl = cum
+    _trail_day = today; _trail_peak = peak; _trailing_stopped = stopped
+    if stopped and not was_stopped:
+        P(f"  [TRAIL] Day peaked +${peak:.0f}, gave back to +${day_pnl:.0f} "
           f"(>= ${TRAIL_STOP_GIVEBACK:.0f}) — trading 1x for rest of day")
     # Persist state so the dashboard (separate process) can show the indicator
     try:
