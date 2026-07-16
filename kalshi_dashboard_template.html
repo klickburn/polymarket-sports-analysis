@@ -557,6 +557,10 @@
   <div class="section-header"><h2>Daily P&L</h2><span class="badge" style="background:rgba(168,85,247,0.2);color:var(--purple)">Per Day</span></div>
   <div id="scoreDailyContent"></div>
 
+  <hr class="section-divider" id="dipSectionDivider" style="display:none">
+  <div class="section-header" id="dipSectionHeader" style="display:none"><h2>Split-Dip Analytics</h2><span class="badge" style="background:rgba(6,182,212,0.2);color:var(--cyan,#06b6d4)">🎯 By Tier</span></div>
+  <div id="dipAnalyticsContent"></div>
+
   <hr class="section-divider">
   <div class="section-header"><h2>Recent Decisions</h2><span class="badge" style="background:rgba(59,130,246,0.2);color:var(--blue)">Trade Log</span></div>
   <div class="card" style="margin-bottom:24px">
@@ -1281,6 +1285,69 @@ function renderScoreEmpty() {
   document.getElementById('scoreKpis').innerHTML = '<div class="card" style="grid-column:1/-1"><div class="empty-state"><div class="msg">Score Bot starting up...</div><div class="sub">Data will appear after the first 15-min window</div></div></div>';
 }
 
+function renderDipAnalytics(dip) {
+  const div = document.getElementById('dipAnalyticsContent');
+  const hdr = document.getElementById('dipSectionHeader');
+  const divider = document.getElementById('dipSectionDivider');
+  if (!dip || !dip.count) { div.innerHTML=''; hdr.style.display='none'; divider.style.display='none'; return; }
+  hdr.style.display=''; divider.style.display='';
+  const tiers = dip.tiers || {};
+  // order tiers by price
+  const keys = Object.keys(tiers).sort((a,b)=>parseInt(a)-parseInt(b));
+
+  // ── Summary table ──
+  let rows = keys.map(t => {
+    const s = tiers[t];
+    const be = s.break_even != null ? s.break_even : parseInt(t);
+    const edge = s.win_rate - be;
+    const verdict = s.count < 5 ? '<span style="color:var(--muted)">too few</span>'
+      : edge >= 0 ? '<span style="color:var(--green)">✓ profitable</span>'
+      : '<span style="color:var(--red)">✗ below break-even</span>';
+    const pc = s.pnl>=0?'var(--green)':'var(--red)';
+    const wc = edge>=0?'var(--green)':'var(--red)';
+    return `<tr>
+      <td style="font-weight:700">${t}</td>
+      <td>${s.count}</td>
+      <td>${s.contracts||s.count}</td>
+      <td style="color:${wc};font-weight:600">${s.win_rate}%</td>
+      <td style="color:var(--muted)">${be}%</td>
+      <td style="color:${wc}">${edge>=0?'+':''}${edge.toFixed(1)}%</td>
+      <td style="color:${pc};font-weight:600">$${s.pnl.toFixed(2)}</td>
+      <td>${verdict}</td>
+    </tr>`;
+  }).join('');
+  const tc = dip.pnl>=0?'var(--green)':'var(--red)';
+  const table = `<div class="card"><div style="font-size:13px;color:var(--muted);margin-bottom:10px">
+      Each dip buys a contract at that price if a split-window side collapses to it. It profits only if it wins more than its <b>break-even</b> (= the buy price). <b>Edge</b> = win rate minus break-even.</div>
+    <div class="scroll-table"><table>
+      <thead><tr><th>Tier</th><th>Fills</th><th>Contracts</th><th>Win%</th><th>Break-even</th><th>Edge</th><th>Net P&L</th><th>Verdict</th></tr></thead>
+      <tbody>${rows}
+        <tr style="border-top:2px solid var(--border);font-weight:700"><td>TOTAL</td><td>${dip.count}</td><td>${dip.contracts||''}</td><td>${dip.win_rate}%</td><td>—</td><td>—</td><td style="color:${tc}">$${dip.pnl.toFixed(2)}</td><td></td></tr>
+      </tbody></table></div>
+    <div class="chart-container med" style="margin-top:14px"><canvas id="dipTierChart"></canvas></div>
+  </div>`;
+  div.innerHTML = table;
+
+  // ── Bar chart: win rate vs break-even per tier ──
+  if (_scoreCharts.dip) { _scoreCharts.dip.destroy(); _scoreCharts.dip=null; }
+  const ctx = document.getElementById('dipTierChart').getContext('2d');
+  _scoreCharts.dip = new Chart(ctx, {
+    type:'bar',
+    data:{ labels:keys, datasets:[
+      { label:'Win rate %', data:keys.map(t=>tiers[t].win_rate),
+        backgroundColor: keys.map(t=>{const s=tiers[t];const be=s.break_even!=null?s.break_even:parseInt(t);return s.win_rate>=be?'rgba(34,197,94,0.75)':'rgba(239,68,68,0.75)';}) },
+      { label:'Break-even %', data:keys.map(t=>tiers[t].break_even!=null?tiers[t].break_even:parseInt(t)),
+        type:'line', borderColor:'#eab308', borderWidth:2, pointRadius:4, pointBackgroundColor:'#eab308', fill:false }
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ labels:{ color:'#c9ccd6' } },
+        tooltip:{ callbacks:{ afterLabel:ctx=>{const t=keys[ctx.dataIndex];const s=tiers[t];return `fills ${s.count}, net $${s.pnl.toFixed(2)}`;} } },
+        title:{ display:true, text:'Win rate vs break-even by tier (green bar = profitable)', color:'#8b8fa3' } },
+      scales:{ x:{ ticks:{ color:'#8b8fa3' }, grid:{ display:false } },
+               y:{ ticks:{ color:'#8b8fa3', callback:v=>v+'%' }, grid:{ color:'rgba(42,45,58,0.3)' }, beginAtZero:true } } }
+  });
+}
+
 function renderScoreBot() {
   const d = SCORE_DATA;
   if (!d) { renderScoreEmpty(); return; }
@@ -1597,6 +1664,7 @@ function renderScoreBot() {
     const oc = dip.pnl >= 0 ? '#22c55e' : '#ef4444';
     dipBanner = `<div style="flex-basis:100%;font-size:12px;color:var(--muted);padding:0 4px">🎯 Split-dip by tier — ${tierLines}<span style="color:var(--muted)">| total ${dip.count} filled, net <span style="color:${oc};font-weight:600">$${dip.pnl.toFixed(2)}</span></span></div>`;
   }
+  renderDipAnalytics(dip);
   document.getElementById('scalingStatusCards').innerHTML = coBanner + dipBanner + Object.entries(ss).map(([gname, s]) => {
     const isScaled = s.current > 1;
     const borderColor = isScaled ? 'var(--green)' : 'var(--yellow)';

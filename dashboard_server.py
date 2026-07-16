@@ -764,20 +764,33 @@ def _build_scaling_performance(resolved, status=None):
     dip = None
     dip_trades = [b for b in resolved if b.get("dip_add") and b.get("result") in ("win", "loss")]
     if dip_trades:
-        def _stat(ts):
+        def _stat(ts, tier_price=None):
             if not ts:
                 return None
             w = sum(1 for b in ts if b["result"] == "win")
-            return {"count": len(ts), "wins": w,
-                    "win_rate": round(w / len(ts) * 100, 1),
-                    "pnl": round(sum(b.get("pnl", 0) for b in ts), 2)}
+            contracts = sum(b.get("filled_count", b.get("contracts", 1)) for b in ts)
+            s = {"count": len(ts), "wins": w,
+                 "win_rate": round(w / len(ts) * 100, 1),
+                 "pnl": round(sum(b.get("pnl", 0) for b in ts), 2),
+                 "contracts": contracts}
+            if tier_price is not None:
+                # break-even win rate = the buy price (buy at p, win pays 1)
+                s["break_even"] = round(tier_price * 100, 1)
+                s["edge"] = round(s["win_rate"] - tier_price * 100, 1)  # above BE = profitable
+            return s
         dip = _stat(dip_trades)
         # Per-tier breakdown (untagged legacy dips -> "10c")
         tiers = {}
         for b in dip_trades:
             t = b.get("dip_tier") or f"{int(round(b.get('price', 0.10)*100))}c"
             tiers.setdefault(t, []).append(b)
-        dip["tiers"] = {t: _stat(ts) for t, ts in sorted(tiers.items())}
+        def _tier_price(t):
+            try:
+                return int(t.replace("c", "")) / 100.0
+            except Exception:
+                return b.get("price", 0.10)
+        dip["tiers"] = {t: _stat(ts, _tier_price(t)) for t, ts in sorted(tiers.items(),
+                        key=lambda kv: _tier_price(kv[0]))}
 
     return {
         "overall_at_1": calc_stats(trades_at_1),
