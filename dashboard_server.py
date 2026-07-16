@@ -31,7 +31,8 @@ from crypto_15m_bot import (
 )
 from crypto_score_bot import (run as run_score_bot, SCALE_UP_COUNT,
                               SPLIT_DIP_ENABLED, SPLIT_DIP_PRICE, SPLIT_DIP_COUNT,
-                              SPLIT_DIP_TIERS)
+                              SPLIT_DIP_TIERS,
+                              TRAIL_STOP_ENABLED, TRAIL_STOP_ARM, TRAIL_STOP_GIVEBACK)
 # History data is committed as kalshi_history.json — no live fetch on Railway
 HISTORY_FILE = "kalshi_history.json"
 
@@ -794,7 +795,8 @@ def _build_scaling_performance(resolved, status=None):
 _SLIM_KEEP = {"crypto", "side", "price", "fill_price", "score", "action", "result",
               "pnl", "contracts", "filled_count", "timestamp", "strategy_version",
               "bet_amount", "would_have_won", "hypothetical_pnl", "market_result",
-              "cool_off", "blocked_scale", "fee", "audited", "dip_add", "dip_type", "dip_tier"}
+              "cool_off", "blocked_scale", "fee", "audited", "dip_add", "dip_type", "dip_tier",
+              "trail_stopped"}
 _DETAIL_KEYS = {"reasons", "score_breakdown", "indicators", "entry_minute", "window_end",
                 "order_id", "event_ticker", "ticker"}
 
@@ -1217,6 +1219,9 @@ def score_debug():
         "split_dip_price": SPLIT_DIP_PRICE,
         "split_dip_count": SPLIT_DIP_COUNT,
         "split_dip_tiers": [f"{c}@{p*100:.0f}c" for p, c in SPLIT_DIP_TIERS],
+        "trail_stop_enabled": TRAIL_STOP_ENABLED,
+        "trail_stop_arm": TRAIL_STOP_ARM,
+        "trail_stop_giveback": TRAIL_STOP_GIVEBACK,
     })
 
 

@@ -1035,6 +1035,38 @@ COOL_OFF_WINDOW = int(os.environ.get("COOL_OFF_WINDOW", "10"))
 # Bypass the lid during a clean consecutive win streak of >= N (0 disables).
 # Distinguishes a durable run (ride it at full size) from choppy euphoria.
 COOL_OFF_BYPASS_STREAK = int(os.environ.get("COOL_OFF_BYPASS_STREAK", "6"))
+# Intraday trailing stop: once the day's CORE P&L peaks >= ARM, if it gives back
+# GIVEBACK from that peak, drop to 1x for the rest of the day. Dips excluded so
+# they can't arm or trigger it. Thresholds are in dollars (tune to multiplier).
+TRAIL_STOP_ENABLED = os.environ.get("TRAIL_STOP_ENABLED", "0") == "1"
+TRAIL_STOP_ARM = float(os.environ.get("TRAIL_STOP_ARM", "40"))
+TRAIL_STOP_GIVEBACK = float(os.environ.get("TRAIL_STOP_GIVEBACK", "20"))
+_trail_day = None
+_trail_peak = 0.0
+_trailing_stopped = False
+
+def _update_trailing_stop(bets):
+    """Track today's realized CORE (non-dip) P&L, arm at TRAIL_STOP_ARM, and set
+    the stop flag once it gives back TRAIL_STOP_GIVEBACK from the day's peak.
+    Split-dip P&L is excluded so dips can't accidentally arm/trigger the stop."""
+    global _trail_day, _trail_peak, _trailing_stopped
+    if not TRAIL_STOP_ENABLED:
+        _trailing_stopped = False
+        return
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if today != _trail_day:
+        _trail_day = today; _trail_peak = 0.0; _trailing_stopped = False
+    day_pnl = sum(b.get("pnl", 0) for b in bets
+                  if b.get("action") == "trade" and b.get("result") in ("win", "loss")
+                  and b.get("crypto") in ("BTC", "ETH") and not b.get("dip_add")
+                  and b.get("timestamp", "")[:10] == today)
+    _trail_peak = max(_trail_peak, day_pnl)
+    if (not _trailing_stopped and _trail_peak >= TRAIL_STOP_ARM
+            and (_trail_peak - day_pnl) >= TRAIL_STOP_GIVEBACK):
+        _trailing_stopped = True
+        P(f"  [TRAIL] Day peaked +${_trail_peak:.0f}, gave back to +${day_pnl:.0f} "
+          f"(>= ${TRAIL_STOP_GIVEBACK:.0f}) — trading 1x for rest of day")
+
 _scale_state = {}
 _scale_up_at = {}  # group -> trade count when scaled up (for down-check offset)
 
@@ -1129,6 +1161,9 @@ def get_dynamic_contracts(bets, crypto, signal_count):
     """Grouped scaling with cool-off lid: BTC+ETH combined, split up/down windows."""
     global _cool_off_blocked
     _cool_off_blocked = 0
+    # Intraday trailing stop: if the day gave back its gains, trade 1x
+    if _trailing_stopped:
+        return 1
     contracts = _group_scale_contracts(bets, crypto, signal_count)
     # Cool-off: trailing WR >= threshold means the run is euphoric — forward
     # edge is ~zero there, so cap at 1x until it cools (group states unaffected)
@@ -1552,11 +1587,15 @@ def run(live=False):
             # and a stale open loss would be invisible to the scale-down check
             if trade_queue:
                 bets = _resolve_open_bets(bets)
+                # Update the intraday trailing stop from today's realized core P&L
+                _update_trailing_stop(bets)
             pending_orders = []  # [{crypto, ticker, side, price, order_id, bet_record}, ...]
             for tq in trade_queue:
                 sig_count = tq["score"] + 3
                 current_contracts = get_dynamic_contracts(bets, tq["crypto"], sig_count)
                 tq["bet_record"]["contracts"] = current_contracts
+                if _trailing_stopped:
+                    tq["bet_record"]["trail_stopped"] = True
                 if _cool_off_blocked > 0:
                     tq["bet_record"]["cool_off"] = True
                     tq["bet_record"]["blocked_scale"] = _cool_off_blocked
