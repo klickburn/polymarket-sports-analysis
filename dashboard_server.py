@@ -31,7 +31,7 @@ from crypto_15m_bot import (
 )
 from crypto_score_bot import (run as run_score_bot, SCALE_UP_COUNT,
                               SPLIT_DIP_ENABLED, SPLIT_DIP_PRICE, SPLIT_DIP_COUNT,
-                              NONSPLIT_DIP_ENABLED, NONSPLIT_DIP_COUNT)
+                              SPLIT_DIP_TIERS)
 # History data is committed as kalshi_history.json — no live fetch on Railway
 HISTORY_FILE = "kalshi_history.json"
 
@@ -759,7 +759,7 @@ def _build_scaling_performance(resolved, status=None):
     except Exception:
         pass
 
-    # Dip-add effectiveness, split out by type (split vs non-split)
+    # Dip-add effectiveness, broken down by price tier (10c / 20c / 5c ...)
     dip = None
     dip_trades = [b for b in resolved if b.get("dip_add") and b.get("result") in ("win", "loss")]
     if dip_trades:
@@ -771,9 +771,12 @@ def _build_scaling_performance(resolved, status=None):
                     "win_rate": round(w / len(ts) * 100, 1),
                     "pnl": round(sum(b.get("pnl", 0) for b in ts), 2)}
         dip = _stat(dip_trades)
-        # Dips placed before the dip_type field existed were all splits
-        dip["split"] = _stat([b for b in dip_trades if b.get("dip_type") != "nonsplit"])
-        dip["nonsplit"] = _stat([b for b in dip_trades if b.get("dip_type") == "nonsplit"])
+        # Per-tier breakdown (untagged legacy dips -> "10c")
+        tiers = {}
+        for b in dip_trades:
+            t = b.get("dip_tier") or f"{int(round(b.get('price', 0.10)*100))}c"
+            tiers.setdefault(t, []).append(b)
+        dip["tiers"] = {t: _stat(ts) for t, ts in sorted(tiers.items())}
 
     return {
         "overall_at_1": calc_stats(trades_at_1),
@@ -791,7 +794,7 @@ def _build_scaling_performance(resolved, status=None):
 _SLIM_KEEP = {"crypto", "side", "price", "fill_price", "score", "action", "result",
               "pnl", "contracts", "filled_count", "timestamp", "strategy_version",
               "bet_amount", "would_have_won", "hypothetical_pnl", "market_result",
-              "cool_off", "blocked_scale", "fee", "audited", "dip_add", "dip_type"}
+              "cool_off", "blocked_scale", "fee", "audited", "dip_add", "dip_type", "dip_tier"}
 _DETAIL_KEYS = {"reasons", "score_breakdown", "indicators", "entry_minute", "window_end",
                 "order_id", "event_ticker", "ticker"}
 
@@ -1213,8 +1216,7 @@ def score_debug():
         "split_dip_enabled": SPLIT_DIP_ENABLED,
         "split_dip_price": SPLIT_DIP_PRICE,
         "split_dip_count": SPLIT_DIP_COUNT,
-        "nonsplit_dip_enabled": NONSPLIT_DIP_ENABLED,
-        "nonsplit_dip_count": NONSPLIT_DIP_COUNT,
+        "split_dip_tiers": [f"{c}@{p*100:.0f}c" for p, c in SPLIT_DIP_TIERS],
     })
 
 

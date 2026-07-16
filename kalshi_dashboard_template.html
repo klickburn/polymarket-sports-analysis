@@ -1590,9 +1590,12 @@ function renderScoreBot() {
     const line = (label, s) => {
       if (!s || !s.count) return '';
       const c = s.pnl >= 0 ? '#22c55e' : '#ef4444';
-      return `<span style="margin-right:14px">${label}: ${s.count} filled, ${s.win_rate}% won, net <span style="color:${c};font-weight:600">$${s.pnl.toFixed(2)}</span></span>`;
+      return `<span style="margin-right:16px">${label}: ${s.count} filled, ${s.win_rate}% won, net <span style="color:${c};font-weight:600">$${s.pnl.toFixed(2)}</span></span>`;
     };
-    dipBanner = `<div style="flex-basis:100%;font-size:12px;color:var(--muted);padding:0 4px">🎯 Dip adds — ${line('split(10x)', dip.split)}${line('non-split(1x)', dip.nonsplit)}</div>`;
+    const tiers = dip.tiers || {};
+    const tierLines = Object.keys(tiers).map(t => line(t, tiers[t])).join('');
+    const oc = dip.pnl >= 0 ? '#22c55e' : '#ef4444';
+    dipBanner = `<div style="flex-basis:100%;font-size:12px;color:var(--muted);padding:0 4px">🎯 Split-dip by tier — ${tierLines}<span style="color:var(--muted)">| total ${dip.count} filled, net <span style="color:${oc};font-weight:600">$${dip.pnl.toFixed(2)}</span></span></div>`;
   }
   document.getElementById('scalingStatusCards').innerHTML = coBanner + dipBanner + Object.entries(ss).map(([gname, s]) => {
     const isScaled = s.current > 1;
