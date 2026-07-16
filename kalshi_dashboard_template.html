@@ -1665,7 +1665,23 @@ function renderScoreBot() {
     dipBanner = `<div style="flex-basis:100%;font-size:12px;color:var(--muted);padding:0 4px">🎯 Split-dip by tier — ${tierLines}<span style="color:var(--muted)">| total ${dip.count} filled, net <span style="color:${oc};font-weight:600">$${dip.pnl.toFixed(2)}</span></span></div>`;
   }
   renderDipAnalytics(dip);
-  document.getElementById('scalingStatusCards').innerHTML = coBanner + dipBanner + Object.entries(ss).map(([gname, s]) => {
+  // Trailing-stop banner
+  const tr = sp.trail_stop;
+  let trailBanner = '';
+  if (tr) {
+    if (tr.stopped) {
+      trailBanner = `<div class="card" style="flex-basis:100%;border-left:3px solid #ef4444;padding:10px 16px">
+        <span style="background:rgba(239,68,68,0.15);color:#ef4444;padding:3px 10px;border-radius:6px;font-weight:700;font-size:13px">🛑 TRAILING STOP ACTIVE</span>
+        <span style="margin-left:10px;font-size:13px;color:var(--text)">Day peaked +$${tr.peak.toFixed(0)}, gave back to +$${tr.day_pnl.toFixed(0)} (≥ $${tr.giveback.toFixed(0)}) — trading 1x for the rest of today</span>
+      </div>`;
+    } else if (tr.armed) {
+      const trigger = tr.peak - tr.giveback;
+      trailBanner = `<div style="flex-basis:100%;font-size:12px;color:var(--muted);padding:0 4px">🛡️ Trailing stop armed — day peak +$${tr.peak.toFixed(0)}, will cut to 1x if it falls to +$${trigger.toFixed(0)} (gives back $${tr.giveback.toFixed(0)})</div>`;
+    } else {
+      trailBanner = `<div style="flex-basis:100%;font-size:12px;color:var(--muted);padding:0 4px">🛡️ Trailing stop: day +$${tr.day_pnl.toFixed(0)} — arms once the day is up $${tr.arm.toFixed(0)}</div>`;
+    }
+  }
+  document.getElementById('scalingStatusCards').innerHTML = coBanner + trailBanner + dipBanner + Object.entries(ss).map(([gname, s]) => {
     const isScaled = s.current > 1;
     const borderColor = isScaled ? 'var(--green)' : 'var(--yellow)';
     const statusLabel = isScaled ? `${s.current}x SCALED UP` : '1x BASE';
@@ -1740,6 +1756,7 @@ function renderScoreTable(bets) {
       const scaled = c > 1;
       qty = `<span style="font-weight:600;color:${b.dip_add ? 'var(--cyan, #06b6d4)' : (scaled ? 'var(--purple)' : 'var(--muted)')}">${fc}${fc !== c ? '/' + c : ''}</span>`;
       if (b.cool_off) qty += ` <span title="cool-off capped this trade at 1x (would be ${b.blocked_scale}x)" style="font-size:11px">❄️</span>`;
+      if (b.trail_stopped) qty += ` <span title="trailing stop active — day gave back its gains, trading 1x" style="font-size:11px">🛑</span>`;
       if (b.dip_add) qty += ` <span title="split-window dip add — bought on the dip at ${(b.fill_price*100).toFixed(0)}c" style="font-size:11px">🎯</span>`;
     }
     return `<tr>

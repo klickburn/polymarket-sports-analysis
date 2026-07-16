@@ -792,6 +792,19 @@ def _build_scaling_performance(resolved, status=None):
         dip["tiers"] = {t: _stat(ts, _tier_price(t)) for t, ts in sorted(tiers.items(),
                         key=lambda kv: _tier_price(kv[0]))}
 
+    # Trailing-stop status (persisted by the bot); only show for today
+    trail = None
+    if TRAIL_STOP_ENABLED:
+        raw = (status or {}).get("trail") or {}
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        if raw.get("day") == today:
+            trail = {"arm": TRAIL_STOP_ARM, "giveback": TRAIL_STOP_GIVEBACK,
+                     "peak": raw.get("peak", 0), "day_pnl": raw.get("day_pnl", 0),
+                     "armed": bool(raw.get("armed")), "stopped": bool(raw.get("stopped"))}
+        else:
+            trail = {"arm": TRAIL_STOP_ARM, "giveback": TRAIL_STOP_GIVEBACK,
+                     "peak": 0, "day_pnl": 0, "armed": False, "stopped": False}
+
     return {
         "overall_at_1": calc_stats(trades_at_1),
         "overall_at_scaled": calc_stats(trades_at_scaled),
@@ -802,6 +815,7 @@ def _build_scaling_performance(resolved, status=None):
         "scaling_status": scaling_status,
         "cool_off": cool_off,
         "dip_add": dip,
+        "trail_stop": trail,
     }
 
 

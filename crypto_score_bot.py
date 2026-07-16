@@ -1066,6 +1066,18 @@ def _update_trailing_stop(bets):
         _trailing_stopped = True
         P(f"  [TRAIL] Day peaked +${_trail_peak:.0f}, gave back to +${day_pnl:.0f} "
           f"(>= ${TRAIL_STOP_GIVEBACK:.0f}) — trading 1x for rest of day")
+    # Persist state so the dashboard (separate process) can show the indicator
+    try:
+        status = {}
+        if os.path.exists(STATUS_FILE):
+            with open(STATUS_FILE) as f:
+                status = json.load(f)
+        status["trail"] = {"day": today, "peak": round(_trail_peak, 2),
+                           "day_pnl": round(day_pnl, 2), "stopped": _trailing_stopped,
+                           "armed": _trail_peak >= TRAIL_STOP_ARM}
+        save_status(status)
+    except Exception:
+        pass
 
 _scale_state = {}
 _scale_up_at = {}  # group -> trade count when scaled up (for down-check offset)
