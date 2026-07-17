@@ -1042,9 +1042,36 @@ COOL_OFF_BYPASS_STREAK = int(os.environ.get("COOL_OFF_BYPASS_STREAK", "6"))
 TRAIL_STOP_ENABLED = os.environ.get("TRAIL_STOP_ENABLED", "0") == "1"
 TRAIL_STOP_ARM = float(os.environ.get("TRAIL_STOP_ARM", "40"))
 TRAIL_STOP_GIVEBACK = float(os.environ.get("TRAIL_STOP_GIVEBACK", "20"))
+# Streak-hold override: while on a K-consecutive-win streak, lift the trailing stop
+# (a durable run keeps its edge — same idea as the cool-off bypass). 0 disables it,
+# leaving the plain one-way daily latch. K>0 turns the stop into a per-trade toggle
+# that can fire, lift on a K-win streak, and re-fire when the streak breaks.
+TRAIL_STREAK_HOLD_K = int(os.environ.get("TRAIL_STREAK_HOLD_K", "0"))
 _trail_day = None
 _trail_peak = 0.0
 _trailing_stopped = False
+
+
+def _trail_replay(seq, arm, give, k):
+    """Replay one UTC day's realized CORE trades through the trailing stop and return
+    whether the NEXT trade should be clipped to 1x, plus diagnostics.
+
+    seq: list of (realized_pnl, won_bool) in order. k<=0 -> one-way daily latch;
+    k>0 -> streak-hold toggle (lift while on a k-win streak, re-fire when it breaks).
+    Pure function of the realized sequence -> deterministic and restart-proof.
+    Returns (clip_next, peak, cum, streak, ever_stopped)."""
+    cum = 0.0; peak = 0.0; s = False; st = 0; ever = False
+    for pnl, won in seq:
+        if k > 0 and s and st >= k:
+            s = False                       # lift: the run is alive again
+        cum += pnl
+        if cum > peak:
+            peak = cum
+        st = st + 1 if won else 0
+        if not s and (k <= 0 or st < k) and peak >= arm and (peak - cum) >= give:
+            s = True; ever = True           # fire (latched until lifted / day end)
+    clip_next = s and not (k > 0 and st >= k)
+    return clip_next, peak, cum, st, ever
 
 def _update_trailing_stop(bets):
     """Track today's realized CORE (non-dip) P&L, arm at TRAIL_STOP_ARM, and set
@@ -1061,34 +1088,32 @@ def _update_trailing_stop(bets):
         return
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     was_stopped = _trailing_stopped and _trail_day == today
-    # Replay today's core trades in order -> true running peak + latch (redeploy-proof)
+    # Replay today's core trades in order -> clip decision (redeploy-proof)
     day_trades = sorted(
         (b for b in bets
          if b.get("action") == "trade" and b.get("result") in ("win", "loss")
          and b.get("crypto") in ("BTC", "ETH") and not b.get("dip_add")
          and b.get("timestamp", "")[:10] == today),
         key=lambda b: b.get("timestamp", ""))
-    cum = 0.0; peak = 0.0; stopped = False
-    for b in day_trades:
-        cum += b.get("pnl", 0)
-        if cum > peak:
-            peak = cum
-        if peak >= TRAIL_STOP_ARM and (peak - cum) >= TRAIL_STOP_GIVEBACK:
-            stopped = True  # latched: stays true for the rest of the day
-    day_pnl = cum
+    seq = [(b.get("pnl", 0), b.get("result") == "win") for b in day_trades]
+    stopped, peak, day_pnl, streak, ever = _trail_replay(
+        seq, TRAIL_STOP_ARM, TRAIL_STOP_GIVEBACK, TRAIL_STREAK_HOLD_K)
     _trail_day = today; _trail_peak = peak; _trailing_stopped = stopped
     if stopped and not was_stopped:
+        mode = f"streak-hold k={TRAIL_STREAK_HOLD_K}" if TRAIL_STREAK_HOLD_K > 0 else "latch"
         P(f"  [TRAIL] Day peaked +${peak:.0f}, gave back to +${day_pnl:.0f} "
-          f"(>= ${TRAIL_STOP_GIVEBACK:.0f}) — trading 1x for rest of day")
+          f"(>= ${TRAIL_STOP_GIVEBACK:.0f}) — clipping to 1x ({mode})")
     # Persist state so the dashboard (separate process) can show the indicator
     try:
         status = {}
         if os.path.exists(STATUS_FILE):
             with open(STATUS_FILE) as f:
                 status = json.load(f)
-        status["trail"] = {"day": today, "peak": round(_trail_peak, 2),
-                           "day_pnl": round(day_pnl, 2), "stopped": _trailing_stopped,
-                           "armed": _trail_peak >= TRAIL_STOP_ARM}
+        status["trail"] = {"day": today, "peak": round(peak, 2),
+                           "day_pnl": round(day_pnl, 2), "stopped": stopped,
+                           "armed": peak >= TRAIL_STOP_ARM,
+                           "streak_hold_k": TRAIL_STREAK_HOLD_K,
+                           "streak": streak, "ever_stopped": ever}
         save_status(status)
     except Exception:
         pass

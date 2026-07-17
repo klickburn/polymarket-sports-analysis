@@ -1359,19 +1359,26 @@ function renderTrailCompare(tc) {
   const badge = document.getElementById('trailCompareBadge');
   if (!tc || !tc.labels || tc.labels.length < 2) { div.innerHTML=''; hdr.style.display='none'; divider.style.display='none'; return; }
   hdr.style.display=''; divider.style.display='';
-  badge.textContent = `🛑 $${(tc.arm||0).toFixed(0)}/$${(tc.giveback||0).toFixed(0)}`;
+  const shK = tc.streak_hold_k || 0;
+  const stopName = shK > 0 ? `streak-hold k=${shK}` : 'trailing stop';
+  badge.textContent = shK > 0
+    ? `🏃 k=${shK} · $${(tc.arm||0).toFixed(0)}/$${(tc.giveback||0).toFixed(0)}`
+    : `🛑 $${(tc.arm||0).toFixed(0)}/$${(tc.giveback||0).toFixed(0)}`;
   const delta = tc.delta || 0;
   const dc = delta >= 0 ? 'var(--green)' : 'var(--red)';
   const verdict = delta >= 0
-    ? `the stop <b style="color:var(--green)">added $${delta.toFixed(2)}</b> over letting it run`
-    : `the stop <b style="color:var(--red)">cost $${Math.abs(delta).toFixed(2)}</b> vs letting it run (it clips green days)`;
+    ? `the ${stopName} <b style="color:var(--green)">added $${delta.toFixed(2)}</b> over letting it run`
+    : `the ${stopName} <b style="color:var(--red)">cost $${Math.abs(delta).toFixed(2)}</b> vs letting it run (it clips green days)`;
+  const howItWorks = shK > 0
+    ? `Both curves cover the trades on this dashboard. Over this period, ${verdict}. The stop caps a day at 1x after it gives back $${(tc.giveback||0).toFixed(0)} from a $${(tc.arm||0).toFixed(0)}+ peak — but a ${shK}-win streak lifts it again, so the "with" line keeps climbing through durable runs.`
+    : `Both curves cover the trades on this dashboard. Over this period, ${verdict}. The lines overlap until a day gives back $${(tc.giveback||0).toFixed(0)} from a $${(tc.arm||0).toFixed(0)}+ peak — then the stop caps that day at 1x and the "with" line flattens.`;
   div.innerHTML = `<div class="card">
     <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:8px">
       <div><div style="font-size:12px;color:var(--muted)">Without stop (free scaling)</div><div style="font-size:20px;font-weight:700;color:${(tc.without_total||0)>=0?'var(--green)':'var(--red)'}">$${(tc.without_total||0)>=0?'+':''}${(tc.without_total||0).toFixed(2)}</div></div>
-      <div><div style="font-size:12px;color:var(--muted)">With trailing stop</div><div style="font-size:20px;font-weight:700;color:${(tc.with_total||0)>=0?'var(--green)':'var(--red)'}">$${(tc.with_total||0)>=0?'+':''}${(tc.with_total||0).toFixed(2)}</div></div>
+      <div><div style="font-size:12px;color:var(--muted)">With ${stopName}</div><div style="font-size:20px;font-weight:700;color:${(tc.with_total||0)>=0?'var(--green)':'var(--red)'}">$${(tc.with_total||0)>=0?'+':''}${(tc.with_total||0).toFixed(2)}</div></div>
       <div><div style="font-size:12px;color:var(--muted)">Difference</div><div style="font-size:20px;font-weight:700;color:${dc}">$${delta>=0?'+':''}${delta.toFixed(2)}</div></div>
     </div>
-    <div style="font-size:13px;color:var(--muted);margin-bottom:10px">Both curves cover the trades on this dashboard. Over this period, ${verdict}. The lines overlap until a day gives back $${(tc.giveback||0).toFixed(0)} from a $${(tc.arm||0).toFixed(0)}+ peak — then the stop caps that day at 1x and the "with" line flattens.</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:10px">${howItWorks}</div>
     <div class="chart-container tall"><canvas id="trailCompareChart"></canvas></div>
   </div>`;
 
@@ -1382,7 +1389,7 @@ function renderTrailCompare(tc) {
     type:'line',
     data:{ labels, datasets:[
       { label:'Without stop (free scaling)', data:tc.without_stop, borderColor:'#8b8fa3', backgroundColor:'rgba(139,143,163,0.05)', fill:false, tension:0.25, pointRadius:0, borderWidth:2, borderDash:[6,4] },
-      { label:'With trailing stop', data:tc.with_stop, borderColor:'#ef4444', backgroundColor:'rgba(239,68,68,0.08)', fill:true, tension:0.25, pointRadius:0, borderWidth:2.5 }
+      { label:`With ${stopName}`, data:tc.with_stop, borderColor:'#ef4444', backgroundColor:'rgba(239,68,68,0.08)', fill:true, tension:0.25, pointRadius:0, borderWidth:2.5 }
     ]},
     options:{ responsive:true, maintainAspectRatio:false, interaction:{ mode:'index', intersect:false },
       plugins:{ legend:{ labels:{ color:'#c9ccd6' } },
@@ -1718,16 +1725,21 @@ function renderScoreBot() {
   const tr = sp.trail_stop;
   let trailBanner = '';
   if (tr) {
+    const shK = tr.streak_hold_k || 0;
+    const shTag = shK > 0 ? ` <span style="color:var(--muted)">· streak-hold k=${shK} (lifts on a ${shK}-win streak, now ${tr.streak||0})</span>` : '';
     if (tr.stopped) {
+      const back = shK > 0 ? `trading 1x until you hit a ${shK}-win streak` : 'trading 1x for the rest of today';
       trailBanner = `<div class="card" style="flex-basis:100%;border-left:3px solid #ef4444;padding:10px 16px">
         <span style="background:rgba(239,68,68,0.15);color:#ef4444;padding:3px 10px;border-radius:6px;font-weight:700;font-size:13px">🛑 TRAILING STOP ACTIVE</span>
-        <span style="margin-left:10px;font-size:13px;color:var(--text)">Day peaked +$${tr.peak.toFixed(0)}, gave back to +$${tr.day_pnl.toFixed(0)} (≥ $${tr.giveback.toFixed(0)}) — trading 1x for the rest of today</span>
+        <span style="margin-left:10px;font-size:13px;color:var(--text)">Day peaked +$${tr.peak.toFixed(0)}, gave back to +$${tr.day_pnl.toFixed(0)} (≥ $${tr.giveback.toFixed(0)}) — ${back}${shTag}</span>
       </div>`;
+    } else if (shK > 0 && tr.armed && (tr.streak||0) >= shK) {
+      trailBanner = `<div style="flex-basis:100%;font-size:12px;color:var(--muted);padding:0 4px">🏃 Riding a ${tr.streak}-win streak — trailing stop held off, scaling on${shTag}</div>`;
     } else if (tr.armed) {
       const trigger = tr.peak - tr.giveback;
-      trailBanner = `<div style="flex-basis:100%;font-size:12px;color:var(--muted);padding:0 4px">🛡️ Trailing stop armed — day peak +$${tr.peak.toFixed(0)}, will cut to 1x if it falls to +$${trigger.toFixed(0)} (gives back $${tr.giveback.toFixed(0)})</div>`;
+      trailBanner = `<div style="flex-basis:100%;font-size:12px;color:var(--muted);padding:0 4px">🛡️ Trailing stop armed — day peak +$${tr.peak.toFixed(0)}, cuts to 1x if it falls to +$${trigger.toFixed(0)} (gives back $${tr.giveback.toFixed(0)})${shTag}</div>`;
     } else {
-      trailBanner = `<div style="flex-basis:100%;font-size:12px;color:var(--muted);padding:0 4px">🛡️ Trailing stop: day +$${tr.day_pnl.toFixed(0)} — arms once the day is up $${tr.arm.toFixed(0)}</div>`;
+      trailBanner = `<div style="flex-basis:100%;font-size:12px;color:var(--muted);padding:0 4px">🛡️ Trailing stop: day +$${tr.day_pnl.toFixed(0)} — arms once the day is up $${tr.arm.toFixed(0)}${shTag}</div>`;
     }
   }
   document.getElementById('scalingStatusCards').innerHTML = coBanner + trailBanner + dipBanner + Object.entries(ss).map(([gname, s]) => {

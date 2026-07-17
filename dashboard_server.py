@@ -32,7 +32,8 @@ from crypto_15m_bot import (
 from crypto_score_bot import (run as run_score_bot, SCALE_UP_COUNT,
                               SPLIT_DIP_ENABLED, SPLIT_DIP_PRICE, SPLIT_DIP_COUNT,
                               SPLIT_DIP_TIERS,
-                              TRAIL_STOP_ENABLED, TRAIL_STOP_ARM, TRAIL_STOP_GIVEBACK)
+                              TRAIL_STOP_ENABLED, TRAIL_STOP_ARM, TRAIL_STOP_GIVEBACK,
+                              TRAIL_STREAK_HOLD_K)
 # History data is committed as kalshi_history.json — no live fetch on Railway
 HISTORY_FILE = "kalshi_history.json"
 
@@ -800,10 +801,14 @@ def _build_scaling_performance(resolved, status=None):
         if raw.get("day") == today:
             trail = {"arm": TRAIL_STOP_ARM, "giveback": TRAIL_STOP_GIVEBACK,
                      "peak": raw.get("peak", 0), "day_pnl": raw.get("day_pnl", 0),
-                     "armed": bool(raw.get("armed")), "stopped": bool(raw.get("stopped"))}
+                     "armed": bool(raw.get("armed")), "stopped": bool(raw.get("stopped")),
+                     "streak_hold_k": TRAIL_STREAK_HOLD_K, "streak": raw.get("streak", 0),
+                     "ever_stopped": bool(raw.get("ever_stopped"))}
         else:
             trail = {"arm": TRAIL_STOP_ARM, "giveback": TRAIL_STOP_GIVEBACK,
-                     "peak": 0, "day_pnl": 0, "armed": False, "stopped": False}
+                     "peak": 0, "day_pnl": 0, "armed": False, "stopped": False,
+                     "streak_hold_k": TRAIL_STREAK_HOLD_K, "streak": 0,
+                     "ever_stopped": False}
 
     return {
         "overall_at_1": calc_stats(trades_at_1),
@@ -843,9 +848,11 @@ def _build_trail_compare(bets, max_points=500):
     """Two cumulative CORE P&L curves over the dashboard's trades: with and
     without the intraday trailing stop. 'without' reconstructs the free-scaling
     P&L from each trade's base_contracts (the scale absent the stop); 'with'
-    replays a clean single-latch stop per UTC day, clipping to 1x once the day
-    gives back TRAIL_STOP_GIVEBACK from a peak >= TRAIL_STOP_ARM. Split dips are
-    excluded so they can't move either line."""
+    replays the *enabled* stop policy per UTC day — the plain one-way latch, or
+    the streak-hold toggle when TRAIL_STREAK_HOLD_K > 0 (lift while on a K-win
+    streak, re-fire when it breaks). This mirrors the bot's _trail_replay. Split
+    dips are excluded so they can't move either line."""
+    K = TRAIL_STREAK_HOLD_K
     core = [b for b in bets
             if b.get("action") == "trade" and b.get("result") in ("win", "loss")
             and b.get("crypto") in ("BTC", "ETH") and not b.get("dip_add")
@@ -857,6 +864,7 @@ def _build_trail_compare(bets, max_points=500):
     day_start = 0.0   # with-stop cumulative at the start of the current UTC day
     day_peak = 0.0    # highest with-stop cumulative reached during the current day
     day_stopped = False
+    day_streak = 0
     for b in core:
         day = b.get("timestamp", "")[:10]
         if day != cur_day:
@@ -864,18 +872,25 @@ def _build_trail_compare(bets, max_points=500):
             day_start = cum_with   # the trailing stop resets each UTC day
             day_peak = cum_with
             day_stopped = False
+            day_streak = 0
+        # lift the stop first if we're riding a K-win streak (streak-hold)
+        if K > 0 and day_stopped and day_streak >= K:
+            day_stopped = False
         c_rec = b.get("filled_count") or b.get("contracts") or 1
         pnl = b.get("pnl", 0)
         per_contract = pnl / c_rec if c_rec else pnl
         base = b.get("base_contracts") or c_rec  # intended scale absent the stop
         # without the stop: always free-scaling
         cum_without += per_contract * base
-        # with the stop: 1x once the day has latched
+        # with the stop: 1x while clipped
         cum_with += per_contract * (1 if day_stopped else base)
         if cum_with > day_peak:
             day_peak = cum_with
-        # Arm on the DAY's own peak gain (not the all-days total); fire on giveback
-        if (not day_stopped and (day_peak - day_start) >= TRAIL_STOP_ARM
+        day_streak = day_streak + 1 if b.get("result") == "win" else 0
+        # Arm on the DAY's own peak gain (not the all-days total); fire on giveback,
+        # unless a K-win streak is holding the stop off.
+        if (not day_stopped and (K <= 0 or day_streak < K)
+                and (day_peak - day_start) >= TRAIL_STOP_ARM
                 and (day_peak - cum_with) >= TRAIL_STOP_GIVEBACK):
             day_stopped = True
         labels.append(b.get("timestamp"))
@@ -899,6 +914,7 @@ def _build_trail_compare(bets, max_points=500):
         "arm": TRAIL_STOP_ARM,
         "giveback": TRAIL_STOP_GIVEBACK,
         "enabled": TRAIL_STOP_ENABLED,
+        "streak_hold_k": K,
     }
 
 
@@ -1320,6 +1336,7 @@ def score_debug():
         "trail_stop_enabled": TRAIL_STOP_ENABLED,
         "trail_stop_arm": TRAIL_STOP_ARM,
         "trail_stop_giveback": TRAIL_STOP_GIVEBACK,
+        "trail_streak_hold_k": TRAIL_STREAK_HOLD_K,
     })
 
 
