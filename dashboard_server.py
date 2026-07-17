@@ -854,13 +854,15 @@ def _build_trail_compare(bets, max_points=500):
     labels, with_series, without_series = [], [], []
     cum_with = cum_without = 0.0
     cur_day = None
-    day_peak = 0.0
+    day_start = 0.0   # with-stop cumulative at the start of the current UTC day
+    day_peak = 0.0    # highest with-stop cumulative reached during the current day
     day_stopped = False
     for b in core:
         day = b.get("timestamp", "")[:10]
         if day != cur_day:
             cur_day = day
-            day_peak = cum_with       # peak tracked on the with-stop realized path
+            day_start = cum_with   # the trailing stop resets each UTC day
+            day_peak = cum_with
             day_stopped = False
         c_rec = b.get("filled_count") or b.get("contracts") or 1
         pnl = b.get("pnl", 0)
@@ -872,7 +874,8 @@ def _build_trail_compare(bets, max_points=500):
         cum_with += per_contract * (1 if day_stopped else base)
         if cum_with > day_peak:
             day_peak = cum_with
-        if (not day_stopped and day_peak >= TRAIL_STOP_ARM
+        # Arm on the DAY's own peak gain (not the all-days total); fire on giveback
+        if (not day_stopped and (day_peak - day_start) >= TRAIL_STOP_ARM
                 and (day_peak - cum_with) >= TRAIL_STOP_GIVEBACK):
             day_stopped = True
         labels.append(b.get("timestamp"))
