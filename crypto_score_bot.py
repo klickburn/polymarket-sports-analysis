@@ -1181,14 +1181,25 @@ def _get_scale_group(signal_count):
     return None, None
 
 _cool_off_blocked = 0  # >0: last get_dynamic_contracts call was capped by the lid
+_last_base_contracts = 1  # scale the last call would use if the trailing stop were OFF
 
 def get_dynamic_contracts(bets, crypto, signal_count):
-    """Grouped scaling with cool-off lid: BTC+ETH combined, split up/down windows."""
-    global _cool_off_blocked
-    _cool_off_blocked = 0
+    """Grouped scaling with cool-off lid, then the intraday trailing-stop clip.
+    Records the pre-stop scale in _last_base_contracts so the dashboard can draw
+    an accurate 'without trailing stop' P&L line even when trades are clipped."""
+    global _last_base_contracts
+    base = _base_dynamic_contracts(bets, crypto, signal_count)
+    _last_base_contracts = base
     # Intraday trailing stop: if the day gave back its gains, trade 1x
     if _trailing_stopped:
         return 1
+    return base
+
+def _base_dynamic_contracts(bets, crypto, signal_count):
+    """Grouped scaling with cool-off lid: BTC+ETH combined, split up/down windows.
+    This is the scale absent the trailing stop."""
+    global _cool_off_blocked
+    _cool_off_blocked = 0
     contracts = _group_scale_contracts(bets, crypto, signal_count)
     # Cool-off: trailing WR >= threshold means the run is euphoric — forward
     # edge is ~zero there, so cap at 1x until it cools (group states unaffected)
@@ -1619,6 +1630,9 @@ def run(live=False):
                 sig_count = tq["score"] + 3
                 current_contracts = get_dynamic_contracts(bets, tq["crypto"], sig_count)
                 tq["bet_record"]["contracts"] = current_contracts
+                # Record the scale absent the trailing stop, so the dashboard can
+                # draw an accurate "without trailing stop" P&L line.
+                tq["bet_record"]["base_contracts"] = _last_base_contracts
                 if _trailing_stopped:
                     tq["bet_record"]["trail_stopped"] = True
                 if _cool_off_blocked > 0:

@@ -823,7 +823,7 @@ _SLIM_KEEP = {"crypto", "side", "price", "fill_price", "score", "action", "resul
               "pnl", "contracts", "filled_count", "timestamp", "strategy_version",
               "bet_amount", "would_have_won", "hypothetical_pnl", "market_result",
               "cool_off", "blocked_scale", "fee", "audited", "dip_add", "dip_type", "dip_tier",
-              "trail_stopped"}
+              "trail_stopped", "base_contracts"}
 _DETAIL_KEYS = {"reasons", "score_breakdown", "indicators", "entry_minute", "window_end",
                 "order_id", "event_ticker", "ticker"}
 
@@ -837,6 +837,66 @@ def _slim_bets(bets, recent=500):
         slim.append({k: v for k, v in b.items() if k not in _DETAIL_KEYS})
     slim.extend(filtered[-recent:])
     return slim
+
+
+def _build_trail_compare(bets, max_points=500):
+    """Two cumulative CORE P&L curves over the dashboard's trades: with and
+    without the intraday trailing stop. 'without' reconstructs the free-scaling
+    P&L from each trade's base_contracts (the scale absent the stop); 'with'
+    replays a clean single-latch stop per UTC day, clipping to 1x once the day
+    gives back TRAIL_STOP_GIVEBACK from a peak >= TRAIL_STOP_ARM. Split dips are
+    excluded so they can't move either line."""
+    core = [b for b in bets
+            if b.get("action") == "trade" and b.get("result") in ("win", "loss")
+            and b.get("crypto") in ("BTC", "ETH") and not b.get("dip_add")
+            and b.get("timestamp")]
+    core.sort(key=lambda b: b.get("timestamp", ""))
+    labels, with_series, without_series = [], [], []
+    cum_with = cum_without = 0.0
+    cur_day = None
+    day_peak = 0.0
+    day_stopped = False
+    for b in core:
+        day = b.get("timestamp", "")[:10]
+        if day != cur_day:
+            cur_day = day
+            day_peak = cum_with       # peak tracked on the with-stop realized path
+            day_stopped = False
+        c_rec = b.get("filled_count") or b.get("contracts") or 1
+        pnl = b.get("pnl", 0)
+        per_contract = pnl / c_rec if c_rec else pnl
+        base = b.get("base_contracts") or c_rec  # intended scale absent the stop
+        # without the stop: always free-scaling
+        cum_without += per_contract * base
+        # with the stop: 1x once the day has latched
+        cum_with += per_contract * (1 if day_stopped else base)
+        if cum_with > day_peak:
+            day_peak = cum_with
+        if (not day_stopped and day_peak >= TRAIL_STOP_ARM
+                and (day_peak - cum_with) >= TRAIL_STOP_GIVEBACK):
+            day_stopped = True
+        labels.append(b.get("timestamp"))
+        with_series.append(round(cum_with, 2))
+        without_series.append(round(cum_without, 2))
+    # Downsample for payload size, always keeping the last point
+    n = len(labels)
+    if n > max_points:
+        step = n / max_points
+        idx = sorted(set([int(i * step) for i in range(max_points)] + [n - 1]))
+        labels = [labels[i] for i in idx]
+        with_series = [with_series[i] for i in idx]
+        without_series = [without_series[i] for i in idx]
+    return {
+        "labels": labels,
+        "with_stop": with_series,
+        "without_stop": without_series,
+        "with_total": round(cum_with, 2),
+        "without_total": round(cum_without, 2),
+        "delta": round(cum_with - cum_without, 2),
+        "arm": TRAIL_STOP_ARM,
+        "giveback": TRAIL_STOP_GIVEBACK,
+        "enabled": TRAIL_STOP_ENABLED,
+    }
 
 
 def _build_score_report(bets, status, balance_info=None):
@@ -899,6 +959,7 @@ def _build_score_report(bets, status, balance_info=None):
 
     # ── Scaling performance breakdown ──────────────────────────────────
     scaling_perf = _build_scaling_performance(resolved_all, status)
+    trail_compare = _build_trail_compare(bets)
 
     return {
         "total_trades": len(trades),
@@ -919,6 +980,7 @@ def _build_score_report(bets, status, balance_info=None):
         "score_distribution": score_dist,
         "by_crypto": by_crypto,
         "scaling_performance": scaling_perf,
+        "trail_compare": trail_compare,
         "indicators": status.get("indicators", {}),
         "last_indicator_update": status.get("last_update", ""),
         "recent_bets": _slim_bets(bets),
