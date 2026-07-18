@@ -33,7 +33,7 @@ from crypto_score_bot import (run as run_score_bot, SCALE_UP_COUNT,
                               SPLIT_DIP_ENABLED, SPLIT_DIP_PRICE, SPLIT_DIP_COUNT,
                               SPLIT_DIP_TIERS,
                               TRAIL_STOP_ENABLED, TRAIL_STOP_ARM, TRAIL_STOP_GIVEBACK,
-                              TRAIL_STREAK_HOLD_K)
+                              TRAIL_STREAK_HOLD_K, TRAIL_STOP_DYNAMIC)
 # History data is committed as kalshi_history.json — no live fetch on Railway
 HISTORY_FILE = "kalshi_history.json"
 
@@ -803,12 +803,12 @@ def _build_scaling_performance(resolved, status=None):
                      "peak": raw.get("peak", 0), "day_pnl": raw.get("day_pnl", 0),
                      "armed": bool(raw.get("armed")), "stopped": bool(raw.get("stopped")),
                      "streak_hold_k": TRAIL_STREAK_HOLD_K, "streak": raw.get("streak", 0),
-                     "ever_stopped": bool(raw.get("ever_stopped"))}
+                     "ever_stopped": bool(raw.get("ever_stopped")), "dynamic": TRAIL_STOP_DYNAMIC}
         else:
             trail = {"arm": TRAIL_STOP_ARM, "giveback": TRAIL_STOP_GIVEBACK,
                      "peak": 0, "day_pnl": 0, "armed": False, "stopped": False,
                      "streak_hold_k": TRAIL_STREAK_HOLD_K, "streak": 0,
-                     "ever_stopped": False}
+                     "ever_stopped": False, "dynamic": TRAIL_STOP_DYNAMIC}
 
     return {
         "overall_at_1": calc_stats(trades_at_1),
@@ -915,6 +915,7 @@ def _build_trail_compare(bets, max_points=500):
         "giveback": TRAIL_STOP_GIVEBACK,
         "enabled": TRAIL_STOP_ENABLED,
         "streak_hold_k": K,
+        "dynamic": TRAIL_STOP_DYNAMIC,
     }
 
 
@@ -1337,6 +1338,7 @@ def score_debug():
         "trail_stop_arm": TRAIL_STOP_ARM,
         "trail_stop_giveback": TRAIL_STOP_GIVEBACK,
         "trail_streak_hold_k": TRAIL_STREAK_HOLD_K,
+        "trail_stop_dynamic": TRAIL_STOP_DYNAMIC,
     })
 
 

@@ -1038,10 +1038,22 @@ COOL_OFF_WINDOW = int(os.environ.get("COOL_OFF_WINDOW", "10"))
 COOL_OFF_BYPASS_STREAK = int(os.environ.get("COOL_OFF_BYPASS_STREAK", "6"))
 # Intraday trailing stop: once the day's CORE P&L peaks >= ARM, if it gives back
 # GIVEBACK from that peak, drop to 1x for the rest of the day. Dips excluded so
-# they can't arm or trigger it. Thresholds are in dollars (tune to multiplier).
+# they can't arm or trigger it.
 TRAIL_STOP_ENABLED = os.environ.get("TRAIL_STOP_ENABLED", "0") == "1"
-TRAIL_STOP_ARM = float(os.environ.get("TRAIL_STOP_ARM", "40"))
-TRAIL_STOP_GIVEBACK = float(os.environ.get("TRAIL_STOP_GIVEBACK", "20"))
+# Dynamic thresholds: scale arm/giveback with SCALE_UP_COUNT so the stop stays
+# calibrated automatically when the multiplier changes — no manual re-tuning.
+# Anchored on the backtest-optimal 20/18 ratio at 30x: arm = 0.667/x,
+# giveback = 0.60/x  ->  20/18 at 30x, 13.3/12 at 20x, 6.7/6 at 10x.
+# TRAIL_STOP_DYNAMIC=0 falls back to the fixed TRAIL_STOP_ARM/GIVEBACK dollars.
+TRAIL_STOP_DYNAMIC = os.environ.get("TRAIL_STOP_DYNAMIC", "0") == "1"
+TRAIL_ARM_PER_X = float(os.environ.get("TRAIL_ARM_PER_X", "0.6667"))
+TRAIL_GIVE_PER_X = float(os.environ.get("TRAIL_GIVE_PER_X", "0.60"))
+if TRAIL_STOP_DYNAMIC:
+    TRAIL_STOP_ARM = round(TRAIL_ARM_PER_X * SCALE_UP_COUNT, 2)
+    TRAIL_STOP_GIVEBACK = round(TRAIL_GIVE_PER_X * SCALE_UP_COUNT, 2)
+else:
+    TRAIL_STOP_ARM = float(os.environ.get("TRAIL_STOP_ARM", "40"))
+    TRAIL_STOP_GIVEBACK = float(os.environ.get("TRAIL_STOP_GIVEBACK", "20"))
 # Streak-hold override: while on a K-consecutive-win streak, lift the trailing stop
 # (a durable run keeps its edge — same idea as the cool-off bypass). 0 disables it,
 # leaving the plain one-way daily latch. K>0 turns the stop into a per-trade toggle

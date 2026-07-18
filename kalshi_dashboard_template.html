@@ -1726,7 +1726,8 @@ function renderScoreBot() {
   let trailBanner = '';
   if (tr) {
     const shK = tr.streak_hold_k || 0;
-    const shTag = shK > 0 ? ` <span style="color:var(--muted)">· streak-hold k=${shK} (lifts on a ${shK}-win streak, now ${tr.streak||0})</span>` : '';
+    const dynTag = tr.dynamic ? ` <span style="color:var(--muted)">· dynamic $${(tr.arm||0).toFixed(0)}/$${(tr.giveback||0).toFixed(0)} (auto-scales with size)</span>` : '';
+    const shTag = (shK > 0 ? ` <span style="color:var(--muted)">· streak-hold k=${shK} (lifts on a ${shK}-win streak, now ${tr.streak||0})</span>` : '') + dynTag;
     if (tr.stopped) {
       const back = shK > 0 ? `trading 1x until you hit a ${shK}-win streak` : 'trading 1x for the rest of today';
       trailBanner = `<div class="card" style="flex-basis:100%;border-left:3px solid #ef4444;padding:10px 16px">
