@@ -49,8 +49,8 @@ SPLIT_DIP_ENABLED = os.environ.get("SPLIT_DIP_ENABLED", "0") == "1"
 SPLIT_DIP_PRICE = float(os.environ.get("SPLIT_DIP_PRICE", "0.10"))
 SPLIT_DIP_COUNT = int(os.environ.get("SPLIT_DIP_COUNT", "10"))
 # Extra tiers as "price:count,price:count" — sized-up cheap tiers (100@5c, 25@20c,
-# 50@2c, 50@1c) plus lottery-ticket singles at 25/30/35c
-_extra = os.environ.get("SPLIT_DIP_EXTRA_TIERS", "0.20:25,0.05:100,0.25:1,0.30:1,0.35:1,0.02:50,0.01:50")
+# 25@15c, 50@2c, 50@1c) plus lottery-ticket singles at 25/30/35c
+_extra = os.environ.get("SPLIT_DIP_EXTRA_TIERS", "0.20:25,0.15:25,0.05:100,0.25:1,0.30:1,0.35:1,0.02:50,0.01:50")
 def _parse_tiers(s):
     tiers = []
     for part in s.split(","):
