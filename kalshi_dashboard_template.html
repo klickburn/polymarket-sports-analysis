@@ -1728,12 +1728,20 @@ function renderScoreBot() {
     const shK = tr.streak_hold_k || 0;
     const dynTag = tr.dynamic ? ` <span style="color:var(--muted)">· dynamic $${(tr.arm||0).toFixed(0)}/$${(tr.giveback||0).toFixed(0)} (auto-scales with size)</span>` : '';
     const shTag = (shK > 0 ? ` <span style="color:var(--muted)">· streak-hold k=${shK} (lifts on a ${shK}-win streak, now ${tr.streak||0})</span>` : '') + dynTag;
-    if (tr.stopped) {
+    const floor = tr.loss_floor || 0;
+    if (tr.floored && floor > 0) {
+      trailBanner = `<div class="card" style="flex-basis:100%;border-left:3px solid #ef4444;padding:10px 16px">
+        <span style="background:rgba(239,68,68,0.15);color:#ef4444;padding:3px 10px;border-radius:6px;font-weight:700;font-size:13px">🛟 LOSS FLOOR ACTIVE</span>
+        <span style="margin-left:10px;font-size:13px;color:var(--text)">Day down $${tr.day_pnl.toFixed(0)} (hit the −$${floor.toFixed(0)} floor) — trading 1x until a ${tr.floor_react_k||1}-win recovery</span>
+      </div>`;
+    } else if (tr.stopped) {
       const back = shK > 0 ? `trading 1x until you hit a ${shK}-win streak` : 'trading 1x for the rest of today';
       trailBanner = `<div class="card" style="flex-basis:100%;border-left:3px solid #ef4444;padding:10px 16px">
         <span style="background:rgba(239,68,68,0.15);color:#ef4444;padding:3px 10px;border-radius:6px;font-weight:700;font-size:13px">🛑 TRAILING STOP ACTIVE</span>
         <span style="margin-left:10px;font-size:13px;color:var(--text)">Day peaked +$${tr.peak.toFixed(0)}, gave back to +$${tr.day_pnl.toFixed(0)} (≥ $${tr.giveback.toFixed(0)}) — ${back}${shTag}</span>
       </div>`;
+    } else if (floor > 0 && (tr.day_pnl||0) < 0) {
+      trailBanner = `<div style="flex-basis:100%;font-size:12px;color:var(--muted);padding:0 4px">🛟 Loss floor armed — day at $${tr.day_pnl.toFixed(0)}, cuts to 1x if it falls to −$${floor.toFixed(0)}</div>`;
     } else if (shK > 0 && tr.armed && (tr.streak||0) >= shK) {
       trailBanner = `<div style="flex-basis:100%;font-size:12px;color:var(--muted);padding:0 4px">🏃 Riding a ${tr.streak}-win streak — trailing stop held off, scaling on${shTag}</div>`;
     } else if (tr.armed) {

@@ -1059,30 +1059,50 @@ else:
 # leaving the plain one-way daily latch. K>0 turns the stop into a per-trade toggle
 # that can fire, lift on a K-win streak, and re-fire when the streak breaks.
 TRAIL_STREAK_HOLD_K = int(os.environ.get("TRAIL_STREAK_HOLD_K", "0"))
+# Daily loss floor: the downside stop. The trailing stop only protects gains, so a
+# day that's red from the open bleeds unprotected. The floor drops to 1x once the
+# day's core P&L falls to -FLOOR, and reactivates on a FLOOR_REACT_K-win streak (a
+# recovery signal — same idea as the streak-hold, applied to the downside). It
+# re-fires if the day bleeds back below the floor. Scales with SCALE_UP like the
+# trailing stop. TRAIL_LOSS_FLOOR_PER_X=0 disables it.
+TRAIL_LOSS_FLOOR_PER_X = float(os.environ.get("TRAIL_LOSS_FLOOR_PER_X", "0"))
+TRAIL_FLOOR_REACT_K = int(os.environ.get("TRAIL_FLOOR_REACT_K", "1"))
+TRAIL_LOSS_FLOOR = round(TRAIL_LOSS_FLOOR_PER_X * SCALE_UP_COUNT, 2)
 _trail_day = None
 _trail_peak = 0.0
 _trailing_stopped = False
 
 
-def _trail_replay(seq, arm, give, k):
-    """Replay one UTC day's realized CORE trades through the trailing stop and return
-    whether the NEXT trade should be clipped to 1x, plus diagnostics.
+def _trail_replay(seq, arm, give, k, floor=0.0, react_k=0):
+    """Replay one UTC day's realized CORE trades through the trailing stop + loss
+    floor and return whether the NEXT trade should be clipped to 1x, plus diagnostics.
 
-    seq: list of (realized_pnl, won_bool) in order. k<=0 -> one-way daily latch;
-    k>0 -> streak-hold toggle (lift while on a k-win streak, re-fire when it breaks).
+    seq: list of (realized_pnl, won_bool) in order.
+      - Trailing stop: arm at `arm`, fire on `give` giveback from peak; k>0 lifts it
+        on a k-win streak (streak-hold), k<=0 is a one-way daily latch.
+      - Loss floor: fire (1x) once cum <= -floor; react_k>0 reactivates on a
+        react_k-win streak; re-fires if it bleeds back below -floor. floor<=0 off.
     Pure function of the realized sequence -> deterministic and restart-proof.
     Returns (clip_next, peak, cum, streak, ever_stopped)."""
-    cum = 0.0; peak = 0.0; s = False; st = 0; ever = False
+    cum = 0.0; peak = 0.0; s = False; st = 0; fl = False; ever = False
     for pnl, won in seq:
         if k > 0 and s and st >= k:
-            s = False                       # lift: the run is alive again
+            s = False                       # trailing lift: the run is alive again
+        if fl and react_k > 0 and st >= react_k:
+            fl = False                      # floor reactivation
         cum += pnl
         if cum > peak:
             peak = cum
         st = st + 1 if won else 0
         if not s and (k <= 0 or st < k) and peak >= arm and (peak - cum) >= give:
-            s = True; ever = True           # fire (latched until lifted / day end)
-    clip_next = s and not (k > 0 and st >= k)
+            s = True; ever = True           # trailing fire (latched until lifted/day end)
+        if floor > 0 and cum <= -floor:
+            fl = True                       # floor fire (re-fires each dip below -floor)
+    trail_clip = s and not (k > 0 and st >= k)
+    floor_clip = fl and not (react_k > 0 and st >= react_k)
+    clip_next = trail_clip or floor_clip
+    if fl:
+        ever = True
     return clip_next, peak, cum, st, ever
 
 def _update_trailing_stop(bets):
@@ -1109,12 +1129,18 @@ def _update_trailing_stop(bets):
         key=lambda b: b.get("timestamp", ""))
     seq = [(b.get("pnl", 0), b.get("result") == "win") for b in day_trades]
     stopped, peak, day_pnl, streak, ever = _trail_replay(
-        seq, TRAIL_STOP_ARM, TRAIL_STOP_GIVEBACK, TRAIL_STREAK_HOLD_K)
+        seq, TRAIL_STOP_ARM, TRAIL_STOP_GIVEBACK, TRAIL_STREAK_HOLD_K,
+        TRAIL_LOSS_FLOOR, TRAIL_FLOOR_REACT_K)
     _trail_day = today; _trail_peak = peak; _trailing_stopped = stopped
+    floored = TRAIL_LOSS_FLOOR > 0 and day_pnl <= -TRAIL_LOSS_FLOOR
     if stopped and not was_stopped:
-        mode = f"streak-hold k={TRAIL_STREAK_HOLD_K}" if TRAIL_STREAK_HOLD_K > 0 else "latch"
-        P(f"  [TRAIL] Day peaked +${peak:.0f}, gave back to +${day_pnl:.0f} "
-          f"(>= ${TRAIL_STOP_GIVEBACK:.0f}) — clipping to 1x ({mode})")
+        if floored:
+            P(f"  [TRAIL] Day at +${day_pnl:.0f} hit the -${TRAIL_LOSS_FLOOR:.0f} "
+              f"loss floor — clipping to 1x (reactivates on {TRAIL_FLOOR_REACT_K}-win)")
+        else:
+            mode = f"streak-hold k={TRAIL_STREAK_HOLD_K}" if TRAIL_STREAK_HOLD_K > 0 else "latch"
+            P(f"  [TRAIL] Day peaked +${peak:.0f}, gave back to +${day_pnl:.0f} "
+              f"(>= ${TRAIL_STOP_GIVEBACK:.0f}) — clipping to 1x ({mode})")
     # Persist state so the dashboard (separate process) can show the indicator
     try:
         status = {}
@@ -1125,7 +1151,9 @@ def _update_trailing_stop(bets):
                            "day_pnl": round(day_pnl, 2), "stopped": stopped,
                            "armed": peak >= TRAIL_STOP_ARM,
                            "streak_hold_k": TRAIL_STREAK_HOLD_K,
-                           "streak": streak, "ever_stopped": ever}
+                           "streak": streak, "ever_stopped": ever,
+                           "loss_floor": TRAIL_LOSS_FLOOR,
+                           "floor_react_k": TRAIL_FLOOR_REACT_K, "floored": floored}
         save_status(status)
     except Exception:
         pass
