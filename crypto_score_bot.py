@@ -1068,12 +1068,18 @@ TRAIL_STREAK_HOLD_K = int(os.environ.get("TRAIL_STREAK_HOLD_K", "0"))
 TRAIL_LOSS_FLOOR_PER_X = float(os.environ.get("TRAIL_LOSS_FLOOR_PER_X", "0"))
 TRAIL_FLOOR_REACT_K = int(os.environ.get("TRAIL_FLOOR_REACT_K", "1"))
 TRAIL_LOSS_FLOOR = round(TRAIL_LOSS_FLOOR_PER_X * SCALE_UP_COUNT, 2)
+# Hard backstop: a deeper floor that latches with NO reactivation. The soft floor
+# reactivates on a win (to catch dip-then-rip days), but a day that bleeds all the
+# way to -HARD_FLOOR is genuinely bad — stop for the rest of the day, full stop.
+# Prevents a runaway day from re-exposing over and over. Scales with SCALE_UP too.
+TRAIL_HARD_FLOOR_PER_X = float(os.environ.get("TRAIL_HARD_FLOOR_PER_X", "0"))
+TRAIL_HARD_FLOOR = round(TRAIL_HARD_FLOOR_PER_X * SCALE_UP_COUNT, 2)
 _trail_day = None
 _trail_peak = 0.0
 _trailing_stopped = False
 
 
-def _trail_replay(seq, arm, give, k, floor=0.0, react_k=0):
+def _trail_replay(seq, arm, give, k, floor=0.0, react_k=0, hard_floor=0.0):
     """Replay one UTC day's realized CORE trades through the trailing stop + loss
     floor and return whether the NEXT trade should be clipped to 1x, plus diagnostics.
 
@@ -1082,14 +1088,16 @@ def _trail_replay(seq, arm, give, k, floor=0.0, react_k=0):
         on a k-win streak (streak-hold), k<=0 is a one-way daily latch.
       - Loss floor: fire (1x) once cum <= -floor; react_k>0 reactivates on a
         react_k-win streak; re-fires if it bleeds back below -floor. floor<=0 off.
+      - Hard backstop: fire (1x) once cum <= -hard_floor and LATCH — never
+        reactivates for the rest of the day. hard_floor<=0 off.
     Pure function of the realized sequence -> deterministic and restart-proof.
     Returns (clip_next, peak, cum, streak, ever_stopped)."""
-    cum = 0.0; peak = 0.0; s = False; st = 0; fl = False; ever = False
+    cum = 0.0; peak = 0.0; s = False; st = 0; fl = False; hf = False; ever = False
     for pnl, won in seq:
         if k > 0 and s and st >= k:
             s = False                       # trailing lift: the run is alive again
         if fl and react_k > 0 and st >= react_k:
-            fl = False                      # floor reactivation
+            fl = False                      # soft floor reactivation
         cum += pnl
         if cum > peak:
             peak = cum
@@ -1097,11 +1105,13 @@ def _trail_replay(seq, arm, give, k, floor=0.0, react_k=0):
         if not s and (k <= 0 or st < k) and peak >= arm and (peak - cum) >= give:
             s = True; ever = True           # trailing fire (latched until lifted/day end)
         if floor > 0 and cum <= -floor:
-            fl = True                       # floor fire (re-fires each dip below -floor)
+            fl = True                       # soft floor fire (re-fires each dip below -floor)
+        if hard_floor > 0 and cum <= -hard_floor:
+            hf = True                       # hard backstop: latches, no reactivation
     trail_clip = s and not (k > 0 and st >= k)
     floor_clip = fl and not (react_k > 0 and st >= react_k)
-    clip_next = trail_clip or floor_clip
-    if fl:
+    clip_next = trail_clip or floor_clip or hf
+    if fl or hf:
         ever = True
     return clip_next, peak, cum, st, ever
 
@@ -1130,11 +1140,15 @@ def _update_trailing_stop(bets):
     seq = [(b.get("pnl", 0), b.get("result") == "win") for b in day_trades]
     stopped, peak, day_pnl, streak, ever = _trail_replay(
         seq, TRAIL_STOP_ARM, TRAIL_STOP_GIVEBACK, TRAIL_STREAK_HOLD_K,
-        TRAIL_LOSS_FLOOR, TRAIL_FLOOR_REACT_K)
+        TRAIL_LOSS_FLOOR, TRAIL_FLOOR_REACT_K, TRAIL_HARD_FLOOR)
     _trail_day = today; _trail_peak = peak; _trailing_stopped = stopped
+    hard_stopped = TRAIL_HARD_FLOOR > 0 and day_pnl <= -TRAIL_HARD_FLOOR
     floored = TRAIL_LOSS_FLOOR > 0 and day_pnl <= -TRAIL_LOSS_FLOOR
     if stopped and not was_stopped:
-        if floored:
+        if hard_stopped:
+            P(f"  [TRAIL] Day at +${day_pnl:.0f} hit the -${TRAIL_HARD_FLOOR:.0f} "
+              f"HARD backstop — 1x for the rest of the day (no reactivation)")
+        elif floored:
             P(f"  [TRAIL] Day at +${day_pnl:.0f} hit the -${TRAIL_LOSS_FLOOR:.0f} "
               f"loss floor — clipping to 1x (reactivates on {TRAIL_FLOOR_REACT_K}-win)")
         else:
@@ -1153,7 +1167,8 @@ def _update_trailing_stop(bets):
                            "streak_hold_k": TRAIL_STREAK_HOLD_K,
                            "streak": streak, "ever_stopped": ever,
                            "loss_floor": TRAIL_LOSS_FLOOR,
-                           "floor_react_k": TRAIL_FLOOR_REACT_K, "floored": floored}
+                           "floor_react_k": TRAIL_FLOOR_REACT_K, "floored": floored,
+                           "hard_floor": TRAIL_HARD_FLOOR, "hard_stopped": hard_stopped}
         save_status(status)
     except Exception:
         pass

@@ -1729,10 +1729,16 @@ function renderScoreBot() {
     const dynTag = tr.dynamic ? ` <span style="color:var(--muted)">· dynamic $${(tr.arm||0).toFixed(0)}/$${(tr.giveback||0).toFixed(0)} (auto-scales with size)</span>` : '';
     const shTag = (shK > 0 ? ` <span style="color:var(--muted)">· streak-hold k=${shK} (lifts on a ${shK}-win streak, now ${tr.streak||0})</span>` : '') + dynTag;
     const floor = tr.loss_floor || 0;
-    if (tr.floored && floor > 0) {
+    const hardFloor = tr.hard_floor || 0;
+    if (tr.hard_stopped && hardFloor > 0) {
+      trailBanner = `<div class="card" style="flex-basis:100%;border-left:3px solid #b91c1c;padding:10px 16px">
+        <span style="background:rgba(185,28,28,0.18);color:#dc2626;padding:3px 10px;border-radius:6px;font-weight:700;font-size:13px">🧯 HARD STOP — DAY DONE</span>
+        <span style="margin-left:10px;font-size:13px;color:var(--text)">Day down $${tr.day_pnl.toFixed(0)} (hit the −$${hardFloor.toFixed(0)} backstop) — 1x for the rest of today, no reactivation</span>
+      </div>`;
+    } else if (tr.floored && floor > 0) {
       trailBanner = `<div class="card" style="flex-basis:100%;border-left:3px solid #ef4444;padding:10px 16px">
         <span style="background:rgba(239,68,68,0.15);color:#ef4444;padding:3px 10px;border-radius:6px;font-weight:700;font-size:13px">🛟 LOSS FLOOR ACTIVE</span>
-        <span style="margin-left:10px;font-size:13px;color:var(--text)">Day down $${tr.day_pnl.toFixed(0)} (hit the −$${floor.toFixed(0)} floor) — trading 1x until a ${tr.floor_react_k||1}-win recovery</span>
+        <span style="margin-left:10px;font-size:13px;color:var(--text)">Day down $${tr.day_pnl.toFixed(0)} (hit the −$${floor.toFixed(0)} floor) — trading 1x until a ${tr.floor_react_k||1}-win recovery${hardFloor>0?`, hard stop at −$${hardFloor.toFixed(0)}`:''}</span>
       </div>`;
     } else if (tr.stopped) {
       const back = shK > 0 ? `trading 1x until you hit a ${shK}-win streak` : 'trading 1x for the rest of today';

@@ -34,7 +34,7 @@ from crypto_score_bot import (run as run_score_bot, SCALE_UP_COUNT,
                               SPLIT_DIP_TIERS,
                               TRAIL_STOP_ENABLED, TRAIL_STOP_ARM, TRAIL_STOP_GIVEBACK,
                               TRAIL_STREAK_HOLD_K, TRAIL_STOP_DYNAMIC,
-                              TRAIL_LOSS_FLOOR, TRAIL_FLOOR_REACT_K)
+                              TRAIL_LOSS_FLOOR, TRAIL_FLOOR_REACT_K, TRAIL_HARD_FLOOR)
 # History data is committed as kalshi_history.json — no live fetch on Railway
 HISTORY_FILE = "kalshi_history.json"
 
@@ -806,14 +806,16 @@ def _build_scaling_performance(resolved, status=None):
                      "streak_hold_k": TRAIL_STREAK_HOLD_K, "streak": raw.get("streak", 0),
                      "ever_stopped": bool(raw.get("ever_stopped")), "dynamic": TRAIL_STOP_DYNAMIC,
                      "loss_floor": TRAIL_LOSS_FLOOR, "floor_react_k": TRAIL_FLOOR_REACT_K,
-                     "floored": bool(raw.get("floored"))}
+                     "floored": bool(raw.get("floored")),
+                     "hard_floor": TRAIL_HARD_FLOOR, "hard_stopped": bool(raw.get("hard_stopped"))}
         else:
             trail = {"arm": TRAIL_STOP_ARM, "giveback": TRAIL_STOP_GIVEBACK,
                      "peak": 0, "day_pnl": 0, "armed": False, "stopped": False,
                      "streak_hold_k": TRAIL_STREAK_HOLD_K, "streak": 0,
                      "ever_stopped": False, "dynamic": TRAIL_STOP_DYNAMIC,
                      "loss_floor": TRAIL_LOSS_FLOOR, "floor_react_k": TRAIL_FLOOR_REACT_K,
-                     "floored": False}
+                     "floored": False,
+                     "hard_floor": TRAIL_HARD_FLOOR, "hard_stopped": False}
 
     return {
         "overall_at_1": calc_stats(trades_at_1),
@@ -860,6 +862,7 @@ def _build_trail_compare(bets, max_points=500):
     K = TRAIL_STREAK_HOLD_K
     FLOOR = TRAIL_LOSS_FLOOR
     RK = TRAIL_FLOOR_REACT_K
+    HARD = TRAIL_HARD_FLOOR
     core = [b for b in bets
             if b.get("action") == "trade" and b.get("result") in ("win", "loss")
             and b.get("crypto") in ("BTC", "ETH") and not b.get("dip_add")
@@ -881,8 +884,10 @@ def _build_trail_compare(bets, max_points=500):
             day_peak = cum_with
             day_stopped = False
             day_floored = False
+            day_hard = False
             day_streak = 0
-        # lift the trailing stop / reactivate the floor first (streak signals)
+        # lift the trailing stop / reactivate the soft floor first (streak signals);
+        # the hard backstop never reactivates.
         if K > 0 and day_stopped and day_streak >= K:
             day_stopped = False
         if day_floored and RK > 0 and day_streak >= RK:
@@ -891,7 +896,7 @@ def _build_trail_compare(bets, max_points=500):
         pnl = b.get("pnl", 0)
         per_contract = pnl / c_rec if c_rec else pnl
         base = b.get("base_contracts") or c_rec  # intended scale absent the stop
-        clipped = day_stopped or day_floored
+        clipped = day_stopped or day_floored or day_hard
         # without the stop: always free-scaling
         cum_without += per_contract * base
         # with the stop: 1x while clipped
@@ -908,6 +913,9 @@ def _build_trail_compare(bets, max_points=500):
         # Loss floor: fire once the day is down >= FLOOR from its start.
         if FLOOR > 0 and (cum_with - day_start) <= -FLOOR:
             day_floored = True
+        # Hard backstop: latches with no reactivation.
+        if HARD > 0 and (cum_with - day_start) <= -HARD:
+            day_hard = True
         labels.append(b.get("timestamp"))
         with_series.append(round(cum_with, 2))
         without_series.append(round(cum_without, 2))
@@ -933,6 +941,7 @@ def _build_trail_compare(bets, max_points=500):
         "dynamic": TRAIL_STOP_DYNAMIC,
         "loss_floor": FLOOR,
         "floor_react_k": RK,
+        "hard_floor": HARD,
     }
 
 
@@ -1358,6 +1367,7 @@ def score_debug():
         "trail_stop_dynamic": TRAIL_STOP_DYNAMIC,
         "trail_loss_floor": TRAIL_LOSS_FLOOR,
         "trail_floor_react_k": TRAIL_FLOOR_REACT_K,
+        "trail_hard_floor": TRAIL_HARD_FLOOR,
     })
 
 

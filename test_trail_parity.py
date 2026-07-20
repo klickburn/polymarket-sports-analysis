@@ -13,16 +13,16 @@ import random
 from crypto_score_bot import _trail_replay
 
 
-def reference_policy(day, arm, give, k, floor=0.0, react_k=0):
+def reference_policy(day, arm, give, k, floor=0.0, react_k=0, hard=0.0):
     """All-at-once backtest policy: returns the list of realized pnl for a day.
     day: list of (full_scale_pnl, one_x_pnl, won)."""
-    out = []; cum = 0.0; peak = 0.0; s = False; st = 0; fl = False
+    out = []; cum = 0.0; peak = 0.0; s = False; st = 0; fl = False; hf = False
     for full, onex, won in day:
         if k > 0 and s and st >= k:
             s = False
         if fl and react_k > 0 and st >= react_k:
             fl = False
-        r = onex if (s or fl) else full
+        r = onex if (s or fl or hf) else full
         out.append(r); cum += r
         if cum > peak:
             peak = cum
@@ -31,15 +31,17 @@ def reference_policy(day, arm, give, k, floor=0.0, react_k=0):
             s = True
         if floor > 0 and cum <= -floor:
             fl = True
+        if hard > 0 and cum <= -hard:
+            hf = True
     return out
 
 
-def live_policy(day, arm, give, k, floor=0.0, react_k=0):
+def live_policy(day, arm, give, k, floor=0.0, react_k=0, hard=0.0):
     """How the bot runs it: for each trade, replay the realized-so-far via
     _trail_replay to get the clip decision, then record the realized pnl."""
     out = []; realized = []  # (realized_pnl, won)
     for full, onex, won in day:
-        clip, *_ = _trail_replay(realized, arm, give, k, floor, react_k)
+        clip, *_ = _trail_replay(realized, arm, give, k, floor, react_k, hard)
         r = onex if clip else full
         out.append(r); realized.append((r, won))
     return out
@@ -60,17 +62,19 @@ def make_day(rng):
 
 def main():
     rng = random.Random(20260716)
-    # (arm, give, k, floor, react_k) — trailing only, floor only, and combined
-    params = [(40, 20, 0, 0, 0), (30, 20, 0, 0, 0), (30, 20, 2, 0, 0),
-              (40, 20, 3, 0, 0), (30, 20, 1, 0, 0), (50, 25, 2, 0, 0),
-              (20, 18, 2, 35, 1), (20, 18, 2, 50, 2), (20, 18, 2, 60, 1),
-              (0, 0, 0, 40, 1), (20, 18, 2, 35, 3)]
+    # (arm, give, k, floor, react_k, hard) — trailing/floor/hard-backstop, and combos
+    params = [(40, 20, 0, 0, 0, 0), (30, 20, 0, 0, 0, 0), (30, 20, 2, 0, 0, 0),
+              (40, 20, 3, 0, 0, 0), (30, 20, 1, 0, 0, 0), (50, 25, 2, 0, 0, 0),
+              (20, 18, 2, 35, 1, 0), (20, 18, 2, 50, 2, 0), (20, 18, 2, 60, 1, 0),
+              (0, 0, 0, 40, 1, 0), (20, 18, 2, 35, 3, 0),
+              (20, 18, 2, 35, 1, 80), (20, 18, 2, 35, 1, 60),
+              (0, 0, 0, 0, 0, 50), (20, 18, 2, 0, 0, 80)]
     mismatches = 0; checked = 0
     for _ in range(4000):
         day = make_day(rng)
-        for arm, give, k, floor, react_k in params:
-            ref = reference_policy(day, arm, give, k, floor, react_k)
-            live = live_policy(day, arm, give, k, floor, react_k)
+        for arm, give, k, floor, react_k, hard in params:
+            ref = reference_policy(day, arm, give, k, floor, react_k, hard)
+            live = live_policy(day, arm, give, k, floor, react_k, hard)
             checked += len(ref)
             if any(abs(a - b) > 1e-9 for a, b in zip(ref, live)):
                 mismatches += 1
