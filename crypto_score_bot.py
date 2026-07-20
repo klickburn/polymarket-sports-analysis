@@ -48,9 +48,9 @@ SCORE_VERSION = os.environ.get("SCORE_VERSION", "v4")
 SPLIT_DIP_ENABLED = os.environ.get("SPLIT_DIP_ENABLED", "0") == "1"
 SPLIT_DIP_PRICE = float(os.environ.get("SPLIT_DIP_PRICE", "0.10"))
 SPLIT_DIP_COUNT = int(os.environ.get("SPLIT_DIP_COUNT", "10"))
-# Extra tiers as "price:count,price:count" — sized-up cheap tiers (100@5c, 25@20c,
-# 25@15c, 50@2c, 50@1c) plus lottery-ticket singles at 25/30/35c
-_extra = os.environ.get("SPLIT_DIP_EXTRA_TIERS", "0.20:25,0.15:25,0.05:100,0.25:1,0.30:1,0.35:1,0.02:50,0.01:50")
+# Extra tiers as "price:count,price:count" — only the 20c tier (10c is the primary
+# tier from SPLIT_DIP_PRICE/COUNT). Other tiers (15/5/25/30/35/2/1c) turned off.
+_extra = os.environ.get("SPLIT_DIP_EXTRA_TIERS", "0.20:25")
 def _parse_tiers(s):
     tiers = []
     for part in s.split(","):
