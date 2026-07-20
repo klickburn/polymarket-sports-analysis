@@ -554,7 +554,7 @@
   </div>
 
   <hr class="section-divider" id="trailCompareDivider" style="display:none">
-  <div class="section-header" id="trailCompareHeader" style="display:none"><h2>Trailing Stop: With vs Without</h2><span class="badge" id="trailCompareBadge" style="background:rgba(239,68,68,0.15);color:#ef4444">🛑 $40/$20</span></div>
+  <div class="section-header" id="trailCompareHeader" style="display:none"><h2>Protection Stack: With vs Without</h2><span class="badge" id="trailCompareBadge" style="background:rgba(239,68,68,0.15);color:#ef4444">🛑 $20/$18</span></div>
   <div id="trailCompareContent"></div>
 
   <hr class="section-divider">
@@ -1360,18 +1360,24 @@ function renderTrailCompare(tc) {
   if (!tc || !tc.labels || tc.labels.length < 2) { div.innerHTML=''; hdr.style.display='none'; divider.style.display='none'; return; }
   hdr.style.display=''; divider.style.display='';
   const shK = tc.streak_hold_k || 0;
-  const stopName = shK > 0 ? `streak-hold k=${shK}` : 'trailing stop';
-  badge.textContent = shK > 0
-    ? `🏃 k=${shK} · $${(tc.arm||0).toFixed(0)}/$${(tc.giveback||0).toFixed(0)}`
-    : `🛑 $${(tc.arm||0).toFixed(0)}/$${(tc.giveback||0).toFixed(0)}`;
+  const floor = tc.loss_floor || 0;
+  const hard = tc.hard_floor || 0;
+  const hasStack = floor > 0 || hard > 0;
+  const stopName = hasStack ? 'protection stack' : (shK > 0 ? `streak-hold k=${shK}` : 'trailing stop');
+  // badge shows every active layer so it matches what the "with" line computes
+  let bParts = [`🛑 $${(tc.arm||0).toFixed(0)}/$${(tc.giveback||0).toFixed(0)}${shK>0?` k${shK}`:''}`];
+  if (floor > 0) bParts.push(`🛟 −$${floor.toFixed(0)}`);
+  if (hard > 0) bParts.push(`🧯 −$${hard.toFixed(0)}`);
+  badge.textContent = bParts.join(' · ');
   const delta = tc.delta || 0;
   const dc = delta >= 0 ? 'var(--green)' : 'var(--red)';
   const verdict = delta >= 0
-    ? `the ${stopName} <b style="color:var(--green)">added $${delta.toFixed(2)}</b> over letting it run`
-    : `the ${stopName} <b style="color:var(--red)">cost $${Math.abs(delta).toFixed(2)}</b> vs letting it run (it clips green days)`;
-  const howItWorks = shK > 0
-    ? `Both curves cover the trades on this dashboard. Over this period, ${verdict}. The stop caps a day at 1x after it gives back $${(tc.giveback||0).toFixed(0)} from a $${(tc.arm||0).toFixed(0)}+ peak — but a ${shK}-win streak lifts it again, so the "with" line keeps climbing through durable runs.`
-    : `Both curves cover the trades on this dashboard. Over this period, ${verdict}. The lines overlap until a day gives back $${(tc.giveback||0).toFixed(0)} from a $${(tc.arm||0).toFixed(0)}+ peak — then the stop caps that day at 1x and the "with" line flattens.`;
+    ? `the ${stopName} <b style="color:var(--green)">added $${delta.toFixed(2)}</b> vs letting it run`
+    : `the ${stopName} <b style="color:var(--red)">cost $${Math.abs(delta).toFixed(2)}</b> vs letting it run (protection clips green days)`;
+  const layers = [`trailing stop ($${(tc.arm||0).toFixed(0)}/$${(tc.giveback||0).toFixed(0)}${shK>0?`, lifts on a ${shK}-win streak`:''})`];
+  if (floor > 0) layers.push(`a −$${floor.toFixed(0)} loss floor (reactivates on a ${tc.floor_react_k||1}-win)`);
+  if (hard > 0) layers.push(`a −$${hard.toFixed(0)} hard backstop (no reactivation)`);
+  const howItWorks = `Both curves cover the trades on this dashboard. Over this period, ${verdict}. The "with" line applies your full stack — ${layers.join(', ')} — so it clips gains on green days but cushions the bad ones. Positive difference = protection is net saving you money over this window.`;
   div.innerHTML = `<div class="card">
     <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:8px">
       <div><div style="font-size:12px;color:var(--muted)">Without stop (free scaling)</div><div style="font-size:20px;font-weight:700;color:${(tc.without_total||0)>=0?'var(--green)':'var(--red)'}">$${(tc.without_total||0)>=0?'+':''}${(tc.without_total||0).toFixed(2)}</div></div>
