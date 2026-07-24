@@ -45,6 +45,12 @@ SCORE_VERSION = os.environ.get("SCORE_VERSION", "v4")
 # Split-window dip orders: in windows where BTC and ETH are on opposite sides,
 # rest limit buys at multiple price/size tiers on each crypto's own side —
 # bounded-risk contrarian adds that fill only if that side collapses.
+# Split-guard: in split windows (BTC/ETH opposite sides) one leg almost always
+# loses (correlated underlyings), so trade split-window legs at 1x instead of the
+# group scale. Legs land in separate polls ~96% of the time, so we can only guard
+# the *second* leg (the first is already placed) — but that captures ~91% of the
+# benefit in backtest (+$649 of +$712 over 57 days).
+SPLIT_GUARD = os.environ.get("SPLIT_GUARD", "0") == "1"
 SPLIT_DIP_ENABLED = os.environ.get("SPLIT_DIP_ENABLED", "0") == "1"
 SPLIT_DIP_PRICE = float(os.environ.get("SPLIT_DIP_PRICE", "0.10"))
 SPLIT_DIP_COUNT = int(os.environ.get("SPLIT_DIP_COUNT", "10"))
@@ -725,6 +731,24 @@ def _place_split_dips(bets, window_end_iso):
                 save_bets(bets)
             time.sleep(0.25)
     return True
+
+
+def _is_split_leg(bets, trade_queue, crypto, side, window_end_iso):
+    """True if the OTHER crypto (BTC<->ETH) is on the opposite side in this same
+    window — i.e. this trade is a leg of a split. Checks both already-recorded
+    trades (the common case: the other leg landed in an earlier poll) and the
+    current trade_queue (the rare same-poll case, which guards both legs)."""
+    other = "ETH" if crypto == "BTC" else "BTC"
+    for b in bets:
+        if (b.get("action") == "trade" and b.get("crypto") == other
+                and not b.get("dip_add") and b.get("window_end") == window_end_iso
+                and b.get("result") not in ("unfilled",)
+                and b.get("side") and b.get("side") != side):
+            return True
+    for tq in trade_queue:
+        if tq.get("crypto") == other and tq.get("side") and tq.get("side") != side:
+            return True
+    return False
 
 
 def place_take_profit(ticker, side, count):
@@ -1710,6 +1734,15 @@ def run(live=False):
             for tq in trade_queue:
                 sig_count = tq["score"] + 3
                 current_contracts = get_dynamic_contracts(bets, tq["crypto"], sig_count)
+                # Split-guard: trade split-window legs at 1x — the losing leg can't
+                # do full-scale damage. Detected from the other crypto's recorded/
+                # queued side; guards the 2nd leg (the 1st is already placed).
+                if (SPLIT_GUARD and current_contracts > 1
+                        and _is_split_leg(bets, trade_queue, tq["crypto"], tq["side"],
+                                          tq["bet_record"].get("window_end"))):
+                    P(f"    {tq['crypto']}: split-guard — {current_contracts}x -> 1x")
+                    current_contracts = 1
+                    tq["bet_record"]["split_guard"] = True
                 tq["bet_record"]["contracts"] = current_contracts
                 # Record the scale absent the trailing stop, so the dashboard can
                 # draw an accurate "without trailing stop" P&L line.
