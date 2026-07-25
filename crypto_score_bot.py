@@ -1427,47 +1427,78 @@ def _resolve_dip_orders(bets):
     return bets
 
 def _resolve_open_bets(bets):
-    """Quickly resolve open bets from past windows so scaling has fresh data."""
+    """Resolve open bets from past windows so scaling/cool-off/trailing see the
+    COMPLETE realized P&L sequence. Unresolved trades are invisible to the sizing
+    logic (it only reads win/loss), so a backlog of stuck 'open' trades makes the
+    bot size off a partial view — the single biggest live-vs-backtest gap driver.
+
+    Three defenses against a starving backlog:
+      1. Settle-time gate: only query markets whose window has actually ended, so
+         we never waste calls (or rate-limit budget) on un-settleable markets.
+      2. Loud failures: API errors are logged with the ticker (never swallowed),
+         and the bet is left open for the next cycle instead of vanishing.
+      3. Deterministic drain: process oldest-window-first with one retry/backoff,
+         so a backlog empties from the front instead of the tail starving."""
     now = datetime.now(timezone.utc)
     # Always run (no-op when none pending) so dips resolve even if the feature
     # is toggled off while orders are still outstanding
     if any(b.get("result") == "dip_pending" for b in bets):
         bets = _resolve_dip_orders(bets)
-    changed = False
-    for bet in bets:
-        if bet.get("result") != "open" or bet.get("action") != "trade":
-            continue
-        # Never book settlement P&L without confirmed fill evidence — the
-        # dashboard resolver verifies unconfirmed orders against the API
-        if bet.get("filled_count", 0) <= 0:
-            continue
-        # Only resolve bets whose window has ended (ticker encodes the time)
-        ticker = bet.get("ticker", "")
+
+    def _we(bet):
         try:
-            mkt = public_get(f"/markets/{ticker}")
-            market = mkt.get("market", {})
-            mkt_status = market.get("status", "")
-            result_val = market.get("result", "")
-            if mkt_status in ("settled", "finalized") and result_val:
-                side = bet.get("side", "")
-                won = (result_val == "yes" and side == "yes") or \
-                      (result_val == "no" and side == "no")
-                bet["result"] = "win" if won else "loss"
-                bet["market_result"] = result_val
-                price = bet.get("fill_price", bet.get("price", 0))
-                contracts = bet.get("filled_count", bet.get("contracts", 1))
-                fee = bet.get("fee")
-                if fee is None:
-                    fee = math.ceil(0.07 * contracts * price * (1 - price) * 100) / 100.0 if 0 < price < 1 else 0.0
-                if won:
-                    bet["pnl"] = round(contracts * (1.0 - price) - fee, 2)
-                else:
-                    bet["pnl"] = round(-contracts * price - fee, 2)
-                changed = True
-                P(f"  [RESOLVE] {bet.get('crypto','')} {ticker}: {bet['result']}")
-            time.sleep(0.3)
+            return datetime.fromisoformat(bet.get("window_end", ""))
         except Exception:
-            pass
+            return now  # no parseable window_end -> treat as due now
+
+    # Candidates: open trade bets, confirmed-filled, whose window has ended.
+    # Never book settlement P&L without confirmed fill evidence.
+    pending = [b for b in bets
+               if b.get("result") == "open" and b.get("action") == "trade"
+               and b.get("filled_count", 0) > 0 and _we(b) <= now]
+    # Oldest window first so a backlog drains from the front deterministically
+    pending.sort(key=_we)
+
+    changed = False
+    failures = 0
+    for bet in pending:
+        ticker = bet.get("ticker", "")
+        market = None
+        for attempt in (1, 2):  # one retry with backoff on transient errors
+            try:
+                mkt = public_get(f"/markets/{ticker}")
+                market = mkt.get("market", {})
+                break
+            except Exception as e:
+                if attempt == 1:
+                    time.sleep(0.6)
+                    continue
+                failures += 1
+                P(f"  [RESOLVE] WARN {bet.get('crypto','')} {ticker}: API error, left open — {e}")
+        if market is None:
+            continue  # left open, retried next cycle (visibly)
+        mkt_status = market.get("status", "")
+        result_val = market.get("result", "")
+        if mkt_status in ("settled", "finalized") and result_val:
+            side = bet.get("side", "")
+            won = (result_val == "yes" and side == "yes") or \
+                  (result_val == "no" and side == "no")
+            bet["result"] = "win" if won else "loss"
+            bet["market_result"] = result_val
+            price = bet.get("fill_price", bet.get("price", 0))
+            contracts = bet.get("filled_count", bet.get("contracts", 1))
+            fee = bet.get("fee")
+            if fee is None:
+                fee = math.ceil(0.07 * contracts * price * (1 - price) * 100) / 100.0 if 0 < price < 1 else 0.0
+            if won:
+                bet["pnl"] = round(contracts * (1.0 - price) - fee, 2)
+            else:
+                bet["pnl"] = round(-contracts * price - fee, 2)
+            changed = True
+            P(f"  [RESOLVE] {bet.get('crypto','')} {ticker}: {bet['result']}")
+        time.sleep(0.3)
+    if failures:
+        P(f"  [RESOLVE] {failures} bet(s) still open after API errors — will retry next window")
     if changed:
         save_bets(bets)
     return bets
