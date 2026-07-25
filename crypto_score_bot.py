@@ -1101,6 +1101,11 @@ TRAIL_HARD_FLOOR = round(TRAIL_HARD_FLOOR_PER_X * SCALE_UP_COUNT, 2)
 _trail_day = None
 _trail_peak = 0.0
 _trailing_stopped = False
+# Snapshot of the trailing-stop/floor state from the last _update_trailing_stop
+# call, so per-trade sizing can stamp exactly what the protection saw. Makes
+# live-vs-backtest reconciliation a lookup instead of a forensic replay.
+_trail_dbg = {"peak": 0.0, "day_pnl": 0.0, "armed": False, "stopped": False,
+              "floored": False, "hard_stopped": False, "streak": 0, "resolved": 0}
 
 
 def _trail_replay(seq, arm, give, k, floor=0.0, react_k=0, hard_floor=0.0):
@@ -1148,9 +1153,11 @@ def _update_trailing_stop(bets):
     trades in timestamp order, NOT carried in mutable globals. This makes the stop
     deterministic and immune to bot restarts/redeploys — a restart used to zero the
     in-memory peak and un-latch the stop, letting it re-arm and scale back to 30x."""
-    global _trail_day, _trail_peak, _trailing_stopped
+    global _trail_day, _trail_peak, _trailing_stopped, _trail_dbg
     if not TRAIL_STOP_ENABLED:
         _trailing_stopped = False
+        _trail_dbg = {"peak": 0.0, "day_pnl": 0.0, "armed": False, "stopped": False,
+                      "floored": False, "hard_stopped": False, "streak": 0, "resolved": 0}
         return
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     was_stopped = _trailing_stopped and _trail_day == today
@@ -1168,6 +1175,10 @@ def _update_trailing_stop(bets):
     _trail_day = today; _trail_peak = peak; _trailing_stopped = stopped
     hard_stopped = TRAIL_HARD_FLOOR > 0 and day_pnl <= -TRAIL_HARD_FLOOR
     floored = TRAIL_LOSS_FLOOR > 0 and day_pnl <= -TRAIL_LOSS_FLOOR
+    _trail_dbg = {"peak": round(peak, 2), "day_pnl": round(day_pnl, 2),
+                  "armed": peak >= TRAIL_STOP_ARM, "stopped": stopped,
+                  "floored": floored, "hard_stopped": hard_stopped,
+                  "streak": streak, "resolved": len(seq)}
     if stopped and not was_stopped:
         if hard_stopped:
             P(f"  [TRAIL] Day at +${day_pnl:.0f} hit the -${TRAIL_HARD_FLOOR:.0f} "
@@ -1287,6 +1298,7 @@ def _get_scale_group(signal_count):
 
 _cool_off_blocked = 0  # >0: last get_dynamic_contracts call was capped by the lid
 _last_base_contracts = 1  # scale the last call would use if the trailing stop were OFF
+_last_group_scale = 1  # raw group scale before the cool-off lid (for debug logging)
 
 def get_dynamic_contracts(bets, crypto, signal_count):
     """Grouped scaling with cool-off lid, then the intraday trailing-stop clip.
@@ -1303,9 +1315,10 @@ def get_dynamic_contracts(bets, crypto, signal_count):
 def _base_dynamic_contracts(bets, crypto, signal_count):
     """Grouped scaling with cool-off lid: BTC+ETH combined, split up/down windows.
     This is the scale absent the trailing stop."""
-    global _cool_off_blocked
+    global _cool_off_blocked, _last_group_scale
     _cool_off_blocked = 0
     contracts = _group_scale_contracts(bets, crypto, signal_count)
+    _last_group_scale = contracts
     # Cool-off: trailing WR >= threshold means the run is euphoric — forward
     # edge is ~zero there, so cap at 1x until it cools (group states unaffected)
     if contracts > 1 and COOL_OFF_WR > 0:
@@ -1783,6 +1796,40 @@ def run(live=False):
                 if _cool_off_blocked > 0:
                     tq["bet_record"]["cool_off"] = True
                     tq["bet_record"]["blocked_scale"] = _cool_off_blocked
+                # ── Decision record: everything the sizing brain saw, stamped on
+                # the trade, so live-vs-backtest reconciliation is a lookup rather
+                # than a forensic replay. clip_reason names the single binding
+                # constraint; resolved/open_today expose the partial-view effect.
+                _td = _trail_dbg
+                if tq["bet_record"].get("split_guard"):
+                    _clip = "split_guard"
+                elif _trailing_stopped:
+                    _clip = ("hard_floor" if _td.get("hard_stopped")
+                             else "soft_floor" if _td.get("floored") else "trailing")
+                elif _cool_off_blocked > 0:
+                    _clip = "cool_off"
+                else:
+                    _clip = "none"
+                _today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                _core_today = [b for b in bets if b.get("action") == "trade"
+                               and b.get("crypto") in ("BTC", "ETH") and not b.get("dip_add")
+                               and b.get("timestamp", "")[:10] == _today]
+                _res_today = sum(1 for b in _core_today if b.get("result") in ("win", "loss"))
+                _open_today = sum(1 for b in _core_today if b.get("result") == "open")
+                tq["bet_record"]["decision"] = {
+                    "group_scale": _last_group_scale, "cool_off": bool(_cool_off_blocked),
+                    "base": _last_base_contracts, "trail_stopped": bool(_trailing_stopped),
+                    "trail_peak": _td.get("peak"), "trail_day_pnl": _td.get("day_pnl"),
+                    "trail_armed": _td.get("armed"), "floored": _td.get("floored"),
+                    "hard_stopped": _td.get("hard_stopped"),
+                    "split_guard": bool(tq["bet_record"].get("split_guard")),
+                    "final": current_contracts, "clip_reason": _clip,
+                    "resolved_today": _res_today, "open_today": _open_today,
+                }
+                P(f"    [SIZE] {tq['crypto']} sig{sig_count}: group {_last_group_scale}x "
+                  f"-> final {current_contracts}x [{_clip}] "
+                  f"(day resolved {_res_today}/open {_open_today}, "
+                  f"peak ${_td.get('peak',0):.0f} pnl ${_td.get('day_pnl',0):.0f})")
                 try:
                     result = place_order(tq["ticker"], tq["side"], tq["price"], BET_AMOUNT, count=current_contracts)
                     if not result:
