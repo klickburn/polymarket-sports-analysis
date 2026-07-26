@@ -51,6 +51,7 @@ CO_WR          = float(os.environ.get("COOL_OFF_WR", "0.8"))
 CO_WIN         = int(os.environ.get("COOL_OFF_WINDOW", "10"))
 CO_STREAK      = int(os.environ.get("COOL_OFF_BYPASS_STREAK", "6"))
 SPLIT_GUARD    = os.environ.get("SPLIT_GUARD", "1") == "1"
+VOL_GATE       = float(os.environ.get("VOL_GATE", "0"))
 GROUPS = {"A": {"sig": {4, 5}, "uw": 4, "ut": 3, "dw": 16, "dt": 3},
           "B": {"sig": {1, 2, 3}, "uw": 6, "ut": 4, "dw": 16, "dt": 4}}
 
@@ -162,6 +163,10 @@ def expected_sizing(core):
                             scale = 1                                            # cool-off lid
             if id(b) in guard and scale > 1:
                 scale = 1                                                        # split-guard
+            if VOL_GATE > 0 and scale > 1:
+                vol = (b.get("indicators") or {}).get("vol_6h")
+                if vol is not None and vol < VOL_GATE:
+                    scale = 1                                                    # vol gate
             base[id(b)] = scale
             grp_of[id(b)] = name
             results.append((name, b["result"] == "win"))

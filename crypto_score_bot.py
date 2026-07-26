@@ -52,6 +52,12 @@ SCORE_VERSION = os.environ.get("SCORE_VERSION", "v4")
 # the *second* leg (the first is already placed) — but that captures ~91% of the
 # benefit in backtest (+$649 of +$712 over 57 days).
 SPLIT_GUARD = os.environ.get("SPLIT_GUARD", "0") == "1"
+# Volatility gate: momentum needs the market to move. Red days are LOW-volatility,
+# choppy days where momentum whipsaws. So don't scale up when 6h volatility is
+# below VOL_GATE — trade 1x instead. Backtest-validated (out-of-sample): fewer red
+# days, lower drawdown, softer worst day, for ~4% total. vol_6h is recorded at
+# entry, so this is deterministic -> parity-safe. 0 disables.
+VOL_GATE = float(os.environ.get("VOL_GATE", "0"))
 SPLIT_DIP_ENABLED = os.environ.get("SPLIT_DIP_ENABLED", "0") == "1"
 SPLIT_DIP_PRICE = float(os.environ.get("SPLIT_DIP_PRICE", "0.10"))
 SPLIT_DIP_COUNT = int(os.environ.get("SPLIT_DIP_COUNT", "10"))
@@ -1861,6 +1867,15 @@ def run(live=False):
                     P(f"    {tq['crypto']}: split-guard — {current_contracts}x -> 1x")
                     current_contracts = 1
                     tq["bet_record"]["split_guard"] = True
+                # Vol gate: don't scale into low-volatility chop (momentum whipsaws
+                # there -> red days). vol_6h is recorded at entry -> parity-safe.
+                if VOL_GATE > 0 and current_contracts > 1:
+                    _vol = (tq["bet_record"].get("indicators") or {}).get("vol_6h")
+                    if _vol is not None and _vol < VOL_GATE:
+                        P(f"    {tq['crypto']}: vol-gate — {current_contracts}x -> 1x "
+                          f"(vol {_vol:.3f} < {VOL_GATE})")
+                        current_contracts = 1
+                        tq["bet_record"]["vol_gated"] = True
                 tq["bet_record"]["contracts"] = current_contracts
                 # Record the scale absent the trailing stop, so the dashboard can
                 # draw an accurate "without trailing stop" P&L line.
@@ -1877,6 +1892,8 @@ def run(live=False):
                 _td = _trail_dbg
                 if tq["bet_record"].get("split_guard"):
                     _clip = "split_guard"
+                elif tq["bet_record"].get("vol_gated"):
+                    _clip = "vol_gate"
                 elif _trailing_stopped:
                     _clip = ("hard_floor" if _td.get("hard_stopped")
                              else "soft_floor" if _td.get("floored") else "trailing")
@@ -1897,6 +1914,7 @@ def run(live=False):
                     "trail_armed": _td.get("armed"), "floored": _td.get("floored"),
                     "hard_stopped": _td.get("hard_stopped"),
                     "split_guard": bool(tq["bet_record"].get("split_guard")),
+                    "vol_gated": bool(tq["bet_record"].get("vol_gated")),
                     "final": current_contracts, "clip_reason": _clip,
                     "resolved_today": _res_today, "open_today": _open_today,
                 }
