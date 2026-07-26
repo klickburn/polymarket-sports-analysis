@@ -22,6 +22,7 @@ import time
 import math
 import uuid
 import urllib.request
+from collections import OrderedDict
 from datetime import datetime, timezone, timedelta
 
 from crypto_15m_bot import (
@@ -1098,6 +1099,22 @@ TRAIL_LOSS_FLOOR = round(TRAIL_LOSS_FLOOR_PER_X * SCALE_UP_COUNT, 2)
 # Prevents a runaway day from re-exposing over and over. Scales with SCALE_UP too.
 TRAIL_HARD_FLOOR_PER_X = float(os.environ.get("TRAIL_HARD_FLOOR_PER_X", "0"))
 TRAIL_HARD_FLOOR = round(TRAIL_HARD_FLOOR_PER_X * SCALE_UP_COUNT, 2)
+# ── Count-based protection (parity-safe rebuilt strategy) ──────────────────
+# The dollar trailing stop/floors made live diverge from backtest because their
+# thresholds depend on realized P&L, which differs by trade SIZE. Count-based
+# protection keys off the win/loss SEQUENCE (identical live vs backtest), so the
+# clip decisions match exactly. PROTECT_MODE="count" uses the day's net-win-count
+# (+1 win / -1 loss): clip to 1x once it falls to -COUNT_SOFT_C, reactivate on a
+# COUNT_REACT_K-win streak, re-fire on the next dip. No dollar/trailing/hard floor.
+PROTECT_MODE = os.environ.get("PROTECT_MODE", "dollar")   # "count" for rebuilt
+COUNT_SOFT_C = int(os.environ.get("COUNT_SOFT_C", "3"))
+COUNT_REACT_K = int(os.environ.get("COUNT_REACT_K", "1"))
+# Press-winners: a CLEAN consecutive-win streak carries persistent momentum, so on
+# a streak >= PRESS_STREAK_N boost the group scale by PRESS_MULT (and bypass the
+# cool-off lid — a durable run keeps its edge). 0 disables. Streak counts resolved
+# BTC/ETH core wins in a row. Backtest: streak>=5 -> 1.5x is the robust choice.
+PRESS_STREAK_N = int(os.environ.get("PRESS_STREAK_N", "0"))
+PRESS_MULT = float(os.environ.get("PRESS_MULT", "1.5"))
 _trail_day = None
 _trail_peak = 0.0
 _trailing_stopped = False
@@ -1144,6 +1161,30 @@ def _trail_replay(seq, arm, give, k, floor=0.0, react_k=0, hard_floor=0.0):
         ever = True
     return clip_next, peak, cum, st, ever
 
+def _count_replay(day_trades, soft_c, react_k):
+    """Count-based soft floor, replayed WINDOW-BY-WINDOW to match the backtest
+    exactly (BTC+ETH in one window settle together, so both legs share the clip
+    decided from PRIOR windows — no within-window peek). net-win-count = +1 win /
+    -1 loss on the day; clip to 1x once it reaches -soft_c, reactivate on a
+    react_k-win streak, re-fire on the next dip. Returns (clip_next, nc, streak).
+    Pure function of the resolved win/loss sequence -> identical live and backtest."""
+    windows = OrderedDict()
+    for b in day_trades:
+        windows.setdefault(b.get("window_end") or b.get("timestamp"), []).append(b)
+    s = False; st = 0; nc = 0
+    for we, legs in windows.items():
+        if s and react_k > 0 and st >= react_k:
+            s = False                       # reactivation at window start
+        for b in legs:
+            won = b.get("result") == "win"
+            st = st + 1 if won else 0
+            nc += 1 if won else -1
+            if nc <= -soft_c:
+                s = True                    # soft floor fire (re-fires each dip)
+    clip_next = s and not (react_k > 0 and st >= react_k)
+    return clip_next, nc, st
+
+
 def _update_trailing_stop(bets):
     """Track today's realized CORE (non-dip) P&L, arm at TRAIL_STOP_ARM, and set
     the stop flag once it gives back TRAIL_STOP_GIVEBACK from the day's peak.
@@ -1154,13 +1195,7 @@ def _update_trailing_stop(bets):
     deterministic and immune to bot restarts/redeploys — a restart used to zero the
     in-memory peak and un-latch the stop, letting it re-arm and scale back to 30x."""
     global _trail_day, _trail_peak, _trailing_stopped, _trail_dbg
-    if not TRAIL_STOP_ENABLED:
-        _trailing_stopped = False
-        _trail_dbg = {"peak": 0.0, "day_pnl": 0.0, "armed": False, "stopped": False,
-                      "floored": False, "hard_stopped": False, "streak": 0, "resolved": 0}
-        return
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    was_stopped = _trailing_stopped and _trail_day == today
     # Replay today's core trades in order -> clip decision (redeploy-proof)
     day_trades = sorted(
         (b for b in bets
@@ -1168,6 +1203,36 @@ def _update_trailing_stop(bets):
          and b.get("crypto") in ("BTC", "ETH") and not b.get("dip_add")
          and b.get("timestamp", "")[:10] == today),
         key=lambda b: b.get("timestamp", ""))
+    # ── Count-based protection (parity-safe): net-win-count soft floor ──
+    if PROTECT_MODE == "count":
+        was_stopped = _trailing_stopped and _trail_day == today
+        clip, nc, streak = _count_replay(day_trades, COUNT_SOFT_C, COUNT_REACT_K)
+        _trail_day = today; _trail_peak = 0.0; _trailing_stopped = clip
+        _trail_dbg = {"peak": 0.0, "day_pnl": 0.0, "armed": False, "stopped": clip,
+                      "floored": clip, "hard_stopped": False, "streak": streak,
+                      "resolved": len(day_trades), "net_count": nc}
+        if clip and not was_stopped:
+            P(f"  [FLOOR] Day net-win-count {nc} <= -{COUNT_SOFT_C} — clipping to 1x "
+              f"(reactivates on {COUNT_REACT_K}-win streak)")
+        try:
+            status = {}
+            if os.path.exists(STATUS_FILE):
+                with open(STATUS_FILE) as f:
+                    status = json.load(f)
+            status["trail"] = {"day": today, "mode": "count", "stopped": clip,
+                               "net_count": nc, "soft_c": COUNT_SOFT_C,
+                               "react_k": COUNT_REACT_K, "streak": streak,
+                               "resolved": len(day_trades)}
+            save_status(status)
+        except Exception:
+            pass
+        return
+    if not TRAIL_STOP_ENABLED:
+        _trailing_stopped = False
+        _trail_dbg = {"peak": 0.0, "day_pnl": 0.0, "armed": False, "stopped": False,
+                      "floored": False, "hard_stopped": False, "streak": 0, "resolved": 0}
+        return
+    was_stopped = _trailing_stopped and _trail_day == today
     seq = [(b.get("pnl", 0), b.get("result") == "win") for b in day_trades]
     stopped, peak, day_pnl, streak, ever = _trail_replay(
         seq, TRAIL_STOP_ARM, TRAIL_STOP_GIVEBACK, TRAIL_STREAK_HOLD_K,
@@ -1319,24 +1384,33 @@ def _base_dynamic_contracts(bets, crypto, signal_count):
     _cool_off_blocked = 0
     contracts = _group_scale_contracts(bets, crypto, signal_count)
     _last_group_scale = contracts
+    if contracts <= 1:
+        return contracts
+    resolved = [b for b in bets if b.get("action") == "trade"
+                and b.get("result") in ("win", "loss")
+                and b.get("crypto") in ("BTC", "ETH") and not b.get("dip_add")]
+    # Clean consecutive-win streak over resolved core trades (window-aware: the
+    # current window's legs are still open, so this only sees prior windows)
+    streak = 0
+    for b in reversed(resolved):
+        if b["result"] == "win":
+            streak += 1
+        else:
+            break
+    # Press-winners: a clean streak carries persistent momentum -> boost the scale
+    # and BYPASS the cool-off lid (a durable run keeps its edge)
+    if PRESS_STREAK_N > 0 and streak >= PRESS_STREAK_N:
+        pressed = max(contracts, int(round(contracts * PRESS_MULT)))
+        if pressed != contracts:
+            P(f"  [SCALE] Press-winners: {streak}-win streak — {contracts}x -> {pressed}x")
+        return pressed
     # Cool-off: trailing WR >= threshold means the run is euphoric — forward
     # edge is ~zero there, so cap at 1x until it cools (group states unaffected)
-    if contracts > 1 and COOL_OFF_WR > 0:
-        resolved = [b for b in bets if b.get("action") == "trade"
-                    and b.get("result") in ("win", "loss")
-                    and b.get("crypto") in ("BTC", "ETH") and not b.get("dip_add")]
+    if COOL_OFF_WR > 0:
         last = resolved[-COOL_OFF_WINDOW:]
         if len(last) >= COOL_OFF_WINDOW:
             wr = sum(1 for b in last if b["result"] == "win") / len(last)
             if wr >= COOL_OFF_WR:
-                # Bypass the lid on a clean consecutive win streak — a durable
-                # run keeps its edge, unlike choppy 80% (wins with losses mixed)
-                streak = 0
-                for b in reversed(resolved):
-                    if b["result"] == "win":
-                        streak += 1
-                    else:
-                        break
                 if COOL_OFF_BYPASS_STREAK > 0 and streak >= COOL_OFF_BYPASS_STREAK:
                     P(f"  [SCALE] Cool-off bypass: {streak}-win streak — staying {contracts}x")
                 else:
