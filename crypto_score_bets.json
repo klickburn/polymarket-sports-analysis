@@ -625864,5 +625864,109 @@
     "status": "executed",
     "fill_price": 0.87,
     "filled_count": 2
+  },
+  {
+    "crypto": "BTC",
+    "ticker": "KXBTC15M-26JUL261245-45",
+    "event_ticker": "KXBTC15M-26JUL261245",
+    "side": "yes",
+    "price": 0.84,
+    "score": -3,
+    "reasons": [
+      [
+        "Signal Score",
+        "0/8",
+        "0"
+      ],
+      [
+        "RSI Misalign",
+        "YES RSI=66.1",
+        "0"
+      ],
+      [
+        "1h NoRev",
+        "ret=+0.09%",
+        "0"
+      ],
+      [
+        "BTC Same",
+        "btc=+0.00%",
+        "0"
+      ],
+      [
+        "Consensus",
+        "all YES",
+        "0"
+      ],
+      [
+        "Stoch High",
+        "100.0",
+        "0"
+      ]
+    ],
+    "score_breakdown": {
+      "Signal Score": {
+        "detail": "0/8",
+        "points": 0
+      },
+      "RSI Misalign": {
+        "detail": "YES RSI=66.1",
+        "points": 0
+      },
+      "1h NoRev": {
+        "detail": "ret=+0.09%",
+        "points": 0
+      },
+      "BTC Same": {
+        "detail": "btc=+0.00%",
+        "points": 0
+      },
+      "Consensus": {
+        "detail": "all YES",
+        "points": 0
+      },
+      "Stoch High": {
+        "detail": "100.0",
+        "points": 0
+      }
+    },
+    "indicators": {
+      "ret_1h": 0.0947,
+      "ret_3h": 0.4579,
+      "vol_6h": 0.1079,
+      "rsi": 66.09,
+      "stoch": 100.0,
+      "pack_agreement": 1.0,
+      "btc_ret_1h": 0.0947
+    },
+    "bet_amount": 0.1,
+    "contracts": 1,
+    "entry_minute": 4.7,
+    "timestamp": "2026-07-26T16:34:48.095106+00:00",
+    "window_end": "2026-07-26T16:45:00+00:00",
+    "result": "open",
+    "strategy_version": "v7",
+    "action": "trade",
+    "base_contracts": 1,
+    "decision": {
+      "group_scale": 1,
+      "cool_off": false,
+      "base": 1,
+      "trail_stopped": false,
+      "trail_peak": 0.0,
+      "trail_day_pnl": 0.0,
+      "trail_armed": false,
+      "floored": false,
+      "hard_stopped": false,
+      "split_guard": false,
+      "final": 1,
+      "clip_reason": "none",
+      "resolved_today": 0,
+      "open_today": 0
+    },
+    "order_id": "d5a7c36a-bb1b-4236-b92d-2621607566c6",
+    "status": "executed",
+    "fill_price": 0.83,
+    "filled_count": 1
   }
 ]
