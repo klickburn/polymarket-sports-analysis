@@ -577477,6 +577477,26 @@
     "pnl": -0.7
   },
   {
+    "crypto": "ETH",
+    "side": "no",
+    "price": 0.6799999999999999,
+    "score": -1,
+    "bet_amount": 0.1,
+    "contracts": 1,
+    "timestamp": "2026-07-24T04:17:21.347528+00:00",
+    "result": "loss",
+    "strategy_version": "v7",
+    "action": "trade",
+    "base_contracts": 1,
+    "cool_off": true,
+    "blocked_scale": 30,
+    "status": "executed",
+    "fill_price": 0.6799999999999999,
+    "filled_count": 1,
+    "market_result": "yes",
+    "pnl": -0.7
+  },
+  {
     "crypto": "BTC",
     "ticker": "KXBTC15M-26JUL240045-45",
     "event_ticker": "KXBTC15M-26JUL240045",
@@ -577569,6 +577589,24 @@
     "action": "trade",
     "base_contracts": 30,
     "order_id": "449d6c76-b852-4c7e-b64d-2b34e6b865ae",
+    "status": "executed",
+    "fill_price": 0.63,
+    "filled_count": 30,
+    "market_result": "no",
+    "pnl": 10.61
+  },
+  {
+    "crypto": "BTC",
+    "side": "no",
+    "price": 0.62,
+    "score": 0,
+    "bet_amount": 0.1,
+    "contracts": 30,
+    "timestamp": "2026-07-24T04:32:25.119519+00:00",
+    "result": "win",
+    "strategy_version": "v7",
+    "action": "trade",
+    "base_contracts": 30,
     "status": "executed",
     "fill_price": 0.63,
     "filled_count": 30,
@@ -623383,6 +623421,216 @@
     "order_id": "8f420ce2-2e30-49cf-95b9-d3a1cb16e2a1",
     "status": "resting",
     "fill_price": 0.6599999999999999,
+    "filled_count": 1
+  },
+  {
+    "crypto": "BTC",
+    "ticker": "KXBTC15M-26JUL261015-15",
+    "event_ticker": "KXBTC15M-26JUL261015",
+    "side": "yes",
+    "price": 0.71,
+    "score": -3,
+    "reasons": [
+      [
+        "Signal Score",
+        "0/8",
+        "0"
+      ],
+      [
+        "RSI Misalign",
+        "YES RSI=53.1",
+        "0"
+      ],
+      [
+        "1h NoRev",
+        "ret=+0.03%",
+        "0"
+      ],
+      [
+        "BTC Same",
+        "btc=+0.00%",
+        "0"
+      ],
+      [
+        "No Consensus",
+        "{'BTC': 'yes', 'ETH': 'yes', 'SOL': 'yes', 'DOGE': 'no'}",
+        "0"
+      ],
+      [
+        "Stoch High",
+        "57.9",
+        "0"
+      ]
+    ],
+    "score_breakdown": {
+      "Signal Score": {
+        "detail": "0/8",
+        "points": 0
+      },
+      "RSI Misalign": {
+        "detail": "YES RSI=53.1",
+        "points": 0
+      },
+      "1h NoRev": {
+        "detail": "ret=+0.03%",
+        "points": 0
+      },
+      "BTC Same": {
+        "detail": "btc=+0.00%",
+        "points": 0
+      },
+      "No Consensus": {
+        "detail": "{'BTC': 'yes', 'ETH': 'yes', 'SOL': 'yes', 'DOGE': 'no'}",
+        "points": 0
+      },
+      "Stoch High": {
+        "detail": "57.9",
+        "points": 0
+      }
+    },
+    "indicators": {
+      "ret_1h": 0.0272,
+      "ret_3h": 0.0094,
+      "vol_6h": 0.1197,
+      "rsi": 53.05,
+      "stoch": 57.92,
+      "pack_agreement": 0.0,
+      "btc_ret_1h": 0.0272
+    },
+    "bet_amount": 0.1,
+    "contracts": 1,
+    "entry_minute": 2.3,
+    "timestamp": "2026-07-26T14:02:26.740905+00:00",
+    "window_end": "2026-07-26T14:15:00+00:00",
+    "result": "open",
+    "strategy_version": "v7",
+    "action": "trade",
+    "base_contracts": 1,
+    "trail_stopped": true,
+    "decision": {
+      "group_scale": 1,
+      "cool_off": false,
+      "base": 1,
+      "trail_stopped": true,
+      "trail_peak": 55.4,
+      "trail_day_pnl": -107.45,
+      "trail_armed": true,
+      "floored": true,
+      "hard_stopped": true,
+      "split_guard": false,
+      "final": 1,
+      "clip_reason": "hard_floor",
+      "resolved_today": 111,
+      "open_today": 0
+    },
+    "order_id": "8f34a1ba-82cb-4859-8626-fb29facfa204",
+    "status": "executed",
+    "fill_price": 0.69,
+    "filled_count": 1
+  },
+  {
+    "crypto": "ETH",
+    "ticker": "KXETH15M-26JUL261015-15",
+    "event_ticker": "KXETH15M-26JUL261015",
+    "side": "yes",
+    "price": 0.69,
+    "score": -2,
+    "reasons": [
+      [
+        "Signal Score",
+        "1/8",
+        "1"
+      ],
+      [
+        "RSI Misalign",
+        "YES RSI=52.6",
+        "0"
+      ],
+      [
+        "1h MeanRev",
+        "ret=-0.08%",
+        "+1"
+      ],
+      [
+        "BTC Same",
+        "btc=+0.00%",
+        "0"
+      ],
+      [
+        "No Consensus",
+        "{'BTC': 'yes', 'ETH': 'yes', 'SOL': 'yes', 'DOGE': 'no'}",
+        "0"
+      ],
+      [
+        "Stoch High",
+        "43.6",
+        "0"
+      ]
+    ],
+    "score_breakdown": {
+      "Signal Score": {
+        "detail": "1/8",
+        "points": 1
+      },
+      "RSI Misalign": {
+        "detail": "YES RSI=52.6",
+        "points": 0
+      },
+      "1h MeanRev": {
+        "detail": "ret=-0.08%",
+        "points": 1
+      },
+      "BTC Same": {
+        "detail": "btc=+0.00%",
+        "points": 0
+      },
+      "No Consensus": {
+        "detail": "{'BTC': 'yes', 'ETH': 'yes', 'SOL': 'yes', 'DOGE': 'no'}",
+        "points": 0
+      },
+      "Stoch High": {
+        "detail": "43.6",
+        "points": 0
+      }
+    },
+    "indicators": {
+      "ret_1h": -0.0818,
+      "ret_3h": -0.0322,
+      "vol_6h": 0.1311,
+      "rsi": 52.55,
+      "stoch": 43.59,
+      "pack_agreement": 0.0,
+      "btc_ret_1h": 0.0272
+    },
+    "bet_amount": 0.1,
+    "contracts": 1,
+    "entry_minute": 2.3,
+    "timestamp": "2026-07-26T14:02:26.741636+00:00",
+    "window_end": "2026-07-26T14:15:00+00:00",
+    "result": "open",
+    "strategy_version": "v7",
+    "action": "trade",
+    "base_contracts": 30,
+    "trail_stopped": true,
+    "decision": {
+      "group_scale": 30,
+      "cool_off": false,
+      "base": 30,
+      "trail_stopped": true,
+      "trail_peak": 55.4,
+      "trail_day_pnl": -107.45,
+      "trail_armed": true,
+      "floored": true,
+      "hard_stopped": true,
+      "split_guard": false,
+      "final": 1,
+      "clip_reason": "hard_floor",
+      "resolved_today": 111,
+      "open_today": 1
+    },
+    "order_id": "e07bea1d-4560-4ab1-9950-62eb0b0b305b",
+    "status": "executed",
+    "fill_price": 0.7,
     "filled_count": 1
   }
 ]
