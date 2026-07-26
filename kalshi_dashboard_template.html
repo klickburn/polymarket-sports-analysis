@@ -1359,25 +1359,34 @@ function renderTrailCompare(tc) {
   const badge = document.getElementById('trailCompareBadge');
   if (!tc || !tc.labels || tc.labels.length < 2) { div.innerHTML=''; hdr.style.display='none'; divider.style.display='none'; return; }
   hdr.style.display=''; divider.style.display='';
-  const shK = tc.streak_hold_k || 0;
-  const floor = tc.loss_floor || 0;
-  const hard = tc.hard_floor || 0;
-  const hasStack = floor > 0 || hard > 0;
-  const stopName = hasStack ? 'protection stack' : (shK > 0 ? `streak-hold k=${shK}` : 'trailing stop');
-  // badge shows every active layer so it matches what the "with" line computes
-  let bParts = [`🛑 $${(tc.arm||0).toFixed(0)}/$${(tc.giveback||0).toFixed(0)}${shK>0?` k${shK}`:''}`];
-  if (floor > 0) bParts.push(`🛟 −$${floor.toFixed(0)}`);
-  if (hard > 0) bParts.push(`🧯 −$${hard.toFixed(0)}`);
-  badge.textContent = bParts.join(' · ');
   const delta = tc.delta || 0;
   const dc = delta >= 0 ? 'var(--green)' : 'var(--red)';
-  const verdict = delta >= 0
-    ? `the ${stopName} <b style="color:var(--green)">added $${delta.toFixed(2)}</b> vs letting it run`
-    : `the ${stopName} <b style="color:var(--red)">cost $${Math.abs(delta).toFixed(2)}</b> vs letting it run (protection clips green days)`;
-  const layers = [`trailing stop ($${(tc.arm||0).toFixed(0)}/$${(tc.giveback||0).toFixed(0)}${shK>0?`, lifts on a ${shK}-win streak`:''})`];
-  if (floor > 0) layers.push(`a −$${floor.toFixed(0)} loss floor (reactivates on a ${tc.floor_react_k||1}-win)`);
-  if (hard > 0) layers.push(`a −$${hard.toFixed(0)} hard backstop (no reactivation)`);
-  const howItWorks = `Both curves cover the trades on this dashboard. Over this period, ${verdict}. The "with" line applies your full stack — ${layers.join(', ')} — so it clips gains on green days but cushions the bad ones. Positive difference = protection is net saving you money over this window.`;
+  let stopName, verdict, howItWorks;
+  if (tc.mode === 'count') {
+    stopName = 'count floor';
+    badge.textContent = `🛟 net −${tc.soft_c}` + (tc.press_streak_n > 0 ? ` · ⏫ ${tc.press_streak_n}→${tc.press_mult}×` : '');
+    verdict = delta >= 0
+      ? `the count floor <b style="color:var(--green)">added $${delta.toFixed(2)}</b> vs letting it run`
+      : `the count floor <b style="color:var(--red)">cost $${Math.abs(delta).toFixed(2)}</b> vs letting it run (protection clips green days)`;
+    howItWorks = `Both curves cover the trades on this dashboard. Over this period, ${verdict}. Count-based protection clips to 1× once the day's net-win-count (+1 win / −1 loss) reaches −${tc.soft_c}, reactivating on a ${tc.react_k}-win streak${tc.press_streak_n>0?`; press-winners boosts to ${tc.press_mult}× on a ${tc.press_streak_n}-win streak`:''}. Because it keys off win/loss counts, not dollars, live matches the backtest exactly.`;
+  } else {
+    const shK = tc.streak_hold_k || 0;
+    const floor = tc.loss_floor || 0;
+    const hard = tc.hard_floor || 0;
+    const hasStack = floor > 0 || hard > 0;
+    stopName = hasStack ? 'protection stack' : (shK > 0 ? `streak-hold k=${shK}` : 'trailing stop');
+    let bParts = [`🛑 $${(tc.arm||0).toFixed(0)}/$${(tc.giveback||0).toFixed(0)}${shK>0?` k${shK}`:''}`];
+    if (floor > 0) bParts.push(`🛟 −$${floor.toFixed(0)}`);
+    if (hard > 0) bParts.push(`🧯 −$${hard.toFixed(0)}`);
+    badge.textContent = bParts.join(' · ');
+    verdict = delta >= 0
+      ? `the ${stopName} <b style="color:var(--green)">added $${delta.toFixed(2)}</b> vs letting it run`
+      : `the ${stopName} <b style="color:var(--red)">cost $${Math.abs(delta).toFixed(2)}</b> vs letting it run (protection clips green days)`;
+    const layers = [`trailing stop ($${(tc.arm||0).toFixed(0)}/$${(tc.giveback||0).toFixed(0)}${shK>0?`, lifts on a ${shK}-win streak`:''})`];
+    if (floor > 0) layers.push(`a −$${floor.toFixed(0)} loss floor (reactivates on a ${tc.floor_react_k||1}-win)`);
+    if (hard > 0) layers.push(`a −$${hard.toFixed(0)} hard backstop (no reactivation)`);
+    howItWorks = `Both curves cover the trades on this dashboard. Over this period, ${verdict}. The "with" line applies your full stack — ${layers.join(', ')} — so it clips gains on green days but cushions the bad ones. Positive difference = protection is net saving you money over this window.`;
+  }
   div.innerHTML = `<div class="card">
     <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:8px">
       <div><div style="font-size:12px;color:var(--muted)">Without stop (free scaling)</div><div style="font-size:20px;font-weight:700;color:${(tc.without_total||0)>=0?'var(--green)':'var(--red)'}">$${(tc.without_total||0)>=0?'+':''}${(tc.without_total||0).toFixed(2)}</div></div>
@@ -1730,7 +1739,17 @@ function renderScoreBot() {
   // Trailing-stop banner
   const tr = sp.trail_stop;
   let trailBanner = '';
-  if (tr) {
+  if (tr && tr.mode === 'count') {
+    const pressTag = tr.press_streak_n > 0 ? ` · ⏫ press ${tr.press_streak_n}→${tr.press_mult}× on a clean streak (now ${tr.streak||0})` : '';
+    if (tr.stopped) {
+      trailBanner = `<div class="card" style="flex-basis:100%;border-left:3px solid #ef4444;padding:10px 16px">
+        <span style="background:rgba(239,68,68,0.15);color:#ef4444;padding:3px 10px;border-radius:6px;font-weight:700;font-size:13px">🛟 COUNT FLOOR ACTIVE</span>
+        <span style="margin-left:10px;font-size:13px;color:var(--text)">Day net-win-count ${tr.net_count} ≤ −${tr.soft_c} — trading 1x until a ${tr.react_k}-win recovery${pressTag}</span>
+      </div>`;
+    } else {
+      trailBanner = `<div style="flex-basis:100%;font-size:12px;color:var(--muted);padding:0 4px">🛟 Count floor — day net-win-count ${tr.net_count||0}, cuts to 1x at −${tr.soft_c} (reactivates on a ${tr.react_k}-win)${pressTag}</div>`;
+    }
+  } else if (tr) {
     const shK = tr.streak_hold_k || 0;
     const dynTag = tr.dynamic ? ` <span style="color:var(--muted)">· dynamic $${(tr.arm||0).toFixed(0)}/$${(tr.giveback||0).toFixed(0)} (auto-scales with size)</span>` : '';
     const shTag = (shK > 0 ? ` <span style="color:var(--muted)">· streak-hold k=${shK} (lifts on a ${shK}-win streak, now ${tr.streak||0})</span>` : '') + dynTag;

@@ -34,7 +34,9 @@ from crypto_score_bot import (run as run_score_bot, SCALE_UP_COUNT,
                               SPLIT_DIP_TIERS,
                               TRAIL_STOP_ENABLED, TRAIL_STOP_ARM, TRAIL_STOP_GIVEBACK,
                               TRAIL_STREAK_HOLD_K, TRAIL_STOP_DYNAMIC,
-                              TRAIL_LOSS_FLOOR, TRAIL_FLOOR_REACT_K, TRAIL_HARD_FLOOR)
+                              TRAIL_LOSS_FLOOR, TRAIL_FLOOR_REACT_K, TRAIL_HARD_FLOOR,
+                              PROTECT_MODE, COUNT_SOFT_C, COUNT_REACT_K,
+                              PRESS_STREAK_N, PRESS_MULT)
 # History data is committed as kalshi_history.json — no live fetch on Railway
 HISTORY_FILE = "kalshi_history.json"
 
@@ -794,9 +796,17 @@ def _build_scaling_performance(resolved, status=None):
         dip["tiers"] = {t: _stat(ts, _tier_price(t)) for t, ts in sorted(tiers.items(),
                         key=lambda kv: _tier_price(kv[0]))}
 
-    # Trailing-stop status (persisted by the bot); only show for today
+    # Protection status (persisted by the bot); only show for today
     trail = None
-    if TRAIL_STOP_ENABLED:
+    if PROTECT_MODE == "count":
+        raw = (status or {}).get("trail") or {}
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        r = raw if raw.get("day") == today else {}
+        trail = {"mode": "count", "soft_c": COUNT_SOFT_C, "react_k": COUNT_REACT_K,
+                 "press_streak_n": PRESS_STREAK_N, "press_mult": PRESS_MULT,
+                 "net_count": r.get("net_count", 0), "stopped": bool(r.get("stopped")),
+                 "streak": r.get("streak", 0), "resolved": r.get("resolved", 0)}
+    elif TRAIL_STOP_ENABLED:
         raw = (status or {}).get("trail") or {}
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         if raw.get("day") == today:
@@ -868,6 +878,36 @@ def _build_trail_compare(bets, max_points=500):
             and b.get("crypto") in ("BTC", "ETH") and not b.get("dip_add")
             and b.get("timestamp")]
     core.sort(key=lambda b: b.get("timestamp", ""))
+    # Count-based protection: the live trades already reflect the count floor
+    # (contracts = 1 when floored, else the pressed scale). So 'with' = the actual
+    # realized P&L, and 'without' = free-scaling from base_contracts. No re-sim.
+    if PROTECT_MODE == "count":
+        labels, with_series, without_series = [], [], []
+        cum_with = cum_without = 0.0
+        for b in core:
+            c_rec = b.get("filled_count") or b.get("contracts") or 1
+            pnl = b.get("pnl", 0)
+            per_contract = pnl / c_rec if c_rec else pnl
+            base = b.get("base_contracts") or c_rec
+            cum_with += pnl
+            cum_without += per_contract * base
+            labels.append(b.get("timestamp"))
+            with_series.append(round(cum_with, 2))
+            without_series.append(round(cum_without, 2))
+        n = len(labels)
+        if n > max_points:
+            step = n / max_points
+            idx = sorted(set([int(i * step) for i in range(max_points)] + [n - 1]))
+            labels = [labels[i] for i in idx]
+            with_series = [with_series[i] for i in idx]
+            without_series = [without_series[i] for i in idx]
+        return {
+            "labels": labels, "with_stop": with_series, "without_stop": without_series,
+            "with_total": round(cum_with, 2), "without_total": round(cum_without, 2),
+            "delta": round(cum_with - cum_without, 2), "enabled": True, "mode": "count",
+            "soft_c": COUNT_SOFT_C, "react_k": COUNT_REACT_K,
+            "press_streak_n": PRESS_STREAK_N, "press_mult": PRESS_MULT,
+        }
     labels, with_series, without_series = [], [], []
     cum_with = cum_without = 0.0
     cur_day = None
