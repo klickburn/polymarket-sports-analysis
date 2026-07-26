@@ -628823,5 +628823,110 @@
     "status": "executed",
     "fill_price": 0.62,
     "filled_count": 1
+  },
+  {
+    "crypto": "ETH",
+    "ticker": "KXETH15M-26JUL261615-15",
+    "event_ticker": "KXETH15M-26JUL261615",
+    "side": "no",
+    "price": 0.62,
+    "score": 0,
+    "reasons": [
+      [
+        "Signal Score",
+        "3/8",
+        "3"
+      ],
+      [
+        "RSI Aligned",
+        "NO RSI=62.5",
+        "+2"
+      ],
+      [
+        "1h MeanRev",
+        "ret=+0.02%",
+        "+1"
+      ],
+      [
+        "BTC Same",
+        "btc=+0.00%",
+        "0"
+      ],
+      [
+        "No Consensus",
+        "{'ETH': 'no', 'SOL': 'yes', 'XRP': 'yes'}",
+        "0"
+      ],
+      [
+        "Stoch High",
+        "44.7",
+        "0"
+      ]
+    ],
+    "score_breakdown": {
+      "Signal Score": {
+        "detail": "3/8",
+        "points": 3
+      },
+      "RSI Aligned": {
+        "detail": "NO RSI=62.5",
+        "points": 2
+      },
+      "1h MeanRev": {
+        "detail": "ret=+0.02%",
+        "points": 1
+      },
+      "BTC Same": {
+        "detail": "btc=+0.00%",
+        "points": 0
+      },
+      "No Consensus": {
+        "detail": "{'ETH': 'no', 'SOL': 'yes', 'XRP': 'yes'}",
+        "points": 0
+      },
+      "Stoch High": {
+        "detail": "44.7",
+        "points": 0
+      }
+    },
+    "indicators": {
+      "ret_1h": 0.017,
+      "ret_3h": -0.002,
+      "vol_6h": 0.2691,
+      "rsi": 62.46,
+      "stoch": 44.67,
+      "pack_agreement": 0.0,
+      "btc_ret_1h": -0.0186
+    },
+    "bet_amount": 0.1,
+    "contracts": 30,
+    "entry_minute": 3.5,
+    "timestamp": "2026-07-26T20:03:36.739286+00:00",
+    "window_end": "2026-07-26T20:15:00+00:00",
+    "result": "open",
+    "strategy_version": "v7",
+    "action": "trade",
+    "base_contracts": 30,
+    "decision": {
+      "group_scale": 30,
+      "cool_off": false,
+      "base": 30,
+      "trail_stopped": false,
+      "trail_peak": 0.0,
+      "trail_day_pnl": 0.0,
+      "trail_armed": false,
+      "floored": false,
+      "hard_stopped": false,
+      "split_guard": false,
+      "vol_gated": false,
+      "final": 30,
+      "clip_reason": "none",
+      "resolved_today": 26,
+      "open_today": 1
+    },
+    "order_id": "817267aa-ba82-47a8-b576-84bb9b3b7e79",
+    "status": "executed",
+    "fill_price": 0.62,
+    "filled_count": 30
   }
 ]
