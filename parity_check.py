@@ -40,18 +40,20 @@ def get_reset_ts():
     except Exception:
         return None
 
-# ── Strategy config (defaults match the deployed count-mode env) ──────────────
-SCALE_UP       = int(os.environ.get("SCALE_UP_COUNT", "2"))
+# ── Strategy config — defaults MUST match the deployed Railway env, else the
+# check reports spurious 'scale_state' gaps. Current deployed: 30x, press OFF,
+# vol gate 0.20. Override any of these via env when live config changes.
+SCALE_UP       = int(os.environ.get("SCALE_UP_COUNT", "30"))
 PROTECT_MODE   = os.environ.get("PROTECT_MODE", "count")
 COUNT_SOFT_C   = int(os.environ.get("COUNT_SOFT_C", "3"))
 COUNT_REACT_K  = int(os.environ.get("COUNT_REACT_K", "1"))
-PRESS_STREAK_N = int(os.environ.get("PRESS_STREAK_N", "5"))
+PRESS_STREAK_N = int(os.environ.get("PRESS_STREAK_N", "0"))
 PRESS_MULT     = float(os.environ.get("PRESS_MULT", "1.5"))
 CO_WR          = float(os.environ.get("COOL_OFF_WR", "0.8"))
 CO_WIN         = int(os.environ.get("COOL_OFF_WINDOW", "10"))
 CO_STREAK      = int(os.environ.get("COOL_OFF_BYPASS_STREAK", "6"))
 SPLIT_GUARD    = os.environ.get("SPLIT_GUARD", "1") == "1"
-VOL_GATE       = float(os.environ.get("VOL_GATE", "0"))
+VOL_GATE       = float(os.environ.get("VOL_GATE", "0.20"))
 GROUPS = {"A": {"sig": {4, 5}, "uw": 4, "ut": 3, "dw": 16, "dt": 3},
           "B": {"sig": {1, 2, 3}, "uw": 6, "ut": 4, "dw": 16, "dt": 4}}
 
