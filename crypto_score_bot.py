@@ -77,6 +77,36 @@ def _parse_sig_weights(s):
             P(f"  [CONFIG] bad SIG_WEIGHTS entry '{part}' — ignored")
     return out
 SIG_WEIGHTS = _parse_sig_weights(os.environ.get("SIG_WEIGHTS", ""))
+# ── Win-rate ladder ────────────────────────────────────────────────────────
+# Forward edge depends on the trailing win rate: it peaks around 0.70 and goes
+# NEGATIVE above ~0.80 (euphoria — the run is exhausted). So size by where the
+# rolling WR sits:
+#     WR > WR_CAP           -> 1x   (euphoric, stop scaling)
+#     WR_BOOST_LO..HI       -> xMULT (the productive band — lean in)
+#     otherwise             -> normal group scale
+# Windows are in TRADES (not time): ~142 core trades/day, so N=100 ~ 13h and
+# N=150 ~ 21h. Pure win/loss counts -> deterministic -> parity-safe. 0 disables.
+WR_CAP_N = int(os.environ.get("WR_CAP_N", "150"))
+WR_CAP = float(os.environ.get("WR_CAP", "0"))          # 0 disables the cap
+WR_BOOST_N = int(os.environ.get("WR_BOOST_N", "100"))
+WR_BOOST_LO = float(os.environ.get("WR_BOOST_LO", "0.55"))
+WR_BOOST_HI = float(os.environ.get("WR_BOOST_HI", "0.70"))
+WR_BOOST_MULT = float(os.environ.get("WR_BOOST_MULT", "0"))  # 0/1 disables the boost
+
+
+def _trailing_wr(bets, n):
+    """Win rate over the last n RESOLVED core trades. Returns None until there
+    are n of them. Window-aware by construction: only resolved (settled) trades
+    count, and the current window's legs are still open when this is called."""
+    if n <= 0:
+        return None
+    res = [b for b in bets
+           if b.get("action") == "trade" and b.get("result") in ("win", "loss")
+           and b.get("crypto") in ("BTC", "ETH") and not b.get("dip_add")]
+    if len(res) < n:
+        return None
+    last = res[-n:]
+    return sum(1 for b in last if b["result"] == "win") / n
 SPLIT_DIP_ENABLED = os.environ.get("SPLIT_DIP_ENABLED", "0") == "1"
 SPLIT_DIP_PRICE = float(os.environ.get("SPLIT_DIP_PRICE", "0.10"))
 SPLIT_DIP_COUNT = int(os.environ.get("SPLIT_DIP_COUNT", "10"))
@@ -1906,6 +1936,25 @@ def run(live=False):
                               f"{current_contracts}x -> {_weighted}x (x{_w})")
                             current_contracts = _weighted
                             tq["bet_record"]["sig_weighted"] = True
+                # ── Win-rate ladder ──────────────────────────────────────
+                # Cap: euphoric stretch -> stop scaling entirely.
+                if WR_CAP > 0 and current_contracts > 1:
+                    _wr = _trailing_wr(bets, WR_CAP_N)
+                    if _wr is not None and _wr > WR_CAP:
+                        P(f"    {tq['crypto']}: wr-cap — trailing-{WR_CAP_N} WR "
+                          f"{_wr:.0%} > {WR_CAP:.0%} — {current_contracts}x -> 1x")
+                        current_contracts = 1
+                        tq["bet_record"]["wr_capped"] = True
+                # Boost: productive band -> lean in.
+                if WR_BOOST_MULT > 1 and current_contracts > 1:
+                    _wrb = _trailing_wr(bets, WR_BOOST_N)
+                    if _wrb is not None and WR_BOOST_LO <= _wrb <= WR_BOOST_HI:
+                        _b = max(1, int(round(current_contracts * WR_BOOST_MULT)))
+                        if _b != current_contracts:
+                            P(f"    {tq['crypto']}: wr-boost — trailing-{WR_BOOST_N} WR "
+                              f"{_wrb:.0%} in band — {current_contracts}x -> {_b}x")
+                            current_contracts = _b
+                            tq["bet_record"]["wr_boosted"] = True
                 tq["bet_record"]["contracts"] = current_contracts
                 # Record the scale absent the trailing stop, so the dashboard can
                 # draw an accurate "without trailing stop" P&L line.
@@ -1920,7 +1969,11 @@ def run(live=False):
                 # than a forensic replay. clip_reason names the single binding
                 # constraint; resolved/open_today expose the partial-view effect.
                 _td = _trail_dbg
-                if tq["bet_record"].get("split_guard"):
+                if tq["bet_record"].get("wr_boosted"):
+                    _clip = "wr_boost"
+                elif tq["bet_record"].get("wr_capped"):
+                    _clip = "wr_cap"
+                elif tq["bet_record"].get("split_guard"):
                     _clip = "split_guard"
                 elif tq["bet_record"].get("vol_gated"):
                     _clip = "vol_gate"
@@ -1948,6 +2001,10 @@ def run(live=False):
                     "split_guard": bool(tq["bet_record"].get("split_guard")),
                     "vol_gated": bool(tq["bet_record"].get("vol_gated")),
                     "sig_weighted": bool(tq["bet_record"].get("sig_weighted")),
+                    "wr_capped": bool(tq["bet_record"].get("wr_capped")),
+                    "wr_boosted": bool(tq["bet_record"].get("wr_boosted")),
+                    "wr_cap_val": _trailing_wr(bets, WR_CAP_N) if WR_CAP > 0 else None,
+                    "wr_boost_val": _trailing_wr(bets, WR_BOOST_N) if WR_BOOST_MULT > 1 else None,
                     "final": current_contracts, "clip_reason": _clip,
                     "resolved_today": _res_today, "open_today": _open_today,
                 }

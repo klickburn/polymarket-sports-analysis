@@ -36,7 +36,10 @@ from crypto_score_bot import (run as run_score_bot, SCALE_UP_COUNT,
                               TRAIL_STREAK_HOLD_K, TRAIL_STOP_DYNAMIC,
                               TRAIL_LOSS_FLOOR, TRAIL_FLOOR_REACT_K, TRAIL_HARD_FLOOR,
                               PROTECT_MODE, COUNT_SOFT_C, COUNT_REACT_K,
-                              PRESS_STREAK_N, PRESS_MULT)
+                              PRESS_STREAK_N, PRESS_MULT,
+                              VOL_GATE, SIG_WEIGHTS, WR_CAP_N, WR_CAP,
+                              WR_BOOST_N, WR_BOOST_LO, WR_BOOST_HI, WR_BOOST_MULT,
+                              _trailing_wr)
 # History data is committed as kalshi_history.json — no live fetch on Railway
 HISTORY_FILE = "kalshi_history.json"
 
@@ -805,7 +808,13 @@ def _build_scaling_performance(resolved, status=None):
         trail = {"mode": "count", "soft_c": COUNT_SOFT_C, "react_k": COUNT_REACT_K,
                  "press_streak_n": PRESS_STREAK_N, "press_mult": PRESS_MULT,
                  "net_count": r.get("net_count", 0), "stopped": bool(r.get("stopped")),
-                 "streak": r.get("streak", 0), "resolved": r.get("resolved", 0)}
+                 "streak": r.get("streak", 0), "resolved": r.get("resolved", 0),
+                 "vol_gate": VOL_GATE, "sig_weights": SIG_WEIGHTS,
+                 "wr_cap": WR_CAP, "wr_cap_n": WR_CAP_N,
+                 "wr_boost_mult": WR_BOOST_MULT, "wr_boost_n": WR_BOOST_N,
+                 "wr_boost_lo": WR_BOOST_LO, "wr_boost_hi": WR_BOOST_HI,
+                 "wr_cap_val": _trailing_wr(resolved, WR_CAP_N) if WR_CAP > 0 else None,
+                 "wr_boost_val": _trailing_wr(resolved, WR_BOOST_N) if WR_BOOST_MULT > 1 else None}
     elif TRAIL_STOP_ENABLED:
         raw = (status or {}).get("trail") or {}
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")

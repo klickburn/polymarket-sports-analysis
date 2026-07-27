@@ -1741,13 +1741,30 @@ function renderScoreBot() {
   let trailBanner = '';
   if (tr && tr.mode === 'count') {
     const pressTag = tr.press_streak_n > 0 ? ` · ⏫ press ${tr.press_streak_n}→${tr.press_mult}× on a clean streak (now ${tr.streak||0})` : '';
+    // Win-rate ladder status line (cap / boost band)
+    let wrLine = '';
+    if (tr.wr_cap > 0 || tr.wr_boost_mult > 1) {
+      const parts = [];
+      if (tr.wr_boost_mult > 1) {
+        const v = tr.wr_boost_val;
+        const inBand = v !== null && v >= tr.wr_boost_lo && v <= tr.wr_boost_hi;
+        parts.push(`<span style="color:${inBand?'var(--green)':'var(--muted)'};font-weight:${inBand?'700':'400'}">⏫ boost ${tr.wr_boost_mult}× when WR${tr.wr_boost_n} in ${(tr.wr_boost_lo*100).toFixed(0)}–${(tr.wr_boost_hi*100).toFixed(0)}% (now ${v===null?'—':(v*100).toFixed(0)+'%'})${inBand?' ACTIVE':''}</span>`);
+      }
+      if (tr.wr_cap > 0) {
+        const c = tr.wr_cap_val;
+        const capped = c !== null && c > tr.wr_cap;
+        parts.push(`<span style="color:${capped?'var(--red)':'var(--muted)'};font-weight:${capped?'700':'400'}">🛑 cap 1× when WR${tr.wr_cap_n} > ${(tr.wr_cap*100).toFixed(0)}% (now ${c===null?'—':(c*100).toFixed(0)+'%'})${capped?' ACTIVE':''}</span>`);
+      }
+      if (tr.vol_gate > 0) parts.push(`<span style="color:var(--muted)">🌊 vol gate ${tr.vol_gate}</span>`);
+      wrLine = `<div style="flex-basis:100%;font-size:12px;padding:0 4px">${parts.join(' &nbsp;·&nbsp; ')}</div>`;
+    }
     if (tr.stopped) {
       trailBanner = `<div class="card" style="flex-basis:100%;border-left:3px solid #ef4444;padding:10px 16px">
         <span style="background:rgba(239,68,68,0.15);color:#ef4444;padding:3px 10px;border-radius:6px;font-weight:700;font-size:13px">🛟 COUNT FLOOR ACTIVE</span>
         <span style="margin-left:10px;font-size:13px;color:var(--text)">Day net-win-count ${tr.net_count} ≤ −${tr.soft_c} — trading 1x until a ${tr.react_k}-win recovery${pressTag}</span>
-      </div>`;
+      </div>` + wrLine;
     } else {
-      trailBanner = `<div style="flex-basis:100%;font-size:12px;color:var(--muted);padding:0 4px">🛟 Count floor — day net-win-count ${tr.net_count||0}, cuts to 1x at −${tr.soft_c} (reactivates on a ${tr.react_k}-win)${pressTag}</div>`;
+      trailBanner = `<div style="flex-basis:100%;font-size:12px;color:var(--muted);padding:0 4px">🛟 Count floor — day net-win-count ${tr.net_count||0}, cuts to 1x at −${tr.soft_c} (reactivates on a ${tr.react_k}-win)${pressTag}</div>` + wrLine;
     }
   } else if (tr) {
     const shK = tr.streak_hold_k || 0;
