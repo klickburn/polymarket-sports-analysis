@@ -58,6 +58,25 @@ SPLIT_GUARD = os.environ.get("SPLIT_GUARD", "0") == "1"
 # days, lower drawdown, softer worst day, for ~4% total. vol_6h is recorded at
 # entry, so this is deterministic -> parity-safe. 0 disables.
 VOL_GATE = float(os.environ.get("VOL_GATE", "0"))
+# Signal weights: signals inside a group all get the same scale, but their edges
+# differ ~28x (signal 1 earns ~0.001/trade vs signal 2's 0.033 among scaled
+# trades). Removing signal 1 hurts — its results feed group B's momentum history
+# — so instead keep it in the history and trade it SMALLER. Format "1:0.5,6:0.5".
+# Applied to the group scale at sizing time; signal is known at entry so this is
+# deterministic -> parity-safe. Empty disables.
+def _parse_sig_weights(s):
+    out = {}
+    for part in (s or "").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            sig, w = part.split(":")
+            out[int(sig)] = float(w)
+        except ValueError:
+            P(f"  [CONFIG] bad SIG_WEIGHTS entry '{part}' — ignored")
+    return out
+SIG_WEIGHTS = _parse_sig_weights(os.environ.get("SIG_WEIGHTS", ""))
 SPLIT_DIP_ENABLED = os.environ.get("SPLIT_DIP_ENABLED", "0") == "1"
 SPLIT_DIP_PRICE = float(os.environ.get("SPLIT_DIP_PRICE", "0.10"))
 SPLIT_DIP_COUNT = int(os.environ.get("SPLIT_DIP_COUNT", "10"))
@@ -1876,6 +1895,17 @@ def run(live=False):
                           f"(vol {_vol:.3f} < {VOL_GATE})")
                         current_contracts = 1
                         tq["bet_record"]["vol_gated"] = True
+                # Signal weight: trade low-edge signals smaller while keeping them
+                # in the group's momentum history. Deterministic -> parity-safe.
+                if SIG_WEIGHTS and current_contracts > 1:
+                    _w = SIG_WEIGHTS.get(sig_count)
+                    if _w is not None and _w != 1.0:
+                        _weighted = max(1, int(round(current_contracts * _w)))
+                        if _weighted != current_contracts:
+                            P(f"    {tq['crypto']}: sig-weight — sig{sig_count} "
+                              f"{current_contracts}x -> {_weighted}x (x{_w})")
+                            current_contracts = _weighted
+                            tq["bet_record"]["sig_weighted"] = True
                 tq["bet_record"]["contracts"] = current_contracts
                 # Record the scale absent the trailing stop, so the dashboard can
                 # draw an accurate "without trailing stop" P&L line.
@@ -1894,6 +1924,8 @@ def run(live=False):
                     _clip = "split_guard"
                 elif tq["bet_record"].get("vol_gated"):
                     _clip = "vol_gate"
+                elif tq["bet_record"].get("sig_weighted"):
+                    _clip = "sig_weight"
                 elif _trailing_stopped:
                     _clip = ("hard_floor" if _td.get("hard_stopped")
                              else "soft_floor" if _td.get("floored") else "trailing")
@@ -1915,6 +1947,7 @@ def run(live=False):
                     "hard_stopped": _td.get("hard_stopped"),
                     "split_guard": bool(tq["bet_record"].get("split_guard")),
                     "vol_gated": bool(tq["bet_record"].get("vol_gated")),
+                    "sig_weighted": bool(tq["bet_record"].get("sig_weighted")),
                     "final": current_contracts, "clip_reason": _clip,
                     "resolved_today": _res_today, "open_today": _open_today,
                 }
