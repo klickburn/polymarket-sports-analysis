@@ -649422,5 +649422,119 @@
     "status": "executed",
     "fill_price": 0.74,
     "filled_count": 1
+  },
+  {
+    "crypto": "BTC",
+    "ticker": "KXBTC15M-26JUL271745-45",
+    "event_ticker": "KXBTC15M-26JUL271745",
+    "side": "yes",
+    "price": 0.63,
+    "score": 2,
+    "reasons": [
+      [
+        "Signal Score",
+        "5/8",
+        "5"
+      ],
+      [
+        "RSI Aligned",
+        "YES RSI=44.1",
+        "+2"
+      ],
+      [
+        "1h MeanRev",
+        "ret=-0.13%",
+        "+1"
+      ],
+      [
+        "BTC Same",
+        "btc=+0.00%",
+        "0"
+      ],
+      [
+        "High Vol",
+        "0.31\u22650.3",
+        "+1"
+      ],
+      [
+        "Consensus",
+        "all YES",
+        "0"
+      ],
+      [
+        "Stoch OS",
+        "21.1<30",
+        "+1"
+      ]
+    ],
+    "score_breakdown": {
+      "Signal Score": {
+        "detail": "5/8",
+        "points": 5
+      },
+      "RSI Aligned": {
+        "detail": "YES RSI=44.1",
+        "points": 2
+      },
+      "1h MeanRev": {
+        "detail": "ret=-0.13%",
+        "points": 1
+      },
+      "BTC Same": {
+        "detail": "btc=+0.00%",
+        "points": 0
+      },
+      "High Vol": {
+        "detail": "0.31\u22650.3",
+        "points": 1
+      },
+      "Consensus": {
+        "detail": "all YES",
+        "points": 0
+      },
+      "Stoch OS": {
+        "detail": "21.1<30",
+        "points": 1
+      }
+    },
+    "indicators": {
+      "ret_1h": -0.1273,
+      "ret_3h": 0.0089,
+      "vol_6h": 0.3079,
+      "rsi": 44.09,
+      "stoch": 21.12,
+      "pack_agreement": 1.0,
+      "btc_ret_1h": -0.1273
+    },
+    "bet_amount": 0.1,
+    "contracts": 30,
+    "entry_minute": 7.0,
+    "timestamp": "2026-07-27T21:37:06.271691+00:00",
+    "window_end": "2026-07-27T21:45:00+00:00",
+    "result": "open",
+    "strategy_version": "v7",
+    "action": "trade",
+    "base_contracts": 30,
+    "decision": {
+      "group_scale": 30,
+      "cool_off": false,
+      "base": 30,
+      "trail_stopped": false,
+      "trail_peak": 0.0,
+      "trail_day_pnl": 0.0,
+      "trail_armed": false,
+      "floored": false,
+      "hard_stopped": false,
+      "split_guard": false,
+      "vol_gated": false,
+      "final": 30,
+      "clip_reason": "none",
+      "resolved_today": 150,
+      "open_today": 0
+    },
+    "order_id": "6c55baf1-7640-49cb-a91f-518d08f58c84",
+    "status": "executed",
+    "fill_price": 0.64,
+    "filled_count": 30
   }
 ]
