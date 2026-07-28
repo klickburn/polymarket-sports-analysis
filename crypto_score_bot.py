@@ -1765,9 +1765,17 @@ def run(live=False):
             # Single pass: collect sides for consensus + evaluate trades
             CONSENSUS_EXCLUDE = {"BNB", "HYPE"}
             crypto_snapshots = {}
-            P(f"  Scanning {len(CRYPTOS)} markets...")
+            P(f"  Scanning {len([c for c in CRYPTOS if c not in TRADE_PAUSED])} markets...")
             for c, cfg2 in CRYPTOS.items():
                 if c in placed_this_window:
+                    continue
+                # Paused cryptos are never traded, and the only thing their market
+                # scan feeds is `window_sides` -> the Consensus signal, which is
+                # DISABLED (0 points). pack_agreement comes from CoinGecko (already
+                # BTC/ETH-only via skip_coins). Scanning them was ~10 extra Kalshi
+                # calls per window and was triggering 429 rate limits that made the
+                # bot miss real BTC/ETH markets. Skipping them is strategy-neutral.
+                if c in TRADE_PAUSED:
                     continue
                 time.sleep(0.5)
                 mkt2, ev2 = find_current_market(cfg2["series"])
