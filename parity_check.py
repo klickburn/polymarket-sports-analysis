@@ -66,7 +66,7 @@ def _parse_sig_weights(s):
         except ValueError:
             pass
     return out
-SIG_WEIGHTS    = _parse_sig_weights(os.environ.get("SIG_WEIGHTS", "1:0.5"))
+SIG_WEIGHTS    = _parse_sig_weights(os.environ.get("SIG_WEIGHTS", ""))
 WR_CAP_N       = int(os.environ.get("WR_CAP_N", "150"))
 WR_CAP         = float(os.environ.get("WR_CAP", "0.75"))
 WR_BOOST_N     = int(os.environ.get("WR_BOOST_N", "100"))
