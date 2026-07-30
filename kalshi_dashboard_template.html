@@ -1758,6 +1758,30 @@ function renderScoreBot() {
       if (tr.vol_gate > 0) parts.push(`<span style="color:var(--muted)">🌊 vol gate ${tr.vol_gate}</span>`);
       wrLine = `<div style="flex-basis:100%;font-size:12px;padding:0 4px">${parts.join(' &nbsp;·&nbsp; ')}</div>`;
     }
+    // P&L attribution: boosted (2x) vs scaled-unboosted vs 1x
+    const bs = sp.boost_stats;
+    if (bs) {
+      const cell = (label, st, color) => {
+        if (!st) return `<div style="min-width:150px"><div style="font-size:11px;color:var(--muted)">${label}</div><div style="font-size:15px;color:var(--muted)">—</div></div>`;
+        const pc = st.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+        const ec = st.edge >= 0 ? 'var(--green)' : 'var(--red)';
+        return `<div style="min-width:150px">
+          <div style="font-size:11px;color:${color};font-weight:600">${label}</div>
+          <div style="font-size:19px;font-weight:700;color:${pc}">${st.pnl>=0?'+':''}$${st.pnl.toFixed(2)}</div>
+          <div style="font-size:11px;color:var(--muted)">${st.count} trades · ${st.win_rate}% win
+            · BE ${st.break_even}% · <span style="color:${ec}">edge ${st.edge>=0?'+':''}${st.edge}pp</span></div>
+          <div style="font-size:11px;color:var(--muted)">$${st.pnl_per_trade.toFixed(4)}/trade</div>
+        </div>`;
+      };
+      wrLine += `<div class="card" style="flex-basis:100%;padding:10px 16px">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:8px">P&amp;L by size tier — is the ${bs.mult}× boost (WR${bs.n} in ${(bs.band_lo*100).toFixed(0)}–${(bs.band_hi*100).toFixed(0)}%) actually paying?</div>
+        <div style="display:flex;gap:28px;flex-wrap:wrap">
+          ${cell(`⏫ BOOSTED (${bs.mult}×)`, bs.boosted, 'var(--green)')}
+          ${cell('scaled, not boosted', bs.scaled_unboosted, 'var(--text)')}
+          ${cell('at 1× (unscaled)', bs.at_1x, 'var(--muted)')}
+        </div>
+      </div>`;
+    }
     if (tr.stopped) {
       trailBanner = `<div class="card" style="flex-basis:100%;border-left:3px solid #ef4444;padding:10px 16px">
         <span style="background:rgba(239,68,68,0.15);color:#ef4444;padding:3px 10px;border-radius:6px;font-weight:700;font-size:13px">🛟 COUNT FLOOR ACTIVE</span>

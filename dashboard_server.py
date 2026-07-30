@@ -767,6 +767,42 @@ def _build_scaling_performance(resolved, status=None):
     except Exception:
         pass
 
+    # WR-ladder boost effectiveness: P&L of the 2x-boosted trades vs the rest.
+    # Boosted trades are tagged decision.wr_boosted at sizing time. Break-even
+    # win rate for a binary bought at price p is p itself, so edge = WR - price.
+    boost = None
+    try:
+        core_res = [b for b in resolved
+                    if b.get("action") == "trade" and b.get("result") in ("win", "loss")
+                    and b.get("crypto") in ("BTC", "ETH") and not b.get("dip_add")]
+        if core_res:
+            def _bstat(ts):
+                if not ts:
+                    return None
+                w = sum(1 for b in ts if b["result"] == "win")
+                prices = [b.get("fill_price") or b.get("price") or 0 for b in ts]
+                ap = sum(prices) / len(prices) if prices else 0
+                pnl = sum(b.get("pnl", 0) for b in ts)
+                return {"count": len(ts), "wins": w,
+                        "win_rate": round(w / len(ts) * 100, 1),
+                        "avg_price": round(ap, 3),
+                        "break_even": round(ap * 100, 1),
+                        "edge": round(w / len(ts) * 100 - ap * 100, 1),
+                        "pnl": round(pnl, 2),
+                        "pnl_per_trade": round(pnl / len(ts), 4),
+                        "contracts": sum(b.get("filled_count", b.get("contracts", 1)) for b in ts)}
+            def _boosted(b):
+                d = b.get("decision") or {}
+                return bool(d.get("wr_boosted")) or d.get("clip_reason") == "wr_boost"
+            bo = [b for b in core_res if _boosted(b)]
+            sc = [b for b in core_res if not _boosted(b) and (b.get("contracts") or 1) > 1]
+            on = [b for b in core_res if not _boosted(b) and (b.get("contracts") or 1) <= 1]
+            boost = {"boosted": _bstat(bo), "scaled_unboosted": _bstat(sc), "at_1x": _bstat(on),
+                     "mult": WR_BOOST_MULT, "band_lo": WR_BOOST_LO, "band_hi": WR_BOOST_HI,
+                     "n": WR_BOOST_N}
+    except Exception:
+        boost = None
+
     # Dip-add effectiveness, broken down by price tier (10c / 20c / 5c ...)
     dip = None
     dip_trades = [b for b in resolved if b.get("dip_add") and b.get("result") in ("win", "loss")]
@@ -846,6 +882,7 @@ def _build_scaling_performance(resolved, status=None):
         "scaling_status": scaling_status,
         "cool_off": cool_off,
         "dip_add": dip,
+        "boost_stats": boost,
         "trail_stop": trail,
     }
 
