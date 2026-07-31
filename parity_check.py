@@ -15,6 +15,7 @@ Config is read from env so it stays in sync with the deployed Railway vars.
 """
 import os, sys, json, math, time, urllib.request
 from collections import OrderedDict
+from datetime import datetime
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BETS_FILE = os.environ.get("SCORE_BETS_FILE", os.path.join(HERE, "crypto_score_bets.json"))
@@ -149,7 +150,19 @@ def expected_sizing(core):
             sd = {b["crypto"]: b for b in legs}
             if "BTC" in sd and "ETH" in sd and sd["BTC"].get("side") != sd["ETH"].get("side"):
                 two = sorted([sd["BTC"], sd["ETH"]], key=lambda b: b.get("timestamp", ""))
-                guard.add(id(two[1]))  # 2nd-placed leg is the one live can guard
+                # Live's _is_split_leg checks BOTH the recorded trades and the current
+                # trade_queue. Legs fired in the SAME Phase-2 batch are both visible to
+                # it, so both get guarded; legs that land in separate polls (the ~96%
+                # case) only let it guard the 2nd. Same-batch timestamps differ by
+                # microseconds, so compare with a tolerance rather than for equality.
+                try:
+                    dt = abs((datetime.fromisoformat(two[1]["timestamp"])
+                              - datetime.fromisoformat(two[0]["timestamp"])).total_seconds())
+                except Exception:
+                    dt = 999
+                if dt <= 5:
+                    guard.add(id(two[0]))
+                guard.add(id(two[1]))
 
     state = {"A": 1, "B": 1}; up_at = {"A": 0, "B": 0}; grp = {"A": [], "B": []}; allr = []
     base = {}   # id(bet) -> pre-floor scale (group scale + press + cool-off + split-guard)
