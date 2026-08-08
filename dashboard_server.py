@@ -835,6 +835,59 @@ def _build_scaling_performance(resolved, status=None):
         dip["tiers"] = {t: _stat(ts, _tier_price(t)) for t, ts in sorted(tiers.items(),
                         key=lambda kv: _tier_price(kv[0]))}
 
+        # Losses since the last win. Counted two ways: by fill, and by window.
+        # Both legs of a split window settle together, so a 2-leg losing window
+        # adds 2 to the fill count but only 1 to the window count. The window
+        # count is the one that matches how streaks behave (a win in either leg
+        # ends the streak for both).
+        ordered = sorted(dip_trades, key=lambda b: b.get("timestamp", ""))
+        streak_fills = 0
+        for b in reversed(ordered):
+            if b["result"] == "win":
+                break
+            streak_fills += 1
+        by_window, seen = [], set()
+        for b in ordered:
+            key = b.get("window_end") or b.get("timestamp")
+            if key not in seen:
+                seen.add(key)
+                by_window.append([key, False])
+            if b["result"] == "win":
+                by_window[-1][1] = True
+        streak_windows = 0
+        for _, won in reversed(by_window):
+            if won:
+                break
+            streak_windows += 1
+        # Historical context so a long streak can be read as normal or unusual.
+        runs, cur = [], 0
+        for _, won in by_window:
+            if won:
+                runs.append(cur)
+                cur = 0
+            else:
+                cur += 1
+        last_win = next((b.get("timestamp") for b in reversed(ordered)
+                         if b["result"] == "win"), None)
+        hrs = None
+        if last_win:
+            try:
+                lw = datetime.fromisoformat(last_win)
+                if lw.tzinfo is None:
+                    lw = lw.replace(tzinfo=timezone.utc)
+                hrs = round((datetime.now(timezone.utc) - lw).total_seconds() / 3600, 1)
+            except Exception:
+                pass
+        dip["streak"] = {
+            "fills": streak_fills,
+            "windows": streak_windows,
+            "last_win": last_win,
+            "hours_since_win": hrs,
+            "max_run": max(runs + [streak_windows]) if (runs or streak_windows) else 0,
+            "median_run": (sorted(runs)[len(runs) // 2] if runs else 0),
+            "runs": len(runs),
+        }
+
     # Protection status (persisted by the bot); only show for today
     trail = None
     if PROTECT_MODE == "count":

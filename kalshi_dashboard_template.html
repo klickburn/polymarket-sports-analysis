@@ -1321,7 +1321,39 @@ function renderDipAnalytics(dip) {
     </tr>`;
   }).join('');
   const tc = dip.pnl>=0?'var(--green)':'var(--red)';
-  const table = `<div class="card"><div style="font-size:13px;color:var(--muted);margin-bottom:10px">
+  // ── Losses since the last win ──
+  let streakCard = '';
+  const st = dip.streak;
+  if (st) {
+    // Colour by how the current run compares with history, not by an absolute
+    // number: dips lose ~88% of fills, so long runs are normal, not a warning.
+    const w = st.windows, mx = st.max_run || 0, med = st.median_run || 0;
+    const col = w === 0 ? 'var(--green)'
+              : (mx && w >= mx) ? 'var(--red)'
+              : (w > med * 2) ? 'var(--amber, #f59e0b)' : 'var(--muted)';
+    const since = st.hours_since_win != null
+      ? `${st.hours_since_win < 48 ? st.hours_since_win + 'h' : (st.hours_since_win/24).toFixed(1) + 'd'} ago`
+      : 'no win yet';
+    const ctx = mx ? `median run ${med} · longest ${mx} (${st.runs} runs)` : '';
+    streakCard = `<div class="card" style="margin-bottom:14px">
+      <div style="display:flex;align-items:baseline;gap:18px;flex-wrap:wrap">
+        <div>
+          <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Losses since last win</div>
+          <div style="font-size:32px;font-weight:700;color:${col};line-height:1.15">${w}
+            <span style="font-size:14px;font-weight:500;color:var(--muted)">windows</span></div>
+        </div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.7">
+          <div><b style="color:var(--text,#e5e7eb)">${st.fills}</b> losing fills · last win ${since}</div>
+          <div>${ctx}</div>
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-top:10px;padding-top:9px;border-top:1px solid var(--border)">
+        Both legs of a split window settle together, so a 2-leg losing window adds 2 fills but only 1 window.
+        Streaks carry no predictive signal (tested: win rate after 10 straight losses is 13.1% vs a 13.6% base) &mdash; this is a monitoring number, not a trading trigger.
+      </div>
+    </div>`;
+  }
+  const table = streakCard + `<div class="card"><div style="font-size:13px;color:var(--muted);margin-bottom:10px">
       Each dip buys a contract at that price if a split-window side collapses to it. It profits only if it wins more than its <b>break-even</b> (= the buy price). <b>Edge</b> = win rate minus break-even.</div>
     <div class="scroll-table"><table>
       <thead><tr><th>Tier</th><th>Fills</th><th>Contracts</th><th>Win%</th><th>Break-even</th><th>Edge</th><th>Net P&L</th><th>Verdict</th></tr></thead>
@@ -1732,7 +1764,15 @@ function renderScoreBot() {
     const tiers = dip.tiers || {};
     const tierLines = Object.keys(tiers).map(t => line(t, tiers[t])).join('');
     const oc = dip.pnl >= 0 ? '#22c55e' : '#ef4444';
-    dipBanner = `<div style="flex-basis:100%;font-size:12px;color:var(--muted);padding:0 4px">🎯 Split-dip by tier — ${tierLines}<span style="color:var(--muted)">| total ${dip.count} filled, net <span style="color:${oc};font-weight:600">$${dip.pnl.toFixed(2)}</span></span></div>`;
+    let sk = '';
+    if (dip.streak) {
+      const s = dip.streak, mx = s.max_run || 0, med = s.median_run || 0;
+      const sc = s.windows === 0 ? '#22c55e'
+               : (mx && s.windows >= mx) ? '#ef4444'
+               : (s.windows > med * 2) ? '#f59e0b' : 'var(--muted)';
+      sk = ` <span style="color:var(--muted)">| since last win <span style="color:${sc};font-weight:600">${s.windows}</span> windows / ${s.fills} fills</span>`;
+    }
+    dipBanner = `<div style="flex-basis:100%;font-size:12px;color:var(--muted);padding:0 4px">🎯 Split-dip by tier — ${tierLines}<span style="color:var(--muted)">| total ${dip.count} filled, net <span style="color:${oc};font-weight:600">$${dip.pnl.toFixed(2)}</span></span>${sk}</div>`;
   }
   renderDipAnalytics(dip);
   renderTrailCompare(d.trail_compare);
