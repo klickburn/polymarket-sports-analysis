@@ -37,6 +37,13 @@ BET_AMOUNT = float(os.environ.get("SCORE_BET_AMOUNT", "0.10"))
 CONTRACT_COUNT = int(os.environ.get("SCORE_CONTRACT_COUNT", "1"))
 ENTRY_AFTER_MINUTES = int(os.environ.get("SCORE_ENTRY_MINUTES", "11"))
 POLL_INTERVAL = int(os.environ.get("SCORE_POLL_INTERVAL", "20"))
+# Settlement drain: bounded so a backlog can never eat the pre-entry minutes, and
+# checkpointed so an interrupted pass keeps what it resolved. 120 x ~0.5s ~= 1 min,
+# which clears a normal ~40/window load with headroom and still chews a large
+# backlog down over a few hours instead of never.
+RESOLVE_MAX_PER_CYCLE = int(os.environ.get("RESOLVE_MAX_PER_CYCLE", "120"))
+RESOLVE_SAVE_EVERY = int(os.environ.get("RESOLVE_SAVE_EVERY", "20"))
+RESOLVE_SLEEP = float(os.environ.get("RESOLVE_SLEEP", "0.15"))
 MIN_PRICE = float(os.environ.get("SCORE_MIN_PRICE", "0.78"))
 MAX_PRICE = float(os.environ.get("SCORE_MAX_PRICE", "0.99"))
 MIN_SCORE = int(os.environ.get("SCORE_MIN_SCORE", "-3"))  # Signal count 0 = pts-3 = -3
@@ -1580,7 +1587,13 @@ def _resolve_open_bets(bets):
       2. Loud failures: API errors are logged with the ticker (never swallowed),
          and the bet is left open for the next cycle instead of vanishing.
       3. Deterministic drain: process oldest-window-first with one retry/backoff,
-         so a backlog empties from the front instead of the tail starving."""
+         so a backlog empties from the front instead of the tail starving.
+      4. Bounded + checkpointed: a full pass over a large backlog takes longer
+         than a trading window, so an unbounded pass is ALWAYS interrupted — and
+         with a single save at the end, every resolution in that pass was lost.
+         That made a backlog self-sustaining: the bigger it got, the longer the
+         pass, the less likely it ever reached the save. Now we cap the work per
+         cycle and checkpoint as we go, so progress always survives."""
     now = datetime.now(timezone.utc)
     # Always run (no-op when none pending) so dips resolve even if the feature
     # is toggled off while orders are still outstanding
@@ -1601,8 +1614,15 @@ def _resolve_open_bets(bets):
     # Oldest window first so a backlog drains from the front deterministically
     pending.sort(key=_we)
 
+    backlog = len(pending)
+    if backlog > RESOLVE_MAX_PER_CYCLE:
+        pending = pending[:RESOLVE_MAX_PER_CYCLE]
+        P(f"  [RESOLVE] backlog {backlog} open — draining oldest {len(pending)} this cycle "
+          f"(cap RESOLVE_MAX_PER_CYCLE={RESOLVE_MAX_PER_CYCLE})")
+
     changed = False
     failures = 0
+    resolved_since_save = 0
     for bet in pending:
         ticker = bet.get("ticker", "")
         market = None
@@ -1637,12 +1657,20 @@ def _resolve_open_bets(bets):
             else:
                 bet["pnl"] = round(-contracts * price - fee, 2)
             changed = True
+            resolved_since_save += 1
             P(f"  [RESOLVE] {bet.get('crypto','')} {ticker}: {bet['result']}")
-        time.sleep(0.3)
+            # Checkpoint: without this, an interrupted pass discards everything
+            # it just resolved and the backlog never shrinks.
+            if resolved_since_save >= RESOLVE_SAVE_EVERY:
+                save_bets(bets)
+                resolved_since_save = 0
+        time.sleep(RESOLVE_SLEEP)
     if failures:
         P(f"  [RESOLVE] {failures} bet(s) still open after API errors — will retry next window")
     if changed:
         save_bets(bets)
+    if backlog > len(pending):
+        P(f"  [RESOLVE] {backlog - len(pending)} still queued — next cycle continues from the front")
     return bets
 
 # ── Main loop ───────────────────────────────────────────────────────────
