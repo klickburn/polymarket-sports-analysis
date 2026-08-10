@@ -1465,7 +1465,14 @@ function renderScoreBot() {
   const avgPnl = d.resolved > 0 ? corePnl / d.resolved : 0;
   const sBal = d.balance || 0;
   const sPort = d.portfolio_value || 0;
-  const breakdown = `core $${corePnl >= 0 ? '+' : ''}${corePnl.toFixed(2)} · dips $${dipPnl >= 0 ? '+' : ''}${dipPnl.toFixed(2)}`;
+  let breakdown = `core $${corePnl >= 0 ? '+' : ''}${corePnl.toFixed(2)} · dips $${dipPnl >= 0 ? '+' : ''}${dipPnl.toFixed(2)}`;
+  // Phantom trades are recorded but never ordered, so their P&L is imaginary and
+  // is NOT in the headline. Show it anyway — running phantom mode invisibly is
+  // how you end up misreading the account.
+  if (d.phantom_count) {
+    const pp = d.phantom_pnl || 0;
+    breakdown += ` · <span style="color:var(--muted)" title="recorded but never ordered — not real money">👻 ${d.phantom_count} phantom $${pp >= 0 ? '+' : ''}${pp.toFixed(2)}</span>`;
+  }
   // Reconciliation: account change since reset vs recorded P&L (dips-inclusive)
   let pnlSub = breakdown;
   const rb = d.reset_baseline;

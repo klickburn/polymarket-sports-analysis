@@ -1100,9 +1100,19 @@ def _build_score_report(bets, status, balance_info=None):
     losses = [b for b in resolved if b["result"] == "loss"]
     # Win rate / counts stay core-only; total P&L includes split-dip P&L so the
     # headline reflects the actual account movement (dips are real money too).
-    core_pnl = sum(b.get("pnl", 0) for b in resolved)
-    dip_pnl = sum(b.get("pnl", 0) for b in resolved_all if b.get("dip_add"))
+    #
+    # PHANTOM trades were recorded but never ordered — they exist only to keep
+    # the sizing brain's history intact. Their P&L is imaginary, so the headline
+    # must EXCLUDE it or the dashboard reports money that was never made. Win
+    # rate and counts still include them, because that is the history the
+    # strategy actually reasoned from.
+    core_pnl = sum(b.get("pnl", 0) for b in resolved if not b.get("phantom"))
+    dip_pnl = sum(b.get("pnl", 0) for b in resolved_all
+                  if b.get("dip_add") and not b.get("phantom"))
     total_pnl = core_pnl + dip_pnl
+    phantom_res = [b for b in resolved_all if b.get("phantom")]
+    phantom_pnl = sum(b.get("pnl", 0) for b in phantom_res)
+    phantom_count = len(phantom_res)
 
     resolved_skips = [b for b in skips if b.get("result") in ("win", "loss")]
     skip_would_won = [b for b in resolved_skips if b.get("would_have_won")]
@@ -1156,6 +1166,10 @@ def _build_score_report(bets, status, balance_info=None):
         "total_pnl": round(total_pnl, 2),
         "core_pnl": round(core_pnl, 2),
         "dip_pnl": round(dip_pnl, 2),
+        # Imaginary P&L from recorded-but-not-ordered trades. Never folded into
+        # total_pnl; surfaced so the cost of phantom mode stays visible.
+        "phantom_pnl": round(phantom_pnl, 2),
+        "phantom_count": phantom_count,
         "skip_resolved": len(resolved_skips),
         "skip_would_won": len(skip_would_won),
         "skip_would_lost": len(skip_would_lost),

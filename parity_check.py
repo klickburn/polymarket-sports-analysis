@@ -42,9 +42,9 @@ def get_reset_ts():
         return None
 
 # ── Strategy config — defaults MUST match the deployed Railway env, else the
-# check reports spurious 'scale_state' gaps. Current deployed: 30x, press OFF,
-# vol gate 0.20. Override any of these via env when live config changes.
-SCALE_UP       = int(os.environ.get("SCALE_UP_COUNT", "30"))
+# check reports spurious 'scale_state' gaps. Current deployed: 5x, press OFF,
+# vol gate 0.25, cool-off bypass OFF. Override via env when live config changes.
+SCALE_UP       = int(os.environ.get("SCALE_UP_COUNT", "5"))
 PROTECT_MODE   = os.environ.get("PROTECT_MODE", "count")
 COUNT_SOFT_C   = int(os.environ.get("COUNT_SOFT_C", "3"))
 COUNT_REACT_K  = int(os.environ.get("COUNT_REACT_K", "1"))
@@ -52,9 +52,9 @@ PRESS_STREAK_N = int(os.environ.get("PRESS_STREAK_N", "0"))
 PRESS_MULT     = float(os.environ.get("PRESS_MULT", "1.5"))
 CO_WR          = float(os.environ.get("COOL_OFF_WR", "0.8"))
 CO_WIN         = int(os.environ.get("COOL_OFF_WINDOW", "10"))
-CO_STREAK      = int(os.environ.get("COOL_OFF_BYPASS_STREAK", "6"))
+CO_STREAK      = int(os.environ.get("COOL_OFF_BYPASS_STREAK", "0"))
 SPLIT_GUARD    = os.environ.get("SPLIT_GUARD", "1") == "1"
-VOL_GATE       = float(os.environ.get("VOL_GATE", "0.20"))
+VOL_GATE       = float(os.environ.get("VOL_GATE", "0.25"))
 def _parse_sig_weights(s):
     out = {}
     for part in (s or "").split(","):
@@ -262,11 +262,11 @@ def main():
     print(f"resolved {n} open trades via Kalshi; {len(core)} core trades\n")
 
     days = sorted(set(b["timestamp"][:10] for b in core))
-    grand_live = grand_bt = 0.0
+    grand_live = grand_bt = grand_phantom = 0.0
     rows = []
     for day in days:
         dtr = [b for b in core if b["timestamp"][:10] == day]
-        live_tot = bt_tot = 0.0
+        live_tot = bt_tot = phantom_tot = 0.0
         buckets = {}
         for b in dtr:
             price = b.get("fill_price") or b.get("price"); won = b["result"] == "win"
@@ -274,6 +274,12 @@ def main():
             bt_n = expected[id(b)]
             lp = net_pnl(price, won, live_n); bp = net_pnl(price, won, bt_n)
             live_tot += lp; bt_tot += bp
+            # Phantom trades carry their full size (that is the point — the
+            # sizing brain must see an unchanged history), so SIZING parity is
+            # unaffected. But their P&L never reached the account, so track it
+            # apart or the LIVE column overstates real money.
+            if b.get("phantom"):
+                phantom_tot += lp
             diff = round(lp - bp, 2)
             if live_n == bt_n:
                 cat = "match"
@@ -287,12 +293,15 @@ def main():
             if abs(diff) > 0.005:
                 rows.append((day, b, live_n, bt_n, base.get(id(b)), grp_of.get(id(b)), diff, cat))
         gap = live_tot - bt_tot
-        grand_live += live_tot; grand_bt += bt_tot
+        grand_live += live_tot; grand_bt += bt_tot; grand_phantom += phantom_tot
         flag = "OK" if abs(gap) < 0.01 else "GAP"
         bkt = " ".join(f"{k}:{v[0]}(${v[1]:+.2f})" for k, v in buckets.items() if k != "match")
         print(f"  {day}  LIVE ${live_tot:+8.2f}   BACKTEST ${bt_tot:+8.2f}   gap ${gap:+7.2f}  [{flag}]  {bkt}")
 
     print(f"\n  TOTAL   LIVE ${grand_live:+8.2f}   BACKTEST ${grand_bt:+8.2f}   gap ${grand_live-grand_bt:+7.2f}")
+    if abs(grand_phantom) > 0.005:
+        print(f"  PHANTOM ${grand_phantom:+8.2f} of the LIVE figure was never ordered — "
+              f"real money moved ${grand_live-grand_phantom:+.2f}")
     if rows:
         print(f"\nDivergent trades ({len(rows)}):")
         print(f"  {'day':<11}{'time':<6}{'cr':<4}{'res':<5}{'liveN':>6}{'btN':>5}{'base':>5}{'grp':>4}{'diff':>8}  cause")

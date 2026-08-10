@@ -44,6 +44,14 @@ POLL_INTERVAL = int(os.environ.get("SCORE_POLL_INTERVAL", "20"))
 RESOLVE_MAX_PER_CYCLE = int(os.environ.get("RESOLVE_MAX_PER_CYCLE", "120"))
 RESOLVE_SAVE_EVERY = int(os.environ.get("RESOLVE_SAVE_EVERY", "20"))
 RESOLVE_SLEEP = float(os.environ.get("RESOLVE_SLEEP", "0.15"))
+# Phantom trading: record a trade in full but place no order. The record still
+# feeds the sizing brain (group scaling, cool-off, count floor, WR ladder), so
+# the strategy's state evolves exactly as if it had traded — only the money is
+# withheld. "boosted_only" places real orders solely for WR-boosted trades.
+# Backtest over 77d: 1x trades net -$153, boosted net +$475.
+# WARNING: this concentrates 100% of realised P&L into ~15% of trades, all of
+# them selected by the WR ladder. PHANTOM_MODE=off reverts instantly.
+PHANTOM_MODE = os.environ.get("PHANTOM_MODE", "off").strip().lower()
 MIN_PRICE = float(os.environ.get("SCORE_MIN_PRICE", "0.78"))
 MAX_PRICE = float(os.environ.get("SCORE_MAX_PRICE", "0.99"))
 MIN_SCORE = int(os.environ.get("SCORE_MIN_SCORE", "-3"))  # Signal count 0 = pts-3 = -3
@@ -1607,10 +1615,14 @@ def _resolve_open_bets(bets):
             return now  # no parseable window_end -> treat as due now
 
     # Candidates: open trade bets, confirmed-filled, whose window has ended.
-    # Never book settlement P&L without confirmed fill evidence.
+    # Never book settlement P&L without confirmed fill evidence — EXCEPT for
+    # phantoms, which by definition have none. They must still settle: their
+    # win/loss is what keeps the sizing brain's history identical to a fully
+    # traded run, and an unresolved phantom is invisible to every scaling rule.
     pending = [b for b in bets
                if b.get("result") == "open" and b.get("action") == "trade"
-               and b.get("filled_count", 0) > 0 and _we(b) <= now]
+               and (b.get("filled_count", 0) > 0 or b.get("phantom"))
+               and _we(b) <= now]
     # Oldest window first so a backlog drains from the front deterministically
     pending.sort(key=_we)
 
@@ -2048,6 +2060,24 @@ def run(live=False):
                   f"-> final {current_contracts}x [{_clip}] "
                   f"(day resolved {_res_today}/open {_open_today}, "
                   f"peak ${_td.get('peak',0):.0f} pnl ${_td.get('day_pnl',0):.0f})")
+                # ── Phantom gate ─────────────────────────────────────────
+                # Must sit AFTER the WR boost, since that is the only point
+                # where "is this boosted" is known. The record keeps its full
+                # size and enters `bets` normally, so every downstream reader
+                # (group scaling, cool-off, count floor, WR ladder) sees the
+                # identical history — only the order is withheld.
+                if PHANTOM_MODE == "boosted_only" and not tq["bet_record"].get("wr_boosted"):
+                    tq["bet_record"]["phantom"] = True
+                    tq["bet_record"]["status"] = "phantom"
+                    tq["bet_record"]["order_id"] = None
+                    tq["bet_record"]["fill_price"] = tq["price"]
+                    tq["bet_record"]["filled_count"] = current_contracts
+                    bets.append(tq["bet_record"])
+                    save_bets(bets)
+                    placed_this_window.add(tq["crypto"])
+                    P(f"    {tq['crypto']}: PHANTOM {current_contracts}x @ {tq['price']:.2f} "
+                      f"(not boosted — recorded, no order placed)")
+                    continue
                 try:
                     result = place_order(tq["ticker"], tq["side"], tq["price"], BET_AMOUNT, count=current_contracts)
                     if not result:
