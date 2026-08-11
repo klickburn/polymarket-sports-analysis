@@ -911,6 +911,22 @@ def _build_scaling_performance(resolved, status=None):
                 hrs = round((datetime.now(timezone.utc) - lw).total_seconds() / 3600, 1)
             except Exception:
                 pass
+        # Per-day wins. The dip book's P&L is carried by a handful of days
+        # (5 of 33 days = 82% of it historically), so a daily column shows the
+        # concentration that a headline win rate hides.
+        _byday = {}
+        for b in ordered:
+            k = b.get("timestamp", "")[:10]
+            e = _byday.setdefault(k, {"day": k, "fills": 0, "wins": 0, "pnl": 0.0})
+            e["fills"] += 1
+            e["wins"] += 1 if b["result"] == "win" else 0
+            e["pnl"] += b.get("pnl", 0)
+        dip["by_day"] = [
+            {**e, "pnl": round(e["pnl"], 2),
+             "win_rate": round(e["wins"] / e["fills"] * 100, 1) if e["fills"] else 0}
+            for e in sorted(_byday.values(), key=lambda x: x["day"], reverse=True)
+        ]
+
         dip["streak"] = {
             "fills": streak_fills,
             "windows": streak_windows,
