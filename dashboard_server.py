@@ -523,12 +523,26 @@ def _resolve_score_bets():
                 bet["pnl"] = correct_pnl
                 changed = True
 
-    resolve_cutoff = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+    # A 15-minute market settles within minutes, so age alone says nothing about
+    # whether an outcome is available — Kalshi will still answer for a ticker from
+    # weeks ago. This used to blind-mark every bet older than 2h as "expired",
+    # discarding a real win/loss without ever asking. It was invisible while the
+    # score-bot thread clobbered these writes; now that both sides merge, it would
+    # have destroyed ~4,000 outcomes on the first pass. Expiry is now decided ONLY
+    # by the market lookup below.
+    #
+    # Bounded and oldest-first for the same reason the bot's resolver is: a pass
+    # over a large backlog makes one or two API calls per bet, and an unbounded
+    # pass never finishes.
+    RESOLVE_CAP = int(os.environ.get("SERVER_RESOLVE_MAX", "150"))
+    _open = [b for b in bets if b.get("result") == "open"]
+    _open.sort(key=lambda b: b.get("window_end") or b.get("timestamp") or "")
+    _attempt = set(id(b) for b in _open[:RESOLVE_CAP])
+    if len(_open) > RESOLVE_CAP:
+        P(f"  [SCORE-DATA] {len(_open)} open — resolving oldest {RESOLVE_CAP} this pass")
     for bet in bets:
         if bet.get("result") == "open":
-            if bet.get("timestamp", "") < resolve_cutoff:
-                bet["result"] = "expired"
-                changed = True
+            if id(bet) not in _attempt:
                 continue
             # For traded bets, verify the order was actually filled before resolving
             if bet.get("action") == "trade" and bet.get("order_id"):
