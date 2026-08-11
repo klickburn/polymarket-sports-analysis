@@ -926,12 +926,21 @@ def _build_scaling_performance(resolved, status=None):
         _byday = {}
         for b in ordered:
             k = b.get("timestamp", "")[:10]
-            e = _byday.setdefault(k, {"day": k, "fills": 0, "wins": 0, "pnl": 0.0})
+            e = _byday.setdefault(k, {"day": k, "fills": 0, "wins": 0, "pnl": 0.0,
+                                      "pnl_at_100": 0.0})
             e["fills"] += 1
             e["wins"] += 1 if b["result"] == "win" else 0
             e["pnl"] += b.get("pnl", 0)
+            # Same day repriced at a flat 100 contracts. Live size has changed
+            # over time (100 -> 25), so the as-traded column is not comparable
+            # across days; this one is.
+            p = b.get("fill_price") or b.get("price") or 0
+            if 0 < p < 1:
+                f100 = _bet_fee(b, 100, p)
+                e["pnl_at_100"] += (100 * (1 - p) - f100) if b["result"] == "win" \
+                    else (-100 * p - f100)
         dip["by_day"] = [
-            {**e, "pnl": round(e["pnl"], 2),
+            {**e, "pnl": round(e["pnl"], 2), "pnl_at_100": round(e["pnl_at_100"], 2),
              "win_rate": round(e["wins"] / e["fills"] * 100, 1) if e["fills"] else 0}
             for e in sorted(_byday.values(), key=lambda x: x["day"], reverse=True)
         ]

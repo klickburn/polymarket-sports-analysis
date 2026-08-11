@@ -1307,8 +1307,11 @@ function dipDailyTable(dip) {
     : (rest < 0
         ? `the top 5 days made <b>$${top5.toFixed(2)}</b> and every other day combined <b>lost $${Math.abs(rest).toFixed(2)}</b>`
         : `the top 5 days account for <b>${Math.round(top5 / totalPnl * 100)}%</b> of the net`);
+  const tot100 = rows.reduce((a, r) => a + (r.pnl_at_100 || 0), 0);
   const body = rows.map(r => {
     const pc = r.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    const p100 = r.pnl_at_100 || 0;
+    const pc100 = p100 >= 0 ? 'var(--green)' : 'var(--red)';
     // bar length keyed to that day's wins, so outlier days stand out
     const bar = '█'.repeat(r.wins) || '·';
     const hot = r.wins === best && best > 0 ? 'font-weight:700' : '';
@@ -1316,15 +1319,23 @@ function dipDailyTable(dip) {
       <td>${r.day}</td><td>${r.fills}</td>
       <td>${r.wins}</td><td>${r.win_rate}%</td>
       <td style="color:${pc}">$${r.pnl >= 0 ? '+' : ''}${r.pnl.toFixed(2)}</td>
+      <td style="color:${pc100};opacity:.85">$${p100 >= 0 ? '+' : ''}${p100.toFixed(2)}</td>
       <td style="color:var(--cyan,#06b6d4);letter-spacing:-1px">${bar}</td></tr>`;
   }).join('');
+  const totRow = `<tr style="border-top:2px solid var(--border);font-weight:700">
+      <td>TOTAL</td><td>${rows.reduce((a,r)=>a+r.fills,0)}</td>
+      <td>${rows.reduce((a,r)=>a+r.wins,0)}</td><td></td>
+      <td style="color:${totalPnl>=0?'var(--green)':'var(--red)'}">$${totalPnl>=0?'+':''}${totalPnl.toFixed(2)}</td>
+      <td style="color:${tot100>=0?'var(--green)':'var(--red)'}">$${tot100>=0?'+':''}${tot100.toFixed(2)}</td>
+      <td></td></tr>`;
   return `<div class="card" style="margin-top:14px">
     <div style="font-size:13px;color:var(--muted);margin-bottom:10px">
       <b>Split-dip wins by day</b> — dip P&L is concentrated in a few days, not spread evenly.
-      Here, ${concNote}.</div>
+      Here, ${concNote}. <b>P&L @100c</b> reprices every day at a flat 100 contracts, since the
+      live size has changed over time (100 → 25) and the as-traded column isn't comparable across days.</div>
     <div class="scroll-table" style="max-height:380px;overflow-y:auto"><table>
-      <thead><tr><th>Day</th><th>Fills</th><th>Wins</th><th>Win%</th><th>P&L</th><th>Wins</th></tr></thead>
-      <tbody>${body}</tbody></table></div>
+      <thead><tr><th>Day</th><th>Fills</th><th>Wins</th><th>Win%</th><th>P&L (as traded)</th><th>P&L @100c</th><th>Wins</th></tr></thead>
+      <tbody>${body}${totRow}</tbody></table></div>
   </div>`;
 }
 
