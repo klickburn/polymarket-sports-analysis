@@ -599,6 +599,25 @@ def _resolve_score_bets():
 
     if changed:
         try:
+            # This pass makes an API call per open bet, so `bets` can be minutes
+            # stale by now — and the score-bot thread writes the same file every
+            # time it places a trade. Re-read and re-attach anything that landed
+            # underneath us, or this write silently deletes trades the bot just
+            # made. (The bot performs the mirror-image merge in save_bets.)
+            fresh, _ = [], None
+            try:
+                with open(SCORE_BETS_FILE) as f:
+                    fresh = json.load(f)
+            except Exception:
+                fresh = []
+            if fresh:
+                have = {(b.get("timestamp"), b.get("crypto"), b.get("side")) for b in bets}
+                added = [b for b in fresh
+                         if (b.get("timestamp"), b.get("crypto"), b.get("side")) not in have]
+                if added:
+                    bets = bets + added
+                    bets.sort(key=lambda b: b.get("timestamp", ""))
+                    P(f"  [SCORE-DATA] Re-attached {len(added)} bet(s) written while resolving")
             # Atomic write to prevent corruption
             tmp = SCORE_BETS_FILE + ".tmp"
             with open(tmp, "w") as f:

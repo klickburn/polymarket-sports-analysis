@@ -1021,7 +1021,66 @@ def load_bets():
     return data
 
 
+_last_seen_mtime = 0.0
+
+
+def _adopt_foreign_resolutions(bets):
+    """dashboard_server runs score_resolve_loop in a sibling thread that rewrites
+    this same file every 60s. The bot loads `bets` once per 15-minute window and
+    re-saves after every trade, so a blind write discards every outcome that
+    thread booked while we held a stale copy — which is why the open-bet backlog
+    grew instead of draining, and why not one 'expired' record ever survived.
+
+    Re-read only when someone else has actually touched the file (mtime check, so
+    this costs a stat() rather than a 20MB read on every save), and adopt any
+    outcome that landed underneath us. New trades in memory always win; we only
+    ever take resolutions, never rows, so a reset can't be resurrected."""
+    global _last_seen_mtime
+    try:
+        mt = os.path.getmtime(BETS_FILE)
+    except OSError:
+        return bets
+    if mt <= _last_seen_mtime:
+        return bets
+    disk, _ = _try_load_json(BETS_FILE)
+    _last_seen_mtime = mt
+    if not disk:
+        return bets
+    RESOLVED = ("win", "loss", "expired", "unfilled")
+    idx = {}
+    for b in disk:
+        k = (b.get("timestamp"), b.get("crypto"), b.get("side"))
+        if None not in k and b.get("result") in RESOLVED:
+            idx[k] = b
+    adopted = 0
+    for b in bets:
+        if b.get("result") != "open":
+            continue
+        d = idx.get((b.get("timestamp"), b.get("crypto"), b.get("side")))
+        if not d:
+            continue
+        for f in ("result", "pnl", "market_result", "fill_price", "filled_count", "status"):
+            if d.get(f) is not None:
+                b[f] = d[f]
+        adopted += 1
+    if adopted:
+        P(f"  [MERGE] adopted {adopted} resolution(s) booked by the resolve thread")
+    return bets
+
+
+def _note_own_write():
+    """Record our own mtime so the next save doesn't re-read a file we just wrote."""
+    global _last_seen_mtime
+    try:
+        _last_seen_mtime = os.path.getmtime(BETS_FILE)
+    except OSError:
+        pass
+
+
 def save_bets(bets):
+    # Fold in anything the sibling resolve thread settled while we held this list,
+    # otherwise this write silently reverts it.
+    bets = _adopt_foreign_resolutions(bets)
     # Atomic write: write to temp file, then rename (prevents corruption on crash)
     tmp_file = BETS_FILE + ".tmp"
     try:
@@ -1037,12 +1096,14 @@ def save_bets(bets):
             except Exception:
                 pass
         os.replace(tmp_file, BETS_FILE)
+        _note_own_write()
     except OSError:
         # Fallback: direct write if atomic rename fails (Railway volume issue)
         with open(BETS_FILE, "w") as f:
             json.dump(bets, f, indent=2, default=str)
             f.flush()
             os.fsync(f.fileno())
+        _note_own_write()
 
 
 def save_status(status):
