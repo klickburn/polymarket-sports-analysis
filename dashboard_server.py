@@ -815,15 +815,24 @@ def _build_scaling_performance(resolved, status=None):
                 w = sum(1 for b in ts if b["result"] == "win")
                 prices = [b.get("fill_price") or b.get("price") or 0 for b in ts]
                 ap = sum(prices) / len(prices) if prices else 0
-                pnl = sum(b.get("pnl", 0) for b in ts)
+                # Under PHANTOM_MODE the unboosted buckets are recorded but never
+                # ordered, so their P&L is imaginary. Counts/win-rate/edge keep
+                # every trade (that IS the history the strategy sized from), but
+                # `pnl` must be real money only — these are the exact cards you
+                # would read to judge whether phantom mode was working.
+                real = [b for b in ts if not b.get("phantom")]
+                ph = [b for b in ts if b.get("phantom")]
+                pnl = sum(b.get("pnl", 0) for b in real)
                 return {"count": len(ts), "wins": w,
                         "win_rate": round(w / len(ts) * 100, 1),
                         "avg_price": round(ap, 3),
                         "break_even": round(ap * 100, 1),
                         "edge": round(w / len(ts) * 100 - ap * 100, 1),
                         "pnl": round(pnl, 2),
-                        "pnl_per_trade": round(pnl / len(ts), 4),
-                        "contracts": sum(b.get("filled_count", b.get("contracts", 1)) for b in ts)}
+                        "pnl_per_trade": round(pnl / len(real), 4) if real else 0,
+                        "phantom_count": len(ph),
+                        "phantom_pnl": round(sum(b.get("pnl", 0) for b in ph), 2),
+                        "contracts": sum(b.get("filled_count", b.get("contracts", 1)) for b in real)}
             def _boosted(b):
                 d = b.get("decision") or {}
                 return bool(d.get("wr_boosted")) or d.get("clip_reason") == "wr_boost"
