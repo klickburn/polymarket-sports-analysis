@@ -153,6 +153,28 @@ CORE_DIP_PRICE = float(os.environ.get("CORE_DIP_PRICE", "0.10"))
 CORE_DIP_COUNT = int(os.environ.get("CORE_DIP_COUNT", "1"))
 CORE_DIP_CRYPTOS = [c.strip().upper() for c in
                     os.environ.get("CORE_DIP_CRYPTOS", "ETH").split(",") if c.strip()]
+# Per-side size override, "yes:25,no:1". The candlestick study put ETH-yes at
+# 25.4% recovery against ~10% for every other cell, so the two sides are being
+# run at different sizes: yes as the position, no as a 1-contract control that
+# still generates data. Falls back to CORE_DIP_COUNT for any side not listed.
+def _parse_side_sizes(sv):
+    out = {}
+    for part in (sv or "").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            side, n = part.split(":")
+            out[side.strip().lower()] = int(n)
+        except ValueError:
+            pass
+    return out
+CORE_DIP_SIDE_SIZES = _parse_side_sizes(os.environ.get("CORE_DIP_SIDE_SIZES", ""))
+
+
+def _core_dip_size(side):
+    """Contracts for this side — per-side override, else the flat count."""
+    return CORE_DIP_SIDE_SIZES.get((side or "").lower(), CORE_DIP_COUNT)
 
 DATA_DIR = os.environ.get("SCORE_DATA_DIR", "/data")
 if not os.path.isdir(DATA_DIR):
@@ -919,14 +941,17 @@ def _place_core_dips(bets, window_end_iso):
         b = wtr.get(cr)
         if not b or not b.get("side"):
             continue
-        oid = place_dip_order(b["ticker"], b["side"], CORE_DIP_COUNT, CORE_DIP_PRICE)
+        _n = _core_dip_size(b["side"])
+        if _n <= 0:
+            continue
+        oid = place_dip_order(b["ticker"], b["side"], _n, CORE_DIP_PRICE)
         if oid:
             bets.append({
                 "crypto": cr, "ticker": b["ticker"], "side": b["side"],
                 "price": CORE_DIP_PRICE, "score": b.get("score", 0),
                 "action": "trade", "result": "dip_pending", "dip_add": True,
                 "dip_type": "core", "dip_tier": f"{CORE_DIP_PRICE*100:.0f}c",
-                "order_id": oid, "contracts": CORE_DIP_COUNT,
+                "order_id": oid, "contracts": _n,
                 "event_ticker": b.get("event_ticker", ""),
                 "window_end": window_end_iso,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -935,7 +960,7 @@ def _place_core_dips(bets, window_end_iso):
             })
             save_bets(bets)
             placed = True
-            P(f"  [CORE-DIP] {cr} {b['side']} — rested {CORE_DIP_COUNT}x @ "
+            P(f"  [CORE-DIP] {cr} {b['side']} — rested {_n}x @ "
               f"{CORE_DIP_PRICE*100:.0f}c (non-split window)")
         time.sleep(0.25)
     return placed
