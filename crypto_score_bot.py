@@ -143,6 +143,17 @@ def _parse_tiers(s):
 # Full tier list: primary (from SPLIT_DIP_PRICE/COUNT) + extras
 SPLIT_DIP_TIERS = [(SPLIT_DIP_PRICE, SPLIT_DIP_COUNT)] + _parse_tiers(_extra)
 
+# ── Core dips: the same 10c recovery bet on NON-split windows ────────────
+# Split dips only ever covered windows where BTC and ETH took opposite sides.
+# A candlestick replay showed the other ~85% of windows are the larger and (for
+# ETH-yes) stronger population. Starting at 1 contract on both ETH sides as a
+# live A/B; CORE_DIP_ENABLED=0 turns it off with no redeploy.
+CORE_DIP_ENABLED = os.environ.get("CORE_DIP_ENABLED", "0") == "1"
+CORE_DIP_PRICE = float(os.environ.get("CORE_DIP_PRICE", "0.10"))
+CORE_DIP_COUNT = int(os.environ.get("CORE_DIP_COUNT", "1"))
+CORE_DIP_CRYPTOS = [c.strip().upper() for c in
+                    os.environ.get("CORE_DIP_CRYPTOS", "ETH").split(",") if c.strip()]
+
 DATA_DIR = os.environ.get("SCORE_DATA_DIR", "/data")
 if not os.path.isdir(DATA_DIR):
     DATA_DIR = "."  # Fallback to current dir if volume not mounted
@@ -802,6 +813,69 @@ def _place_split_dips(bets, window_end_iso):
                 save_bets(bets)
             time.sleep(0.25)
     return True
+
+
+def _place_core_dips(bets, window_end_iso):
+    """NON-split windows: rest a dip buy on our own side, same idea as the split
+    dip but on the windows the split rule never covered.
+
+    Motivated by a candlestick replay of every core trade since 2026-07-09:
+    99.9% of LOSING core trades collapse through 10c (they settle at zero, so
+    they must), against 7.3% of winners. So a resting 10c buy is a bet on
+    RECOVERY, and the recovery rate splits sharply by market:
+        ETH yes  25.4% (n=390, z=+10.1, both split-halves significant)
+        ETH no   10.1% | BTC yes 10.6% | BTC no 9.5%   (all ~breakeven)
+    The simulation reproduces the live split-dip win rate to within 0.6pp
+    overall and 0.1pp on the ETH-yes cell, and the dip candles carry real
+    volume (median ~12.6k contracts, zero phantom prints).
+
+    Starting at 1 contract on BOTH ETH sides: the no-side is expected to be a
+    coin flip, but running it alongside gives a real-fill A/B rather than
+    trusting the simulation's side split. CORE_DIP_ENABLED=0 reverts."""
+    if not CORE_DIP_ENABLED:
+        return False
+    if any(b.get("dip_add") and b.get("dip_type") == "core"
+           and b.get("window_end") == window_end_iso for b in bets):
+        return True                      # already placed for this window
+    wtr = {}
+    for b in bets:
+        if (b.get("action") == "trade" and b.get("crypto") in ("BTC", "ETH")
+                and not b.get("dip_add") and b.get("window_end") == window_end_iso
+                and b.get("result") not in ("unfilled",)):
+            wtr[b["crypto"]] = b
+    if not wtr:
+        return False
+    # Skip SPLIT windows — those are the existing rule's territory. A split is
+    # both cryptos on opposite sides; anything else is ours.
+    if len(wtr) > 1:
+        sides = [wtr["BTC"].get("side"), wtr["ETH"].get("side")]
+        if all(sides) and sides[0] != sides[1]:
+            return False
+    placed = False
+    for cr in CORE_DIP_CRYPTOS:
+        b = wtr.get(cr)
+        if not b or not b.get("side"):
+            continue
+        oid = place_dip_order(b["ticker"], b["side"], CORE_DIP_COUNT, CORE_DIP_PRICE)
+        if oid:
+            bets.append({
+                "crypto": cr, "ticker": b["ticker"], "side": b["side"],
+                "price": CORE_DIP_PRICE, "score": b.get("score", 0),
+                "action": "trade", "result": "dip_pending", "dip_add": True,
+                "dip_type": "core", "dip_tier": f"{CORE_DIP_PRICE*100:.0f}c",
+                "order_id": oid, "contracts": CORE_DIP_COUNT,
+                "event_ticker": b.get("event_ticker", ""),
+                "window_end": window_end_iso,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "strategy_version": SCORE_VERSION,
+                "indicators": b.get("indicators"),
+            })
+            save_bets(bets)
+            placed = True
+            P(f"  [CORE-DIP] {cr} {b['side']} — rested {CORE_DIP_COUNT}x @ "
+              f"{CORE_DIP_PRICE*100:.0f}c (non-split window)")
+        time.sleep(0.25)
+    return placed
 
 
 def _is_split_leg(bets, trade_queue, crypto, side, window_end_iso):
@@ -1769,6 +1843,7 @@ def run(live=False):
     last_window_end = None
     placed_this_window = set()
     dips_done_this_window = False
+    core_dips_done_this_window = False
     skip_tickers = set()
 
     # Indicators cache
@@ -1790,6 +1865,7 @@ def run(live=False):
                 last_window_end = window_end
                 placed_this_window = set()
                 dips_done_this_window = False
+                core_dips_done_this_window = False
                 locked_side = None  # Lock direction after first trade
                 checked_positions = False
                 fetched_indicators = False
@@ -2192,6 +2268,11 @@ def run(live=False):
             if SPLIT_DIP_ENABLED and not dips_done_this_window:
                 if _place_split_dips(bets, window_end.isoformat()):
                     dips_done_this_window = True
+            # Core dips cover the NON-split windows the rule above skips, so it
+            # runs independently of dips_done_this_window (which tracks splits).
+            if CORE_DIP_ENABLED and not core_dips_done_this_window:
+                if _place_core_dips(bets, window_end.isoformat()):
+                    core_dips_done_this_window = True
 
             # ── Phase 3: Check pending orders once, cancel unfilled ──
             if pending_orders:

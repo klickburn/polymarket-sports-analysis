@@ -920,6 +920,44 @@ def _build_scaling_performance(resolved, status=None):
                 hrs = round((datetime.now(timezone.utc) - lw).total_seconds() / 3600, 1)
             except Exception:
                 pass
+        # Split the book by dip_type. "split" is the original rule (BTC/ETH on
+        # opposite sides); "core" is the non-split experiment, which is a
+        # different population with its own expected win rate — pooling them
+        # would hide whichever one is working.
+        def _daily(ts):
+            acc = {}
+            for b in sorted(ts, key=lambda x: x.get("timestamp", "")):
+                k = b.get("timestamp", "")[:10]
+                e = acc.setdefault(k, {"day": k, "fills": 0, "wins": 0, "pnl": 0.0})
+                e["fills"] += 1
+                e["wins"] += 1 if b["result"] == "win" else 0
+                e["pnl"] += b.get("pnl", 0)
+            return [{**e, "pnl": round(e["pnl"], 2),
+                     "win_rate": round(e["wins"] / e["fills"] * 100, 1) if e["fills"] else 0}
+                    for e in sorted(acc.values(), key=lambda x: x["day"], reverse=True)]
+
+        by_type = {}
+        for t in ("split", "core"):
+            ts = [b for b in dip_trades if (b.get("dip_type") or "split") == t]
+            if not ts:
+                continue
+            st = _stat(ts, _tier_price((ts[0].get("dip_tier") or "10c")))
+            st["by_day"] = _daily(ts)
+            # ETH-yes is the cell the candlestick study singled out (25.4% vs
+            # ~10% elsewhere), so surface the crypto x side grid to test it live.
+            grid = {}
+            for b in ts:
+                k = f"{b.get('crypto')} {b.get('side')}"
+                g = grid.setdefault(k, {"count": 0, "wins": 0, "pnl": 0.0})
+                g["count"] += 1
+                g["wins"] += 1 if b["result"] == "win" else 0
+                g["pnl"] += b.get("pnl", 0)
+            st["grid"] = {k: {**v, "pnl": round(v["pnl"], 2),
+                              "win_rate": round(v["wins"] / v["count"] * 100, 1)}
+                          for k, v in sorted(grid.items())}
+            by_type[t] = st
+        dip["by_type"] = by_type
+
         # Per-day wins. The dip book's P&L is carried by a handful of days
         # (5 of 33 days = 82% of it historically), so a daily column shows the
         # concentration that a headline win rate hides.

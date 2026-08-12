@@ -1292,6 +1292,53 @@ function renderScoreEmpty() {
 // Wins per day. The dip book is carried by a few outlier days, so the daily
 // column is the honest view — a headline win rate makes it look far steadier
 // than it is.
+// Split-dip vs core-dip. Two different populations (opposite-side windows vs
+// everything else) with different expected win rates, so they get separate
+// cards — pooling them would hide whichever one is actually working.
+function dipTypeCards(dip) {
+  const bt = dip.by_type || {};
+  const names = {split: '🔀 Split dips (BTC/ETH opposite sides)',
+                 core: '🧪 Core dips (non-split — experiment)'};
+  const cards = Object.keys(names).filter(t => bt[t]).map(t => {
+    const s = bt[t];
+    const pc = s.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    const edge = (s.win_rate - (s.break_even || 10));
+    const ec = edge >= 0 ? 'var(--green)' : 'var(--red)';
+    const grid = Object.entries(s.grid || {}).map(([k, g]) => {
+      const gc = g.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+      return `<tr><td>${k}</td><td>${g.count}</td><td>${g.wins}</td>
+        <td>${g.win_rate}%</td><td style="color:${gc}">$${g.pnl >= 0 ? '+' : ''}${g.pnl.toFixed(2)}</td></tr>`;
+    }).join('');
+    const days = (s.by_day || []).slice(0, 14).map(r => {
+      const dc = r.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+      return `<tr><td>${r.day}</td><td>${r.fills}</td><td>${r.wins}</td><td>${r.win_rate}%</td>
+        <td style="color:${dc}">$${r.pnl >= 0 ? '+' : ''}${r.pnl.toFixed(2)}</td></tr>`;
+    }).join('');
+    return `<div class="card" style="margin-bottom:14px">
+      <div style="font-weight:600;margin-bottom:8px">${names[t]}</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:10px">
+        ${s.count} fills · ${s.wins} wins · <b>${s.win_rate}%</b> vs ${s.break_even || 10}% break-even ·
+        edge <b style="color:${ec}">${edge >= 0 ? '+' : ''}${edge.toFixed(1)}pp</b> ·
+        net <b style="color:${pc}">$${s.pnl >= 0 ? '+' : ''}${s.pnl.toFixed(2)}</b></div>
+      <div style="display:flex;gap:18px;flex-wrap:wrap">
+        <div style="flex:1;min-width:260px">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:4px">By crypto &amp; side</div>
+          <div class="scroll-table"><table>
+            <thead><tr><th>Market</th><th>Fills</th><th>Wins</th><th>Win%</th><th>P&L</th></tr></thead>
+            <tbody>${grid}</tbody></table></div>
+        </div>
+        <div style="flex:1;min-width:280px">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Daily (last 14)</div>
+          <div class="scroll-table" style="max-height:260px;overflow-y:auto"><table>
+            <thead><tr><th>Day</th><th>Fills</th><th>Wins</th><th>Win%</th><th>P&L</th></tr></thead>
+            <tbody>${days}</tbody></table></div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  return cards;
+}
+
 function dipDailyTable(dip) {
   const rows = dip.by_day || [];
   if (!rows.length) return '';
@@ -1411,7 +1458,7 @@ function renderDipAnalytics(dip) {
         <tr style="border-top:2px solid var(--border);font-weight:700"><td>TOTAL</td><td>${dip.count}</td><td>${dip.contracts||''}</td><td>${dip.win_rate}%</td><td>—</td><td>—</td><td style="color:${tc}">$${dip.pnl.toFixed(2)}</td><td></td></tr>
       </tbody></table></div>
     <div class="chart-container med" style="margin-top:14px"><canvas id="dipTierChart"></canvas></div>
-  </div>` + dipDailyTable(dip);
+  </div>` + dipTypeCards(dip) + dipDailyTable(dip);
   div.innerHTML = table;
 
   // ── Bar chart: win rate vs break-even per tier ──
