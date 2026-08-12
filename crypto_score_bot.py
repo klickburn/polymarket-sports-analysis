@@ -22,7 +22,7 @@ import time
 import math
 import uuid
 import urllib.request
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 from datetime import datetime, timezone, timedelta
 
 from crypto_15m_bot import (
@@ -153,10 +153,6 @@ CORE_DIP_PRICE = float(os.environ.get("CORE_DIP_PRICE", "0.10"))
 CORE_DIP_COUNT = int(os.environ.get("CORE_DIP_COUNT", "1"))
 CORE_DIP_CRYPTOS = [c.strip().upper() for c in
                     os.environ.get("CORE_DIP_CRYPTOS", "ETH").split(",") if c.strip()]
-# Minutes-remaining threshold below which a one-legged window is treated as
-# final. Above it, a second leg may still arrive and turn the window into a
-# split, so we hold off rather than race the split-dip rule.
-CORE_DIP_PLACE_WITHIN_MIN = float(os.environ.get("CORE_DIP_PLACE_WITHIN_MIN", "7"))
 
 DATA_DIR = os.environ.get("SCORE_DATA_DIR", "/data")
 if not os.path.isdir(DATA_DIR):
@@ -800,10 +796,25 @@ def _place_split_dips(bets, window_end_iso):
     sides = [wtr["BTC"].get("side"), wtr["ETH"].get("side")]
     if not all(sides) or sides[0] == sides[1]:
         return False  # not a split — no dips
+    # This window is a confirmed split. A core dip may already be resting here
+    # from before the second leg landed; absorb it rather than cancel (see
+    # _absorb_core_dips) and subtract what it already holds from each tier.
+    absorbed = _absorb_core_dips(bets, window_end_iso) if CORE_DIP_ENABLED else {}
     tier_str = ", ".join(f"{c}@{p*100:.0f}c" for p, c in SPLIT_DIP_TIERS)
     P(f"  [DIP] split window ({sides[0]}/{sides[1]}) — resting tiers [{tier_str}] on both sides")
     for cr, b in wtr.items():
         for price, count in SPLIT_DIP_TIERS:
+            # Only the tier at the core-dip price overlaps; deeper tiers are
+            # untouched. Never go below zero, and skip the order entirely if the
+            # core dip already covers the tier.
+            if absorbed and abs(price - CORE_DIP_PRICE) < 1e-9:
+                have = absorbed.get((cr, b["side"]), 0)
+                if have:
+                    count = max(0, count - have)
+                    P(f"  [DIP] {cr} {price*100:.0f}c tier reduced by {have} "
+                      f"already held from the core dip -> {count}")
+            if count <= 0:
+                continue
             oid = place_dip_order(b["ticker"], b["side"], count, price)
             if oid:
                 bets.append({
@@ -820,6 +831,41 @@ def _place_split_dips(bets, window_end_iso):
                 save_bets(bets)
             time.sleep(0.25)
     return True
+
+
+def _absorb_core_dips(bets, window_end_iso):
+    """A core dip was rested on a window that has since revealed itself as a
+    split. Rather than cancel it — order cancellation on Kalshi has been
+    unreliable here, and a failed cancel leaves us over-sized with no record of
+    it — we KEEP the contracts and let the split tier top up the remainder.
+
+    Two things happen:
+      * the core dip is tagged split_window=True, so the core-dip experiment can
+        exclude it (a split-window fill says nothing about non-split behaviour)
+        while its P&L still counts as real money;
+      * the contracts already resting are returned, so the split tier places
+        SPLIT_DIP_COUNT minus what is already on the book and the window ends up
+        at the intended size rather than core + split stacked on top.
+
+    Nothing is deleted and no API call can fail: worst case the top-up is short
+    by the core amount, never long."""
+    absorbed = defaultdict(int)
+    touched = 0
+    for b in bets:
+        if not (b.get("dip_add") and b.get("dip_type") == "core"
+                and b.get("window_end") == window_end_iso):
+            continue
+        if b.get("result") in ("dip_expired", "unfilled"):
+            continue                      # never made it to the book
+        if not b.get("split_window"):
+            b["split_window"] = True
+            touched += 1
+        absorbed[(b.get("crypto"), b.get("side"))] += (b.get("contracts") or 0)
+    if touched:
+        save_bets(bets)
+        P(f"  [CORE-DIP] window became a split — tagged {touched} core dip(s) "
+          f"split_window; split tier will top up the remainder")
+    return absorbed
 
 
 def _place_core_dips(bets, window_end_iso):
@@ -852,20 +898,16 @@ def _place_core_dips(bets, window_end_iso):
             wtr[b["crypto"]] = b
     if not wtr:
         return False
-    # RACE GUARD. The two legs of a window land in separate polls, so a window
-    # with one leg so far may still become a split. Placing now would (a) rest a
-    # 1-contract core dip on what is actually split territory and (b) make
-    # _place_split_dips think the window was already handled. Wait until the
-    # window is old enough that a second leg can no longer arrive — entry is at
-    # minute ENTRY_AFTER_MINUTES of a 15-minute window, so a few minutes of
-    # slack past that settles it.
-    try:
-        _left = (datetime.fromisoformat(window_end_iso)
-                 - datetime.now(timezone.utc)).total_seconds() / 60.0
-    except Exception:
-        _left = 0.0
-    if _left > CORE_DIP_PLACE_WITHIN_MIN and len(wtr) < 2:
-        return False
+    # NO time delay. A window with one leg may still become a split, but waiting
+    # for certainty costs fills: the dip's whole job is to be resting when the
+    # position collapses, and collapses in the held-back minutes would be missed
+    # outright. That is tolerable for a 1-contract probe and not tolerable once
+    # core dips are scaled. Instead we place immediately and let
+    # _place_split_dips CANCEL this order if the window turns out to be a split
+    # (see _cancel_core_dips). Second legs land a median 0s apart and 89% within
+    # two minutes, so the cancel path is rare and the exposure is one resting
+    # limit order for a couple of minutes.
+    #
     # Skip SPLIT windows — those are the existing rule's territory. A split is
     # both cryptos on opposite sides; anything else is ours.
     if len(wtr) > 1:

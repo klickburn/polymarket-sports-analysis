@@ -952,6 +952,22 @@ def _build_scaling_performance(resolved, status=None):
         by_type = {}
         for t in ("split", "core"):
             ts = [b for b in dip_trades if (b.get("dip_type") or "split") == t]
+            if t == "core":
+                # A core dip rested before the second leg landed, then the window
+                # turned into a split. Its P&L is real money and stays in the
+                # totals, but it says nothing about NON-split behaviour, which is
+                # the only question the core-dip experiment exists to answer.
+                contaminated = [b for b in ts if b.get("split_window")]
+                ts = [b for b in ts if not b.get("split_window")]
+                if contaminated:
+                    cw = sum(1 for b in contaminated if b["result"] == "win")
+                    by_type["core_in_split"] = {
+                        "count": len(contaminated), "wins": cw,
+                        "win_rate": round(cw / len(contaminated) * 100, 1),
+                        "pnl": round(sum(b.get("pnl", 0) for b in contaminated), 2),
+                        "note": "core dips whose window became a split — excluded "
+                                "from the core stats, still real money",
+                    }
             if not ts:
                 continue
             st = _stat(ts, _tier_price((ts[0].get("dip_tier") or "10c")))

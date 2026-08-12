@@ -1298,9 +1298,19 @@ function renderScoreEmpty() {
 function dipTypeCards(dip) {
   const bt = dip.by_type || {};
   const names = {split: '🔀 Split dips (BTC/ETH opposite sides)',
-                 core: '🧪 Core dips (non-split — experiment)'};
+                 core: '🧪 Core dips (non-split — experiment)',
+                 core_in_split: '⚠️ Core dips that landed in a split window'};
   const cards = Object.keys(names).filter(t => bt[t]).map(t => {
     const s = bt[t];
+    if (t === 'core_in_split') {
+      const c = s.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+      return `<div class="card" style="margin-bottom:14px;border-left:3px solid var(--amber,#f59e0b)">
+        <div style="font-weight:600;margin-bottom:6px">${names[t]}</div>
+        <div style="font-size:13px;color:var(--muted)">
+          ${s.count} fills · ${s.wins} wins · ${s.win_rate}% ·
+          net <b style="color:${c}">$${s.pnl >= 0 ? '+' : ''}${s.pnl.toFixed(2)}</b><br>
+          <span style="font-size:12px">${s.note}</span></div></div>`;
+    }
     const pc = s.pnl >= 0 ? 'var(--green)' : 'var(--red)';
     const edge = (s.win_rate - (s.break_even || 10));
     const ec = edge >= 0 ? 'var(--green)' : 'var(--red)';
