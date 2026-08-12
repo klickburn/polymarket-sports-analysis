@@ -153,6 +153,10 @@ CORE_DIP_PRICE = float(os.environ.get("CORE_DIP_PRICE", "0.10"))
 CORE_DIP_COUNT = int(os.environ.get("CORE_DIP_COUNT", "1"))
 CORE_DIP_CRYPTOS = [c.strip().upper() for c in
                     os.environ.get("CORE_DIP_CRYPTOS", "ETH").split(",") if c.strip()]
+# Minutes-remaining threshold below which a one-legged window is treated as
+# final. Above it, a second leg may still arrive and turn the window into a
+# split, so we hold off rather than race the split-dip rule.
+CORE_DIP_PLACE_WITHIN_MIN = float(os.environ.get("CORE_DIP_PLACE_WITHIN_MIN", "7"))
 
 DATA_DIR = os.environ.get("SCORE_DATA_DIR", "/data")
 if not os.path.isdir(DATA_DIR):
@@ -778,9 +782,12 @@ def _place_split_dips(bets, window_end_iso):
     once dips are placed for the window."""
     if not SPLIT_DIP_ENABLED:
         return False
-    # Idempotency: if a dip already exists for this window, don't place again
-    # (survives bot restarts mid-window, unlike the in-memory flag)
-    if any(b.get("dip_add") and b.get("window_end") == window_end_iso for b in bets):
+    # Idempotency: if a SPLIT dip already exists for this window, don't place
+    # again (survives bot restarts mid-window, unlike the in-memory flag).
+    # Must match on dip_type: a core dip in the same window is a different book,
+    # and treating it as "already placed" silently cancelled the split dip.
+    if any(b.get("dip_add") and (b.get("dip_type") or "split") == "split"
+           and b.get("window_end") == window_end_iso for b in bets):
         return True
     wtr = {}
     for b in bets:
@@ -844,6 +851,20 @@ def _place_core_dips(bets, window_end_iso):
                 and b.get("result") not in ("unfilled",)):
             wtr[b["crypto"]] = b
     if not wtr:
+        return False
+    # RACE GUARD. The two legs of a window land in separate polls, so a window
+    # with one leg so far may still become a split. Placing now would (a) rest a
+    # 1-contract core dip on what is actually split territory and (b) make
+    # _place_split_dips think the window was already handled. Wait until the
+    # window is old enough that a second leg can no longer arrive — entry is at
+    # minute ENTRY_AFTER_MINUTES of a 15-minute window, so a few minutes of
+    # slack past that settles it.
+    try:
+        _left = (datetime.fromisoformat(window_end_iso)
+                 - datetime.now(timezone.utc)).total_seconds() / 60.0
+    except Exception:
+        _left = 0.0
+    if _left > CORE_DIP_PLACE_WITHIN_MIN and len(wtr) < 2:
         return False
     # Skip SPLIT windows — those are the existing rule's territory. A split is
     # both cryptos on opposite sides; anything else is ours.
