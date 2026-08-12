@@ -865,15 +865,22 @@ def _build_scaling_performance(resolved, status=None):
             return s
         dip = _stat(dip_trades)
         # Per-tier breakdown (untagged legacy dips -> "10c")
+        # Both books currently rest at 10c, so a tier-only key would pool a
+        # 25-contract split book with a 1-contract core-dip experiment and report
+        # one meaningless win rate. Tag the tier with its type whenever more than
+        # one type is present.
+        _types = {(b.get("dip_type") or "split") for b in dip_trades}
         tiers = {}
         for b in dip_trades:
             t = b.get("dip_tier") or f"{int(round(b.get('price', 0.10)*100))}c"
+            if len(_types) > 1:
+                t = f"{t} {(b.get('dip_type') or 'split')}"
             tiers.setdefault(t, []).append(b)
         def _tier_price(t):
             try:
-                return int(t.replace("c", "")) / 100.0
+                return int(t.split()[0].replace("c", "")) / 100.0
             except Exception:
-                return b.get("price", 0.10)
+                return 0.10
         dip["tiers"] = {t: _stat(ts, _tier_price(t)) for t, ts in sorted(tiers.items(),
                         key=lambda kv: _tier_price(kv[0]))}
 
@@ -882,7 +889,13 @@ def _build_scaling_performance(resolved, status=None):
         # adds 2 to the fill count but only 1 to the window count. The window
         # count is the one that matches how streaks behave (a win in either leg
         # ends the streak for both).
-        ordered = sorted(dip_trades, key=lambda b: b.get("timestamp", ""))
+        # SPLIT dips only. The streak counter and the daily table below both
+        # describe the split book — its sizing history (100 -> 25) is what the
+        # @100c column reprices against, and a 1-contract core-dip experiment
+        # mixed in would both pollute the streak and get repriced at 100x, which
+        # is meaningless. Core dips have their own card via dip["by_type"].
+        ordered = sorted((b for b in dip_trades if (b.get("dip_type") or "split") == "split"),
+                         key=lambda b: b.get("timestamp", ""))
         streak_fills = 0
         for b in reversed(ordered):
             if b["result"] == "win":
