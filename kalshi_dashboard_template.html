@@ -1284,12 +1284,12 @@ function renderDipAnalytics(dip) {
     </tr>`;
   }).join('');
   const tc = dip.pnl>=0?'var(--green)':'var(--red)';
-  // ── Losses since the last win ──
-  let streakCard = '';
-  const st = dip.streak;
-  if (st) {
-    // Colour by how the current run compares with history, not by an absolute
-    // number: dips lose ~88% of fills, so long runs are normal, not a warning.
+  // ── Losses since the last win, one card per book ──
+  // Colour keys off each book's OWN history rather than an absolute threshold:
+  // dips lose ~88% of fills, so long runs are normal and a fixed red-at-10 would
+  // cry wolf daily.
+  function streakCard(st, title, splitNote) {
+    if (!st) return '';
     const w = st.windows, mx = st.max_run || 0, med = st.median_run || 0;
     const col = w === 0 ? 'var(--green)'
               : (mx && w >= mx) ? 'var(--red)'
@@ -1298,10 +1298,13 @@ function renderDipAnalytics(dip) {
       ? `${st.hours_since_win < 48 ? st.hours_since_win + 'h' : (st.hours_since_win/24).toFixed(1) + 'd'} ago`
       : 'no win yet';
     const ctx = mx ? `median run ${med} · longest ${mx} (${st.runs} runs)` : '';
-    streakCard = `<div class="card" style="margin-bottom:14px">
+    const legNote = splitNote
+      ? 'Both legs of a split window settle together, so a 2-leg losing window adds 2 fills but only 1 window. '
+      : 'Core dips are single-leg, so fills and windows track each other. ';
+    return `<div class="card" style="margin-bottom:14px">
       <div style="display:flex;align-items:baseline;gap:18px;flex-wrap:wrap">
         <div>
-          <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Losses since last win</div>
+          <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">${title}</div>
           <div style="font-size:32px;font-weight:700;color:${col};line-height:1.15">${w}
             <span style="font-size:14px;font-weight:500;color:var(--muted)">windows</span></div>
         </div>
@@ -1311,12 +1314,13 @@ function renderDipAnalytics(dip) {
         </div>
       </div>
       <div style="font-size:12px;color:var(--muted);margin-top:10px;padding-top:9px;border-top:1px solid var(--border)">
-        Both legs of a split window settle together, so a 2-leg losing window adds 2 fills but only 1 window.
-        Streaks carry no predictive signal (tested: win rate after 10 straight losses is 13.1% vs a 13.6% base) &mdash; this is a monitoring number, not a trading trigger.
+        ${legNote}Streaks carry no predictive signal (tested: win rate after 10 straight losses is 13.1% vs a 13.6% base) &mdash; this is a monitoring number, not a trading trigger.
       </div>
     </div>`;
   }
-  const table = streakCard + `<div class="card"><div style="font-size:13px;color:var(--muted);margin-bottom:10px">
+  const streakCards = streakCard(dip.streak, 'Split dip — losses since last win', true)
+                    + streakCard(dip.streak_core, 'Core dip — losses since last win', false);
+  const table = streakCards + `<div class="card"><div style="font-size:13px;color:var(--muted);margin-bottom:10px">
       Each dip buys a contract at that price if a split-window side collapses to it. It profits only if it wins more than its <b>break-even</b> (= the buy price). <b>Edge</b> = win rate minus break-even.</div>
     <div class="scroll-table"><table>
       <thead><tr><th>Tier</th><th>Fills</th><th>Contracts</th><th>Win%</th><th>Break-even</th><th>Edge</th><th>Net P&L</th><th>Verdict</th></tr></thead>

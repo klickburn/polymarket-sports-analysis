@@ -884,55 +884,60 @@ def _build_scaling_performance(resolved, status=None):
         dip["tiers"] = {t: _stat(ts, _tier_price(t)) for t, ts in sorted(tiers.items(),
                         key=lambda kv: _tier_price(kv[0]))}
 
-        # Losses since the last win. Counted two ways: by fill, and by window.
-        # Both legs of a split window settle together, so a 2-leg losing window
-        # adds 2 to the fill count but only 1 to the window count. The window
-        # count is the one that matches how streaks behave (a win in either leg
-        # ends the streak for both).
-        # SPLIT dips only. The streak counter and the daily table below both
-        # describe the split book — its sizing history (100 -> 25) is what the
-        # @100c column reprices against, and a 1-contract core-dip experiment
-        # mixed in would both pollute the streak and get repriced at 100x, which
-        # is meaningless. Core dips are broken out in the tier table instead.
+        # Losses since the last win, per book. Counted two ways: by fill and by
+        # window. Both legs of a SPLIT window settle together, so a 2-leg losing
+        # window adds 2 to the fill count but only 1 to the window count, and the
+        # window count is the one whose streaks behave like a sequence. Core dips
+        # are single-leg today, so their two counts track each other.
+        def _streak(ts):
+            o = sorted(ts, key=lambda b: b.get("timestamp", ""))
+            if not o:
+                return None
+            sf = 0
+            for b in reversed(o):
+                if b["result"] == "win":
+                    break
+                sf += 1
+            byw, seen = [], set()
+            for b in o:
+                k = b.get("window_end") or b.get("timestamp")
+                if k not in seen:
+                    seen.add(k)
+                    byw.append([k, False])
+                if b["result"] == "win":
+                    byw[-1][1] = True
+            sw = 0
+            for _, won in reversed(byw):
+                if won:
+                    break
+                sw += 1
+            runs, cur = [], 0
+            for _, won in byw:
+                if won:
+                    runs.append(cur)
+                    cur = 0
+                else:
+                    cur += 1
+            lw = next((b.get("timestamp") for b in reversed(o) if b["result"] == "win"), None)
+            hrs = None
+            if lw:
+                try:
+                    t = datetime.fromisoformat(lw)
+                    if t.tzinfo is None:
+                        t = t.replace(tzinfo=timezone.utc)
+                    hrs = round((datetime.now(timezone.utc) - t).total_seconds() / 3600, 1)
+                except Exception:
+                    pass
+            return {"fills": sf, "windows": sw, "last_win": lw, "hours_since_win": hrs,
+                    "max_run": max(runs + [sw]) if (runs or sw) else 0,
+                    "median_run": (sorted(runs)[len(runs) // 2] if runs else 0),
+                    "runs": len(runs)}
+
+        # The daily table below is SPLIT-only: its @100c column reprices against
+        # the split book's sizing history (100 -> 25), which is meaningless for a
+        # 1-contract core-dip experiment.
         ordered = sorted((b for b in dip_trades if (b.get("dip_type") or "split") == "split"),
                          key=lambda b: b.get("timestamp", ""))
-        streak_fills = 0
-        for b in reversed(ordered):
-            if b["result"] == "win":
-                break
-            streak_fills += 1
-        by_window, seen = [], set()
-        for b in ordered:
-            key = b.get("window_end") or b.get("timestamp")
-            if key not in seen:
-                seen.add(key)
-                by_window.append([key, False])
-            if b["result"] == "win":
-                by_window[-1][1] = True
-        streak_windows = 0
-        for _, won in reversed(by_window):
-            if won:
-                break
-            streak_windows += 1
-        # Historical context so a long streak can be read as normal or unusual.
-        runs, cur = [], 0
-        for _, won in by_window:
-            if won:
-                runs.append(cur)
-                cur = 0
-            else:
-                cur += 1
-        last_win = next((b.get("timestamp") for b in reversed(ordered)
-                         if b["result"] == "win"), None)
-        hrs = None
-        if last_win:
-            try:
-                lw = datetime.fromisoformat(last_win)
-                if lw.tzinfo is None:
-                    lw = lw.replace(tzinfo=timezone.utc)
-                hrs = round((datetime.now(timezone.utc) - lw).total_seconds() / 3600, 1)
-            except Exception:
-                pass
         # Per-day wins. The dip book's P&L is carried by a handful of days
         # (5 of 33 days = 82% of it historically), so a daily column shows the
         # concentration that a headline win rate hides.
@@ -958,15 +963,11 @@ def _build_scaling_performance(resolved, status=None):
             for e in sorted(_byday.values(), key=lambda x: x["day"], reverse=True)
         ]
 
-        dip["streak"] = {
-            "fills": streak_fills,
-            "windows": streak_windows,
-            "last_win": last_win,
-            "hours_since_win": hrs,
-            "max_run": max(runs + [streak_windows]) if (runs or streak_windows) else 0,
-            "median_run": (sorted(runs)[len(runs) // 2] if runs else 0),
-            "runs": len(runs),
-        }
+        dip["streak"] = _streak([b for b in dip_trades
+                                  if (b.get("dip_type") or "split") == "split"])
+        dip["streak_core"] = _streak([b for b in dip_trades
+                                      if b.get("dip_type") == "core"
+                                      and not b.get("split_window")])
 
     # Protection status (persisted by the bot); only show for today
     trail = None
