@@ -362,7 +362,6 @@
 <!-- Mode Tabs -->
 <div class="mode-tabs">
   <div class="mode-tab active-score" id="tabScore" onclick="switchMode('score')">Score Bot</div>
-  <div class="mode-tab" id="tabAnalytics" onclick="switchMode('analytics')">Analytics</div>
 </div>
 
 <!-- ═══════════════════ OVERVIEW SECTION ═══════════════════ -->
@@ -586,89 +585,6 @@
 
 
 <!-- ═══════════════════ ANALYTICS SECTION ═══════════════════ -->
-<div class="mode-section" id="sectionAnalytics">
-  <!-- Summary KPIs filled by JS -->
-  <div id="analyticsKpis" class="kpi-row"></div>
-
-  <!-- Signal Scorecards — each signal gets a visual card -->
-  <div class="section-header"><h2>Signal Performance</h2><span class="badge" style="background:rgba(234,179,8,0.2);color:var(--yellow)">v7 Signals</span></div>
-  <div id="analyticsSignalCards" class="analytics-signal-grid"></div>
-
-  <!-- Radar overview -->
-  <div class="grid-2" style="margin-top:24px">
-    <div class="card">
-      <h3>Signal Radar — Win Rate</h3>
-      <div class="chart-container tall"><canvas id="analyticsRadarChart"></canvas></div>
-    </div>
-    <div class="card">
-      <h3>P&L Contribution by Signal</h3>
-      <div class="chart-container tall"><canvas id="analyticsSignalPnlChart"></canvas></div>
-    </div>
-  </div>
-
-  <hr class="section-divider">
-  <div class="section-header"><h2>Indicator Deep Dive</h2><span class="badge" style="background:rgba(59,130,246,0.2);color:var(--blue)">Brackets</span></div>
-
-  <!-- Tabbed indicator charts -->
-  <div class="analytics-indicator-tabs" id="analyticsIndicatorTabs">
-    <button class="a-tab active" onclick="switchAnalyticsTab('rsi',this)">RSI</button>
-    <button class="a-tab" onclick="switchAnalyticsTab('stoch',this)">Stochastic</button>
-    <button class="a-tab" onclick="switchAnalyticsTab('vol',this)">Volatility</button>
-    <button class="a-tab" onclick="switchAnalyticsTab('ret',this)">1h Return</button>
-    <button class="a-tab" onclick="switchAnalyticsTab('price',this)">Price</button>
-    <button class="a-tab" onclick="switchAnalyticsTab('entry',this)">Entry Time</button>
-  </div>
-  <div class="card" style="margin-top:12px">
-    <div id="analyticsIndicatorPanel">
-      <div class="analytics-ind-pane active" id="pane-rsi">
-        <div class="chart-container tall"><canvas id="analyticsRsiChart"></canvas></div>
-      </div>
-      <div class="analytics-ind-pane" id="pane-stoch">
-        <div class="chart-container tall"><canvas id="analyticsStochChart"></canvas></div>
-      </div>
-      <div class="analytics-ind-pane" id="pane-vol">
-        <div class="chart-container tall"><canvas id="analyticsVolChart"></canvas></div>
-      </div>
-      <div class="analytics-ind-pane" id="pane-ret">
-        <div class="chart-container tall"><canvas id="analyticsRetChart"></canvas></div>
-      </div>
-      <div class="analytics-ind-pane" id="pane-price">
-        <div class="chart-container tall"><canvas id="analyticsPriceChart"></canvas></div>
-      </div>
-      <div class="analytics-ind-pane" id="pane-entry">
-        <div class="chart-container tall"><canvas id="analyticsEntryChart"></canvas></div>
-      </div>
-    </div>
-  </div>
-
-  <hr class="section-divider">
-  <div class="section-header"><h2>Side & Direction</h2><span class="badge" style="background:rgba(168,85,247,0.2);color:var(--purple)">Split View</span></div>
-
-  <div class="grid-2">
-    <div class="card">
-      <h3>YES vs NO Side</h3>
-      <div style="display:flex;gap:20px;align-items:center">
-        <div style="width:45%"><canvas id="analyticsSideDoughnut"></canvas></div>
-        <div id="analyticsSideStats" style="flex:1"></div>
-      </div>
-    </div>
-    <div class="card">
-      <h3>BTC Direction</h3>
-      <div style="display:flex;gap:20px;align-items:center">
-        <div style="width:45%"><canvas id="analyticsBtcDoughnut"></canvas></div>
-        <div id="analyticsBtcStats" style="flex:1"></div>
-      </div>
-    </div>
-  </div>
-
-  <hr class="section-divider">
-  <div class="section-header"><h2>Crypto Breakdown</h2><span class="badge badge-crypto">Per Asset</span></div>
-  <div id="analyticsCryptoContent"></div>
-
-  <hr class="section-divider">
-  <div class="section-header"><h2>Signal Firing Rates</h2><span class="badge" style="background:rgba(20,184,166,0.2);color:var(--teal)">Edge Analysis</span></div>
-  <div id="analyticsTablesContent"></div>
-</div>
 
 <div id="loadingOverlay" style="position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:9999;flex-direction:column;gap:16px">
   <div style="font-size:20px;font-weight:600;color:var(--cyan)">Loading dashboard...</div>
@@ -720,11 +636,8 @@ function resetScoreData() {
 
 function switchMode(mode) {
   document.getElementById('sectionScore').classList.toggle('active', mode === 'score');
-  document.getElementById('sectionAnalytics').classList.toggle('active', mode === 'analytics');
   document.getElementById('tabScore').className = 'mode-tab' + (mode === 'score' ? ' active-score' : '');
-  document.getElementById('tabAnalytics').className = 'mode-tab' + (mode === 'analytics' ? ' active-analytics' : '');
   if (mode === 'score' && !window._scoreLoaded) { loadScoreData(); }
-  if (mode === 'analytics' && !window._analyticsLoaded) { loadAnalytics(); }
 }
 
 function getDate(ts) {
@@ -1292,63 +1205,6 @@ function renderScoreEmpty() {
 // Wins per day. The dip book is carried by a few outlier days, so the daily
 // column is the honest view — a headline win rate makes it look far steadier
 // than it is.
-// Split-dip vs core-dip. Two different populations (opposite-side windows vs
-// everything else) with different expected win rates, so they get separate
-// cards — pooling them would hide whichever one is actually working.
-function dipTypeCards(dip) {
-  const bt = dip.by_type || {};
-  const names = {split: '🔀 Split dips (BTC/ETH opposite sides)',
-                 core: '🧪 Core dips (non-split — experiment)',
-                 core_in_split: '⚠️ Core dips that landed in a split window'};
-  const cards = Object.keys(names).filter(t => bt[t]).map(t => {
-    const s = bt[t];
-    if (t === 'core_in_split') {
-      const c = s.pnl >= 0 ? 'var(--green)' : 'var(--red)';
-      return `<div class="card" style="margin-bottom:14px;border-left:3px solid var(--amber,#f59e0b)">
-        <div style="font-weight:600;margin-bottom:6px">${names[t]}</div>
-        <div style="font-size:13px;color:var(--muted)">
-          ${s.count} fills · ${s.wins} wins · ${s.win_rate}% ·
-          net <b style="color:${c}">$${s.pnl >= 0 ? '+' : ''}${s.pnl.toFixed(2)}</b><br>
-          <span style="font-size:12px">${s.note}</span></div></div>`;
-    }
-    const pc = s.pnl >= 0 ? 'var(--green)' : 'var(--red)';
-    const edge = (s.win_rate - (s.break_even || 10));
-    const ec = edge >= 0 ? 'var(--green)' : 'var(--red)';
-    const grid = Object.entries(s.grid || {}).map(([k, g]) => {
-      const gc = g.pnl >= 0 ? 'var(--green)' : 'var(--red)';
-      return `<tr><td>${k}</td><td>${g.count}</td><td>${g.wins}</td>
-        <td>${g.win_rate}%</td><td style="color:${gc}">$${g.pnl >= 0 ? '+' : ''}${g.pnl.toFixed(2)}</td></tr>`;
-    }).join('');
-    const days = (s.by_day || []).slice(0, 14).map(r => {
-      const dc = r.pnl >= 0 ? 'var(--green)' : 'var(--red)';
-      return `<tr><td>${r.day}</td><td>${r.fills}</td><td>${r.wins}</td><td>${r.win_rate}%</td>
-        <td style="color:${dc}">$${r.pnl >= 0 ? '+' : ''}${r.pnl.toFixed(2)}</td></tr>`;
-    }).join('');
-    return `<div class="card" style="margin-bottom:14px">
-      <div style="font-weight:600;margin-bottom:8px">${names[t]}</div>
-      <div style="font-size:13px;color:var(--muted);margin-bottom:10px">
-        ${s.count} fills · ${s.wins} wins · <b>${s.win_rate}%</b> vs ${s.break_even || 10}% break-even ·
-        edge <b style="color:${ec}">${edge >= 0 ? '+' : ''}${edge.toFixed(1)}pp</b> ·
-        net <b style="color:${pc}">$${s.pnl >= 0 ? '+' : ''}${s.pnl.toFixed(2)}</b></div>
-      <div style="display:flex;gap:18px;flex-wrap:wrap">
-        <div style="flex:1;min-width:260px">
-          <div style="font-size:12px;color:var(--muted);margin-bottom:4px">By crypto &amp; side</div>
-          <div class="scroll-table"><table>
-            <thead><tr><th>Market</th><th>Fills</th><th>Wins</th><th>Win%</th><th>P&L</th></tr></thead>
-            <tbody>${grid}</tbody></table></div>
-        </div>
-        <div style="flex:1;min-width:280px">
-          <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Daily (last 14)</div>
-          <div class="scroll-table" style="max-height:260px;overflow-y:auto"><table>
-            <thead><tr><th>Day</th><th>Fills</th><th>Wins</th><th>Win%</th><th>P&L</th></tr></thead>
-            <tbody>${days}</tbody></table></div>
-        </div>
-      </div>
-    </div>`;
-  }).join('');
-  return cards;
-}
-
 function dipDailyTable(dip) {
   const rows = dip.by_day || [];
   if (!rows.length) return '';
@@ -1468,7 +1324,7 @@ function renderDipAnalytics(dip) {
         <tr style="border-top:2px solid var(--border);font-weight:700"><td>TOTAL</td><td>${dip.count}</td><td>${dip.contracts||''}</td><td>${dip.win_rate}%</td><td>—</td><td>—</td><td style="color:${tc}">$${dip.pnl.toFixed(2)}</td><td></td></tr>
       </tbody></table></div>
     <div class="chart-container med" style="margin-top:14px"><canvas id="dipTierChart"></canvas></div>
-  </div>` + dipTypeCards(dip) + dipDailyTable(dip);
+  </div>` + dipDailyTable(dip);
   div.innerHTML = table;
 
   // ── Bar chart: win rate vs break-even per tier ──
@@ -1803,23 +1659,9 @@ function renderScoreBot() {
       tblHtml += `<td style="border-left:2px solid var(--border);color:${ctpc};font-weight:700">$${cryptoTotals[c] >= 0 ? '+' : ''}${cryptoTotals[c].toFixed(2)}</td>`;
     });
     tblHtml += '</tr></tbody></table></div></div>';
-    const chartHtml = '<div class="card" style="margin-bottom:16px"><div class="chart-container med"><canvas id="scoreDailyChart"></canvas></div></div>';
-    document.getElementById('scoreDailyContent').innerHTML = chartHtml + tblHtml;
-    // Daily P&L bar chart (ascending dates)
-    const chartDates = [...dailyDates].reverse();
-    const chartVals = chartDates.map(dt => parseFloat(dailyMap[dt].pnl.toFixed(2)));
+    // Daily P&L bar chart removed — the table below carries the same numbers.
+    document.getElementById('scoreDailyContent').innerHTML = tblHtml;
     if (_scoreCharts.daily) { _scoreCharts.daily.destroy(); _scoreCharts.daily = null; }
-    _scoreCharts.daily = new Chart(document.getElementById('scoreDailyChart'), {
-      type: 'bar',
-      data: {
-        labels: chartDates.map(dt => new Date(dt + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })),
-        datasets: [{ data: chartVals, backgroundColor: chartVals.map(v => v >= 0 ? 'rgba(34,197,94,0.75)' : 'rgba(239,68,68,0.75)') }]
-      },
-      options: { responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `P&L: ${ctx.raw >= 0 ? '+' : ''}$${ctx.raw.toFixed(2)}` } } },
-        scales: { x: { ticks: { color: '#8b8fa3', maxTicksLimit: 12 }, grid: { display: false } },
-                  y: { ticks: { color: '#8b8fa3', callback: v => '$' + v }, grid: { color: 'rgba(42,45,58,0.3)' } } } }
-    });
   }
 
   // Scaling performance
@@ -2164,214 +2006,6 @@ function makeDoughnutWithStats(canvasId, statsId, chartKey, labelData) {
   }).join('<div style="height:12px"></div>');
 }
 
-async function loadAnalytics() {
-  try {
-    let data = SCORE_DATA;
-    if (!data) {
-      const resp = await fetch('/api/score-data');
-      if (!resp.ok) return;
-      data = await resp.json();
-    }
-    const allBets = (data.recent_bets || []).filter(b => b.strategy_version === 'v7' && (b.result === 'win' || b.result === 'loss'));
-    if (allBets.length === 0) {
-      document.getElementById('analyticsKpis').innerHTML = '<div class="kpi" style="grid-column:1/-1"><div class="label">No Data</div><div class="value" style="color:var(--muted)">Waiting for resolved v7 trades</div></div>';
-      return;
-    }
-
-    const totalWins = allBets.filter(b => b.result === 'win').length;
-    const totalLosses = allBets.filter(b => b.result === 'loss').length;
-    const totalPnl = allBets.reduce((s, b) => s + (b.pnl || 0), 0);
-    const avgPnl = totalPnl / allBets.length;
-    const bestTrade = Math.max(...allBets.map(b => b.pnl || 0));
-    const worstTrade = Math.min(...allBets.map(b => b.pnl || 0));
-
-    // ── Summary KPIs ──
-    const wr = (totalWins / allBets.length * 100).toFixed(1);
-    document.getElementById('analyticsKpis').innerHTML = [
-      { label: 'Resolved Trades', value: allBets.length, cls: 'blue', sub: `${totalWins}W - ${totalLosses}L` },
-      { label: 'Win Rate', value: wr + '%', cls: parseFloat(wr) >= 55 ? 'green' : 'red', sub: 'All v7 trades' },
-      { label: 'Total P&L', value: `$${totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}`, cls: totalPnl >= 0 ? 'green' : 'red', sub: `Avg $${avgPnl >= 0 ? '+' : ''}${avgPnl.toFixed(2)}/trade` },
-      { label: 'Best Trade', value: `$+${bestTrade.toFixed(2)}`, cls: 'green', sub: 'Single trade' },
-      { label: 'Worst Trade', value: `$${worstTrade.toFixed(2)}`, cls: 'red', sub: 'Single trade' },
-    ].map(k => `<div class="kpi"><div class="label">${k.label}</div><div class="value ${k.cls}">${k.value}</div><div class="sub">${k.sub}</div></div>`).join('');
-
-    // ── Signal scorecards ──
-    const signalNames = ['RSI Aligned', '1h MeanRev', 'BTC Against', 'High Vol', 'Consensus', 'Stoch OS', 'RSI Strong', 'Strong MR'];
-    const signalColors = ['#3b82f6', '#a855f7', '#f59e0b', '#06b6d4', '#22c55e', '#ec4899', '#6366f1', '#14b8a6'];
-    const signalIcons = ['~', '%', 'B', '^', '=', 'S', '!', 'R'];
-    const signalData = [];
-
-    signalNames.forEach((name, i) => {
-      const withSig = allBets.filter(b => (b.reasons || []).some(r => r[0] === name && r[2] !== '0'));
-      const withoutSig = allBets.filter(b => !(b.reasons || []).some(r => r[0] === name && r[2] !== '0'));
-      const wins = withSig.filter(b => b.result === 'win').length;
-      const winsWithout = withoutSig.filter(b => b.result === 'win').length;
-      const wr = withSig.length > 0 ? (wins / withSig.length * 100) : 0;
-      const wrWithout = withoutSig.length > 0 ? (winsWithout / withoutSig.length * 100) : 0;
-      const pnl = withSig.reduce((s, b) => s + (b.pnl || 0), 0);
-      const fireRate = allBets.length > 0 ? (withSig.length / allBets.length * 100) : 0;
-      const edge = wr - wrWithout;
-      signalData.push({ name, color: signalColors[i], icon: signalIcons[i], count: withSig.length, wr, pnl, fireRate, edge });
-    });
-
-    document.getElementById('analyticsSignalCards').innerHTML = signalData.map(s => {
-      const wrColor = s.wr >= 60 ? 'var(--green)' : s.wr >= 45 ? 'var(--yellow)' : 'var(--red)';
-      const pnlColor = s.pnl >= 0 ? 'var(--green)' : 'var(--red)';
-      const edgeBg = s.edge > 5 ? 'rgba(34,197,94,0.2)' : s.edge > 0 ? 'rgba(234,179,8,0.2)' : 'rgba(239,68,68,0.2)';
-      const edgeColor = s.edge > 5 ? 'var(--green)' : s.edge > 0 ? 'var(--yellow)' : 'var(--red)';
-      return `<div class="signal-card">
-        <div class="signal-glow" style="background:${s.color}"></div>
-        <div class="signal-name" style="color:${s.color}">${s.name}</div>
-        <div class="signal-wr" style="color:${wrColor}">${s.wr.toFixed(0)}%</div>
-        <div class="signal-sub">WR across ${s.count} trades (${s.fireRate.toFixed(0)}% fire rate)</div>
-        <div class="signal-bar"><div class="signal-bar-fill" style="width:${Math.min(s.wr, 100)}%;background:${s.color}"></div></div>
-        <div class="signal-pnl" style="color:${pnlColor}">$${s.pnl >= 0 ? '+' : ''}${s.pnl.toFixed(2)}</div>
-        <span class="signal-edge" style="background:${edgeBg};color:${edgeColor}">${s.edge >= 0 ? '+' : ''}${s.edge.toFixed(1)}pp edge</span>
-      </div>`;
-    }).join('');
-
-    // ── Radar chart ──
-    destroyAC('radar');
-    _analyticsCharts.radar = new Chart(document.getElementById('analyticsRadarChart'), {
-      type: 'radar',
-      data: {
-        labels: signalData.map(s => s.name),
-        datasets: [
-          { label: 'Win Rate %', data: signalData.map(s => s.wr), borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,0.15)', pointBackgroundColor: '#22c55e', pointRadius: 4, borderWidth: 2 },
-          { label: 'Fire Rate %', data: signalData.map(s => s.fireRate), borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', pointBackgroundColor: '#3b82f6', pointRadius: 4, borderWidth: 2 }
-        ]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        scales: { r: { grid: { color: 'rgba(42,45,58,0.8)' }, angleLines: { color: 'rgba(42,45,58,0.5)' }, ticks: { color: '#8b8fa3', backdropColor: 'transparent' }, pointLabels: { color: '#e1e4eb', font: { size: 11, weight: '600' } }, min: 0 } },
-        plugins: { legend: { labels: { color: '#8b8fa3', usePointStyle: true } } }
-      }
-    });
-
-    // ── P&L contribution horizontal bar ──
-    const sortedByPnl = [...signalData].sort((a, b) => b.pnl - a.pnl);
-    destroyAC('signalPnl');
-    _analyticsCharts.signalPnl = new Chart(document.getElementById('analyticsSignalPnlChart'), {
-      type: 'bar',
-      data: {
-        labels: sortedByPnl.map(s => s.name),
-        datasets: [{
-          label: 'P&L when signal fires',
-          data: sortedByPnl.map(s => +s.pnl.toFixed(2)),
-          backgroundColor: sortedByPnl.map(s => s.pnl >= 0 ? s.color + 'CC' : '#ef4444CC'),
-          borderRadius: 4,
-          borderSkipped: false,
-        }]
-      },
-      options: {
-        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-        plugins: {
-          legend: { display: false },
-          tooltip: { callbacks: { afterLabel: (ctx) => `${sortedByPnl[ctx.dataIndex].count} trades | ${sortedByPnl[ctx.dataIndex].wr.toFixed(0)}% WR` } }
-        },
-        scales: {
-          x: { grid: { color: 'rgba(42,45,58,0.5)' }, ticks: { color: '#8b8fa3', callback: v => '$' + v } },
-          y: { grid: { display: false }, ticks: { color: '#e1e4eb', font: { weight: '600' } } }
-        }
-      }
-    });
-
-    // ── Bracket charts ──
-    const rsiBrackets = ['<30', '30-40', '40-50', '50-60', '60-70', '>70'];
-    const rsiMap = bucketWrPnl(allBets, b => { const r = b.indicators?.rsi; if (r == null) return null; if (r < 30) return '<30'; if (r < 40) return '30-40'; if (r < 50) return '40-50'; if (r < 60) return '50-60'; if (r < 70) return '60-70'; return '>70'; });
-    makeBracketChart('analyticsRsiChart', 'rsi', rsiBrackets, rsiMap);
-
-    const stochBrackets = ['<20', '20-40', '40-60', '60-80', '>80'];
-    const stochMap = bucketWrPnl(allBets, b => { const s = b.indicators?.stoch; if (s == null) return null; if (s < 20) return '<20'; if (s < 40) return '20-40'; if (s < 60) return '40-60'; if (s < 80) return '60-80'; return '>80'; });
-    makeBracketChart('analyticsStochChart', 'stoch', stochBrackets, stochMap);
-
-    const volBrackets = ['<0.1', '0.1-0.2', '0.2-0.3', '0.3-0.5', '0.5-1.0', '>1.0'];
-    const volMap = bucketWrPnl(allBets, b => { const v = b.indicators?.vol_6h; if (v == null) return null; if (v < 0.1) return '<0.1'; if (v < 0.2) return '0.1-0.2'; if (v < 0.3) return '0.2-0.3'; if (v < 0.5) return '0.3-0.5'; if (v < 1.0) return '0.5-1.0'; return '>1.0'; });
-    makeBracketChart('analyticsVolChart', 'vol', volBrackets, volMap);
-
-    const retBrackets = ['<0.1%', '0.1-0.3%', '0.3-0.5%', '0.5-1.0%', '>1.0%'];
-    const retMap = bucketWrPnl(allBets, b => { const r = Math.abs(b.indicators?.ret_1h || 0); if (r < 0.1) return '<0.1%'; if (r < 0.3) return '0.1-0.3%'; if (r < 0.5) return '0.3-0.5%'; if (r < 1.0) return '0.5-1.0%'; return '>1.0%'; });
-    makeBracketChart('analyticsRetChart', 'ret', retBrackets, retMap);
-
-    const priceBrackets = ['<70c', '70-80c', '80-85c', '85-90c', '90-95c', '>95c'];
-    const priceMap = bucketWrPnl(allBets, b => { const p = b.price * 100; if (p < 70) return '<70c'; if (p < 80) return '70-80c'; if (p < 85) return '80-85c'; if (p < 90) return '85-90c'; if (p < 95) return '90-95c'; return '>95c'; });
-    makeBracketChart('analyticsPriceChart', 'price', priceBrackets, priceMap);
-
-    const entryBrackets = ['0-2m', '2-5m', '5-8m', '8-12m', '12-15m'];
-    const entryMap = bucketWrPnl(allBets, b => { const m = b.entry_minute || 0; if (m < 2) return '0-2m'; if (m < 5) return '2-5m'; if (m < 8) return '5-8m'; if (m < 12) return '8-12m'; return '12-15m'; });
-    makeBracketChart('analyticsEntryChart', 'entry', entryBrackets, entryMap);
-
-    // ── Side doughnuts ──
-    const sideMap = bucketWrPnl(allBets, b => (b.side || '').toUpperCase());
-    makeDoughnutWithStats('analyticsSideDoughnut', 'analyticsSideStats', 'sideDoughnut', [
-      { label: 'YES', count: sideMap['YES']?.count || 0, wins: sideMap['YES']?.wins || 0, pnl: sideMap['YES']?.pnl || 0, color: '#22c55e' },
-      { label: 'NO', count: sideMap['NO']?.count || 0, wins: sideMap['NO']?.wins || 0, pnl: sideMap['NO']?.pnl || 0, color: '#ef4444' }
-    ]);
-
-    function btcDir(b) {
-      const btcRet = b.indicators?.btc_ret_1h || 0;
-      if (Math.abs(btcRet) < 0.01) return 'Neutral';
-      return (b.side === 'yes' && btcRet < 0) || (b.side === 'no' && btcRet > 0) ? 'BTC Against' : 'BTC With';
-    }
-    const btcMap = bucketWrPnl(allBets, btcDir);
-    makeDoughnutWithStats('analyticsBtcDoughnut', 'analyticsBtcStats', 'btcDoughnut', [
-      { label: 'BTC Against', count: btcMap['BTC Against']?.count || 0, wins: btcMap['BTC Against']?.wins || 0, pnl: btcMap['BTC Against']?.pnl || 0, color: '#f59e0b' },
-      { label: 'BTC With', count: btcMap['BTC With']?.count || 0, wins: btcMap['BTC With']?.wins || 0, pnl: btcMap['BTC With']?.pnl || 0, color: '#6366f1' },
-      { label: 'Neutral', count: btcMap['Neutral']?.count || 0, wins: btcMap['Neutral']?.wins || 0, pnl: btcMap['Neutral']?.pnl || 0, color: '#4b5563' }
-    ]);
-
-    // ── Crypto breakdown ──
-    const cryptoMap = bucketWrPnl(allBets, b => b.crypto);
-    const cryptos = Object.keys(cryptoMap).sort((a, b) => (cryptoMap[b].pnl || 0) - (cryptoMap[a].pnl || 0));
-    let cryptoHtml = '<div class="analytics-signal-grid">';
-    cryptos.forEach(c => {
-      const d = cryptoMap[c];
-      const wr = d.count > 0 ? (d.wins / d.count * 100) : 0;
-      const wrColor = wr >= 55 ? 'var(--green)' : wr >= 45 ? 'var(--yellow)' : 'var(--red)';
-      const pnlColor = d.pnl >= 0 ? 'var(--green)' : 'var(--red)';
-      const cc = cryptoColors[c] || '#666';
-      cryptoHtml += `<div class="signal-card">
-        <div class="signal-glow" style="background:${cc}"></div>
-        <div class="signal-name" style="color:${cc}">${c}</div>
-        <div class="signal-wr" style="color:${wrColor}">${wr.toFixed(0)}%</div>
-        <div class="signal-sub">${d.wins}W - ${d.losses}L (${d.count} trades)</div>
-        <div class="signal-bar"><div class="signal-bar-fill" style="width:${Math.min(wr, 100)}%;background:${cc}"></div></div>
-        <div class="signal-pnl" style="color:${pnlColor}">$${d.pnl >= 0 ? '+' : ''}${d.pnl.toFixed(2)}</div>
-      </div>`;
-    });
-    cryptoHtml += '</div>';
-    document.getElementById('analyticsCryptoContent').innerHTML = cryptoHtml;
-
-    // ── Signal firing rate table ──
-    let tableHtml = '<div class="card"><div class="scroll-table"><table><thead><tr><th>Signal</th><th>Fires</th><th>Fire Rate</th><th style="background:rgba(34,197,94,0.1)">WR When Fires</th><th>WR When Absent</th><th style="background:rgba(34,197,94,0.1)">P&L When Fires</th><th>P&L When Absent</th><th>Edge</th></tr></thead><tbody>';
-    const sortedSignals = [...signalData].sort((a, b) => b.edge - a.edge);
-    sortedSignals.forEach(s => {
-      const withoutWr = allBets.length - s.count > 0 ? ((allBets.filter(b => !(b.reasons || []).some(r => r[0] === s.name && r[2] !== '0')).filter(b => b.result === 'win').length) / (allBets.length - s.count) * 100).toFixed(1) : '--';
-      const pnlWithout = allBets.filter(b => !(b.reasons || []).some(r => r[0] === s.name && r[2] !== '0')).reduce((sum, b) => sum + (b.pnl || 0), 0);
-      const edgeBg = s.edge > 5 ? 'rgba(34,197,94,0.15)' : s.edge > 0 ? 'rgba(234,179,8,0.1)' : 'rgba(239,68,68,0.1)';
-      const edgeColor = s.edge > 5 ? 'var(--green)' : s.edge > 0 ? 'var(--yellow)' : 'var(--red)';
-      const pnlWithColor = s.pnl >= 0 ? 'var(--green)' : 'var(--red)';
-      const pnlWithoutColor = pnlWithout >= 0 ? 'var(--green)' : 'var(--red)';
-      tableHtml += `<tr>
-        <td><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${s.color};margin-right:8px"></span><strong>${s.name}</strong></td>
-        <td>${s.count}</td>
-        <td><div class="signal-bar" style="width:80px;display:inline-block;vertical-align:middle;margin-right:6px"><div class="signal-bar-fill" style="width:${s.fireRate}%;background:${s.color}"></div></div>${s.fireRate.toFixed(0)}%</td>
-        <td style="background:rgba(34,197,94,0.05);font-weight:700;color:${s.wr >= 55 ? 'var(--green)' : s.wr >= 45 ? 'var(--yellow)' : 'var(--red)'}">${s.wr.toFixed(1)}%</td>
-        <td style="color:var(--muted)">${withoutWr}%</td>
-        <td style="background:rgba(34,197,94,0.05);font-weight:600;color:${pnlWithColor}">$${s.pnl >= 0 ? '+' : ''}${s.pnl.toFixed(2)}</td>
-        <td style="color:${pnlWithoutColor}">$${pnlWithout >= 0 ? '+' : ''}${pnlWithout.toFixed(2)}</td>
-        <td style="background:${edgeBg};font-weight:800;color:${edgeColor};font-size:14px">${s.edge >= 0 ? '+' : ''}${s.edge.toFixed(1)}pp</td>
-      </tr>`;
-    });
-    tableHtml += '</tbody></table></div></div>';
-    document.getElementById('analyticsTablesContent').innerHTML = tableHtml;
-
-    window._analyticsLoaded = true;
-  } catch(e) {
-    console.error('Analytics load error:', e);
-    document.getElementById('analyticsKpis').innerHTML = `<div class="kpi" style="grid-column:1/-1"><div class="value red">Error: ${e.message}</div></div>`;
-  }
-}
 
 loadData();
 loadScoreData();
