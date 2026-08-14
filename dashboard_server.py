@@ -998,6 +998,28 @@ def _build_scaling_performance(resolved, status=None):
                 f100 = _bet_fee(b, 100, p)
                 e["pnl_at_100"] += (100 * (1 - p) - f100) if b["result"] == "win" \
                     else (-100 * p - f100)
+        # Split book by crypto x side. Sizing has moved (100 -> 25 -> 26), so the
+        # as-traded P&L is not comparable across cells that traded in different
+        # periods; the @100c column reprices every fill flat.
+        _grid = {}
+        for b in ordered:
+            k = f"{b.get('crypto')} {b.get('side')}"
+            g = _grid.setdefault(k, {"count": 0, "wins": 0, "pnl": 0.0,
+                                     "pnl_at_100": 0.0, "contracts": 0})
+            g["count"] += 1
+            g["wins"] += 1 if b["result"] == "win" else 0
+            g["pnl"] += b.get("pnl", 0)
+            g["contracts"] += b.get("filled_count", b.get("contracts", 0)) or 0
+            p = b.get("fill_price") or b.get("price") or 0
+            if 0 < p < 1:
+                f100 = _bet_fee(b, 100, p)
+                g["pnl_at_100"] += (100 * (1 - p) - f100) if b["result"] == "win" \
+                    else (-100 * p - f100)
+        dip["grid_split"] = {k: {**v, "pnl": round(v["pnl"], 2),
+                                 "pnl_at_100": round(v["pnl_at_100"], 2),
+                                 "win_rate": round(v["wins"] / v["count"] * 100, 1)}
+                             for k, v in sorted(_grid.items())}
+
         dip["by_day_core"] = [
             {**e, "pnl": round(e["pnl"], 2), "pnl_at_100": round(e["pnl_at_100"], 2),
              "win_rate": round(e["wins"] / e["fills"] * 100, 1) if e["fills"] else 0}
