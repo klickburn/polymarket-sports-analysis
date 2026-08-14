@@ -873,9 +873,12 @@ def _build_scaling_performance(resolved, status=None):
         tiers = {}
         for b in dip_trades:
             _t = (b.get("dip_type") or "split")
-            # Core = ETH-yes only, same rule as the stats above, so the tier
-            # table and the core cards cannot disagree.
-            if _t == "core" and (b.get("side") or "").lower() != "yes":
+            # Core = ETH-yes only AND excluding fills whose window turned into
+            # a split, matching _core above exactly. Filtering on side alone left
+            # the tier row counting split_window fills the cards excluded, so the
+            # two views reported different totals for the same book.
+            if _t == "core" and ((b.get("side") or "").lower() != "yes"
+                                 or b.get("split_window")):
                 continue
             t = b.get("dip_tier") or f"{int(round(b.get('price', 0.10)*100))}c"
             if len(_types) > 1:
