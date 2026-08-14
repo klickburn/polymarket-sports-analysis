@@ -872,9 +872,14 @@ def _build_scaling_performance(resolved, status=None):
         _types = {(b.get("dip_type") or "split") for b in dip_trades}
         tiers = {}
         for b in dip_trades:
+            _t = (b.get("dip_type") or "split")
+            # Core = ETH-yes only, same rule as the stats above, so the tier
+            # table and the core cards cannot disagree.
+            if _t == "core" and (b.get("side") or "").lower() != "yes":
+                continue
             t = b.get("dip_tier") or f"{int(round(b.get('price', 0.10)*100))}c"
             if len(_types) > 1:
-                t = f"{t} {(b.get('dip_type') or 'split')}"
+                t = f"{t} {_t}"
             tiers.setdefault(t, []).append(b)
         def _tier_price(t):
             try:
@@ -963,11 +968,31 @@ def _build_scaling_performance(resolved, status=None):
             for e in sorted(_byday.values(), key=lambda x: x["day"], reverse=True)
         ]
 
+        # The core book is ETH-YES only. ETH-no was run briefly as a control,
+        # tested at ~breakeven and is now sized to 0; leaving its fills in the
+        # stats would blend a live position with an abandoned experiment.
+        _core = [b for b in dip_trades
+                 if b.get("dip_type") == "core"
+                 and (b.get("side") or "").lower() == "yes"
+                 and not b.get("split_window")]
         dip["streak"] = _streak([b for b in dip_trades
                                   if (b.get("dip_type") or "split") == "split"])
-        dip["streak_core"] = _streak([b for b in dip_trades
-                                      if b.get("dip_type") == "core"
-                                      and not b.get("split_window")])
+        dip["streak_core"] = _streak(_core)
+
+        _cbd = {}
+        for b in sorted(_core, key=lambda x: x.get("timestamp", "")):
+            k = b.get("timestamp", "")[:10]
+            e = _cbd.setdefault(k, {"day": k, "fills": 0, "wins": 0, "pnl": 0.0,
+                                    "contracts": 0})
+            e["fills"] += 1
+            e["wins"] += 1 if b["result"] == "win" else 0
+            e["pnl"] += b.get("pnl", 0)
+            e["contracts"] += b.get("filled_count", b.get("contracts", 0)) or 0
+        dip["by_day_core"] = [
+            {**e, "pnl": round(e["pnl"], 2),
+             "win_rate": round(e["wins"] / e["fills"] * 100, 1) if e["fills"] else 0}
+            for e in sorted(_cbd.values(), key=lambda x: x["day"], reverse=True)
+        ]
 
     # Protection status (persisted by the bot); only show for today
     trail = None

@@ -1205,6 +1205,37 @@ function renderScoreEmpty() {
 // Wins per day. The dip book is carried by a few outlier days, so the daily
 // column is the honest view — a headline win rate makes it look far steadier
 // than it is.
+// Core-dip daily table. Kept separate from the split one: the split table
+// carries a flat-100c column to make its 100 -> 25 sizing history comparable,
+// which is meaningless for a book that has only ever traded 1 then 25.
+function coreDailyTable(dip) {
+  const rows = dip.by_day_core || [];
+  if (!rows.length) return '';
+  const tot = rows.reduce((a, r) => a + r.pnl, 0);
+  const body = rows.map(r => {
+    const pc = r.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    const bar = '\u2588'.repeat(r.wins) || '\u00b7';
+    return `<tr><td>${r.day}</td><td>${r.fills}</td><td>${r.contracts || ''}</td>
+      <td>${r.wins}</td><td>${r.win_rate}%</td>
+      <td style="color:${pc}">$${r.pnl >= 0 ? '+' : ''}${r.pnl.toFixed(2)}</td>
+      <td style="color:var(--cyan,#06b6d4);letter-spacing:-1px">${bar}</td></tr>`;
+  }).join('');
+  const tr = `<tr style="border-top:2px solid var(--border);font-weight:700">
+      <td>TOTAL</td><td>${rows.reduce((a,r)=>a+r.fills,0)}</td>
+      <td>${rows.reduce((a,r)=>a+(r.contracts||0),0)}</td>
+      <td>${rows.reduce((a,r)=>a+r.wins,0)}</td><td></td>
+      <td style="color:${tot>=0?'var(--green)':'var(--red)'}">$${tot>=0?'+':''}${tot.toFixed(2)}</td>
+      <td></td></tr>`;
+  return `<div class="card" style="margin-top:14px">
+    <div style="font-size:13px;color:var(--muted);margin-bottom:10px">
+      <b>Core-dip wins by day</b> — ETH yes only. Size has changed (1 &rarr; 25), so the
+      contracts column is there to read P&L against.</div>
+    <div class="scroll-table" style="max-height:380px;overflow-y:auto"><table>
+      <thead><tr><th>Day</th><th>Fills</th><th>Contracts</th><th>Wins</th><th>Win%</th><th>P&L</th><th>Wins</th></tr></thead>
+      <tbody>${body}${tr}</tbody></table></div>
+  </div>`;
+}
+
 function dipDailyTable(dip) {
   const rows = dip.by_day || [];
   if (!rows.length) return '';
@@ -1328,7 +1359,7 @@ function renderDipAnalytics(dip) {
         <tr style="border-top:2px solid var(--border);font-weight:700"><td>TOTAL</td><td>${dip.count}</td><td>${dip.contracts||''}</td><td>${dip.win_rate}%</td><td>—</td><td>—</td><td style="color:${tc}">$${dip.pnl.toFixed(2)}</td><td></td></tr>
       </tbody></table></div>
     <div class="chart-container med" style="margin-top:14px"><canvas id="dipTierChart"></canvas></div>
-  </div>` + dipDailyTable(dip);
+  </div>` + dipDailyTable(dip) + coreDailyTable(dip);
   div.innerHTML = table;
 
   // ── Bar chart: win rate vs break-even per tier ──
