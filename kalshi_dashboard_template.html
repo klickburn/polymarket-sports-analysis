@@ -1215,23 +1215,29 @@ function coreDailyTable(dip) {
   const body = rows.map(r => {
     const pc = r.pnl >= 0 ? 'var(--green)' : 'var(--red)';
     const bar = '\u2588'.repeat(r.wins) || '\u00b7';
+    const p100 = r.pnl_at_100 || 0;
+    const pc100 = p100 >= 0 ? 'var(--green)' : 'var(--red)';
     return `<tr><td>${r.day}</td><td>${r.fills}</td><td>${r.contracts || ''}</td>
       <td>${r.wins}</td><td>${r.win_rate}%</td>
       <td style="color:${pc}">$${r.pnl >= 0 ? '+' : ''}${r.pnl.toFixed(2)}</td>
+      <td style="color:${pc100};opacity:.85">$${p100 >= 0 ? '+' : ''}${p100.toFixed(2)}</td>
       <td style="color:var(--cyan,#06b6d4);letter-spacing:-1px">${bar}</td></tr>`;
   }).join('');
+  const tot100 = rows.reduce((a, r) => a + (r.pnl_at_100 || 0), 0);
   const tr = `<tr style="border-top:2px solid var(--border);font-weight:700">
       <td>TOTAL</td><td>${rows.reduce((a,r)=>a+r.fills,0)}</td>
       <td>${rows.reduce((a,r)=>a+(r.contracts||0),0)}</td>
       <td>${rows.reduce((a,r)=>a+r.wins,0)}</td><td></td>
       <td style="color:${tot>=0?'var(--green)':'var(--red)'}">$${tot>=0?'+':''}${tot.toFixed(2)}</td>
+      <td style="color:${tot100>=0?'var(--green)':'var(--red)'}">$${tot100>=0?'+':''}${tot100.toFixed(2)}</td>
       <td></td></tr>`;
   return `<div class="card" style="margin-top:14px">
     <div style="font-size:13px;color:var(--muted);margin-bottom:10px">
-      <b>Core-dip wins by day</b> — ETH yes only. Size has changed (1 &rarr; 25), so the
-      contracts column is there to read P&L against.</div>
+      <b>Core-dip wins by day</b> — ETH yes only. Size has changed (1 &rarr; 25), so read the
+      as-traded column against contracts; <b>P&L @100c</b> reprices at a flat 100 so this book
+      is directly comparable with the split table above.</div>
     <div class="scroll-table" style="max-height:380px;overflow-y:auto"><table>
-      <thead><tr><th>Day</th><th>Fills</th><th>Contracts</th><th>Wins</th><th>Win%</th><th>P&L</th><th>Wins</th></tr></thead>
+      <thead><tr><th>Day</th><th>Fills</th><th>Contracts</th><th>Wins</th><th>Win%</th><th>P&L (as traded)</th><th>P&L @100c</th><th>Wins</th></tr></thead>
       <tbody>${body}${tr}</tbody></table></div>
   </div>`;
 }

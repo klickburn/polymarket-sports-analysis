@@ -983,13 +983,20 @@ def _build_scaling_performance(resolved, status=None):
         for b in sorted(_core, key=lambda x: x.get("timestamp", "")):
             k = b.get("timestamp", "")[:10]
             e = _cbd.setdefault(k, {"day": k, "fills": 0, "wins": 0, "pnl": 0.0,
-                                    "contracts": 0})
+                                    "contracts": 0, "pnl_at_100": 0.0})
             e["fills"] += 1
             e["wins"] += 1 if b["result"] == "win" else 0
             e["pnl"] += b.get("pnl", 0)
             e["contracts"] += b.get("filled_count", b.get("contracts", 0)) or 0
+            # Same flat-100c repricing the split table uses, so the two books can
+            # be read against each other despite different live sizes.
+            p = b.get("fill_price") or b.get("price") or 0
+            if 0 < p < 1:
+                f100 = _bet_fee(b, 100, p)
+                e["pnl_at_100"] += (100 * (1 - p) - f100) if b["result"] == "win" \
+                    else (-100 * p - f100)
         dip["by_day_core"] = [
-            {**e, "pnl": round(e["pnl"], 2),
+            {**e, "pnl": round(e["pnl"], 2), "pnl_at_100": round(e["pnl_at_100"], 2),
              "win_rate": round(e["wins"] / e["fills"] * 100, 1) if e["fills"] else 0}
             for e in sorted(_cbd.values(), key=lambda x: x["day"], reverse=True)
         ]
