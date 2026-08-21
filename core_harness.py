@@ -47,6 +47,12 @@ CFG = {
     "wr_cap_n": 150, "wr_cap": 0.75,          # 0 disables
     "wr_boost_n": 100, "wr_boost_lo": 0.55,
     "wr_boost_hi": 0.70, "wr_boost_mult": 2.0,  # <=1 disables
+    # Burst: when the trailing burst_n core results are >= burst_thr, the next
+    # burst_m WINDOWS trade at burst_size, overriding every other rule.
+    # Counted in windows, not trades: both legs of a window settle together, so
+    # consuming the counter leg-by-leg would make the result depend on which leg
+    # the poll saw first (measured: a $340 swing on an arbitrary tiebreak).
+    "burst_n": 0, "burst_thr": 1.0, "burst_m": 0, "burst_size": 30,
 }
 
 
@@ -127,6 +133,7 @@ def run(windows, cfg=None, size_only=False, trace=None):
     grp_hist = {g: [] for g in groups}      # resolved wins per group, in order
     core_hist = []                          # resolved wins, all core, in order
     day_windows = defaultdict(list)         # day -> list of consumed windows (bools)
+    burst_left = 0                          # windows remaining in the current burst
 
     total = 0.0
     peak = 0.0
@@ -151,12 +158,36 @@ def run(windows, cfg=None, size_only=False, trace=None):
         cool_wr = _wr(core_hist, c["cool_off_window"])
         wr_cap_val = _wr(core_hist, c["wr_cap_n"])
         wr_boost_val = _wr(core_hist, c["wr_boost_n"])
+        # Burst arming reads ONLY pre-window history, same as every other rule.
+        if c["burst_n"] and c["burst_m"] and burst_left <= 0:
+            bv = _wr(core_hist, c["burst_n"])
+            if bv is not None and bv >= c["burst_thr"]:
+                burst_left = c["burst_m"]
+        in_burst = burst_left > 0
+        if in_burst:
+            burst_left -= 1
         # split window = both cryptos, opposite sides, same window
         cryptos = {b["crypto"] for b in legs}
         sides = {b["side"] for b in legs}
         is_split = len(cryptos) > 1 and len(sides) > 1
 
         for i, b in enumerate(legs):
+            if in_burst:
+                n = c["burst_size"]
+                reason = "burst"
+                clip_counts[reason] += 1
+                sizes.append(n)
+                if trace is not None:
+                    trace[(b["timestamp"], b["crypto"], b["side"])] = (n, reason)
+                if not size_only:
+                    px = b["_px"]
+                    f = fee(n, px)
+                    pnl = (n * (1 - px) - f) if b["_win"] else (-n * px - f)
+                    total += pnl
+                    by_day[day] += pnl
+                    peak = max(peak, total)
+                    dd = min(dd, total - peak)
+                continue
             sig = b["_sig"]
             # -- group scale --
             gname = next((g for g, cf in groups.items() if sig in cf["signals"]), None)
