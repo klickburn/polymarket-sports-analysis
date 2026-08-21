@@ -53,6 +53,9 @@ CFG = {
     # consuming the counter leg-by-leg would make the result depend on which leg
     # the poll saw first (measured: a $340 swing on an arbitrary tiebreak).
     "burst_n": 0, "burst_thr": 1.0, "burst_m": 0, "burst_size": 30,
+    # burst_boost: let the WR boost stack on top of burst_size instead of the
+    # burst flatly overriding it (30 -> 30 * wr_boost_mult inside the boost band).
+    "burst_boost": False,
 }
 
 
@@ -175,6 +178,10 @@ def run(windows, cfg=None, size_only=False, trace=None):
             if in_burst:
                 n = c["burst_size"]
                 reason = "burst"
+                if c["burst_boost"] and c["wr_boost_mult"] > 1 and wr_boost_val is not None \
+                   and c["wr_boost_lo"] <= wr_boost_val <= c["wr_boost_hi"]:
+                    n = max(1, int(round(n * c["wr_boost_mult"])))
+                    reason = "burst_boost"
                 clip_counts[reason] += 1
                 sizes.append(n)
                 if trace is not None:
