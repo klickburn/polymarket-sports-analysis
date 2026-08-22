@@ -912,9 +912,17 @@ def _place_core_dips(bets, window_end_iso):
     price for a real-fill answer on every cell. CORE_DIP_ENABLED=0 reverts."""
     if not CORE_DIP_ENABLED:
         return False
-    if any(b.get("dip_add") and b.get("dip_type") == "core"
-           and b.get("window_end") == window_end_iso for b in bets):
-        return True                      # already placed for this window
+    # Per-CRYPTO, not per-window. The two legs of a window routinely arrive in
+    # different polls (measured 22s apart), so latching the whole window on the
+    # first placement meant a later-arriving leg never got a dip at all. BTC
+    # would then only be sampled in windows where BTC happened to enter first,
+    # which is not a random subset -- it would bias the four-cell comparison the
+    # flat 1-contract run exists to make.
+    done = {b.get("crypto") for b in bets
+            if b.get("dip_add") and b.get("dip_type") == "core"
+            and b.get("window_end") == window_end_iso}
+    if done >= set(CORE_DIP_CRYPTOS):
+        return True                      # every configured cell already covered
     wtr = {}
     for b in bets:
         if (b.get("action") == "trade" and b.get("crypto") in ("BTC", "ETH")
@@ -939,8 +947,9 @@ def _place_core_dips(bets, window_end_iso):
         sides = [wtr["BTC"].get("side"), wtr["ETH"].get("side")]
         if all(sides) and sides[0] != sides[1]:
             return False
-    placed = False
     for cr in CORE_DIP_CRYPTOS:
+        if cr in done:
+            continue                     # already rested for this cell
         b = wtr.get(cr)
         if not b or not b.get("side"):
             continue
@@ -962,11 +971,16 @@ def _place_core_dips(bets, window_end_iso):
                 "indicators": b.get("indicators"),
             })
             save_bets(bets)
-            placed = True
+            done.add(cr)
             P(f"  [CORE-DIP] {cr} {b['side']} — rested {_n}x @ "
               f"{CORE_DIP_PRICE*100:.0f}c (non-split window)")
         time.sleep(0.25)
-    return placed
+    # Latch the window only when every configured cell is covered. Returning
+    # True as soon as ANYTHING was placed is what stranded the second leg: the
+    # caller set core_dips_done_this_window and never called again. A crypto
+    # that never trades this window simply keeps this False, which costs one
+    # cheap re-check per poll until the window rolls.
+    return done >= set(CORE_DIP_CRYPTOS)
 
 
 def _is_split_leg(bets, trade_queue, crypto, side, window_end_iso):
@@ -2361,6 +2375,9 @@ def run(live=False):
                     dips_done_this_window = True
             # Core dips cover the NON-split windows the rule above skips, so it
             # runs independently of dips_done_this_window (which tracks splits).
+            # _place_core_dips returns True only once every configured crypto
+            # has a dip (or the window is a split, which is the split rule's
+            # territory), so a leg that shows up in a later poll still gets one.
             if CORE_DIP_ENABLED and not core_dips_done_this_window:
                 if _place_core_dips(bets, window_end.isoformat()):
                     core_dips_done_this_window = True
