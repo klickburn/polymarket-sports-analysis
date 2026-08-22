@@ -1310,11 +1310,64 @@ def _build_score_report(bets, status, balance_info=None):
                 by_crypto[c]["skip_would_lost"] += 1
             by_crypto[c]["skip_hypothetical_pnl"] += b.get("hypothetical_pnl", 0)
 
+    # ── Monthly P&L ────────────────────────────────────────────────────
+    # Split by book, because the three do not move together: core is a sizing
+    # strategy, split dips are a handful of big days, core dips are a flat
+    # 1-contract probe. A single monthly number hides which one changed.
+    # Phantom P&L is carried in its own column and never added to the total --
+    # same rule as the headline, since that money was never ordered.
+    _months = {}
+    def _m(ts):
+        return (ts or "")[:7]
+    for b in resolved_all:
+        k = _m(b.get("timestamp"))
+        if not k:
+            continue
+        e = _months.setdefault(k, {"month": k, "core_pnl": 0.0, "split_dip_pnl": 0.0,
+                                   "core_dip_pnl": 0.0, "phantom_pnl": 0.0,
+                                   "core_fills": 0, "core_wins": 0, "dip_fills": 0,
+                                   "dip_wins": 0, "days": set()})
+        e["days"].add((b.get("timestamp") or "")[:10])
+        won = b.get("result") == "win"
+        pnl = b.get("pnl", 0)
+        if b.get("phantom"):
+            e["phantom_pnl"] += pnl
+        if b.get("dip_add"):
+            e["dip_fills"] += 1
+            e["dip_wins"] += 1 if won else 0
+            if not b.get("phantom"):
+                if b.get("dip_type") == "core":
+                    e["core_dip_pnl"] += pnl
+                else:
+                    e["split_dip_pnl"] += pnl
+        else:
+            e["core_fills"] += 1
+            e["core_wins"] += 1 if won else 0
+            if not b.get("phantom"):
+                e["core_pnl"] += pnl
+    monthly = []
+    for e in sorted(_months.values(), key=lambda x: x["month"], reverse=True):
+        tot = e["core_pnl"] + e["split_dip_pnl"] + e["core_dip_pnl"]
+        monthly.append({
+            "month": e["month"], "days": len(e["days"]),
+            "core_pnl": round(e["core_pnl"], 2),
+            "split_dip_pnl": round(e["split_dip_pnl"], 2),
+            "core_dip_pnl": round(e["core_dip_pnl"], 2),
+            "phantom_pnl": round(e["phantom_pnl"], 2),
+            "total_pnl": round(tot, 2),
+            "per_day": round(tot / len(e["days"]), 2) if e["days"] else 0,
+            "core_fills": e["core_fills"], "core_wins": e["core_wins"],
+            "core_wr": round(e["core_wins"] / e["core_fills"] * 100, 1) if e["core_fills"] else 0,
+            "dip_fills": e["dip_fills"], "dip_wins": e["dip_wins"],
+            "dip_wr": round(e["dip_wins"] / e["dip_fills"] * 100, 1) if e["dip_fills"] else 0,
+        })
+
     # ── Scaling performance breakdown ──────────────────────────────────
     scaling_perf = _build_scaling_performance(resolved_all, status)
     trail_compare = _build_trail_compare(bets)
 
     return {
+        "monthly": monthly,
         "total_trades": len(trades),
         "total_skips": len(skips),
         "resolved": len(resolved),

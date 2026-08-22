@@ -509,6 +509,7 @@
 <!-- ═══════════════════ SCORE BOT SECTION ═══════════════════ -->
 <div class="mode-section active" id="sectionScore">
   <div class="kpi-row" id="scoreKpis"></div>
+  <div id="monthlyPnl"></div>
 
   <!-- Hero charts -->
   <div class="grid-2">
@@ -1366,6 +1367,50 @@ function dipDailyTable(dip) {
   </div>`;
 }
 
+// Monthly P&L, split by book. The three do not move together -- core is a
+// sizing strategy, split dips are carried by a handful of outlier days, core
+// dips are a flat 1-contract probe -- so one blended monthly number hides which
+// one actually changed. Phantom sits in its own column and is never added in:
+// that money was recorded but never ordered.
+function renderMonthlyPnl(d) {
+  const el = document.getElementById('monthlyPnl');
+  if (!el) return;
+  const rows = d.monthly || [];
+  if (!rows.length) { el.innerHTML = ''; return; }
+  const money = v => {
+    const c = v > 0 ? 'var(--green)' : (v < 0 ? 'var(--red)' : 'var(--muted)');
+    return `<td style="color:${c}">${v >= 0 ? '+' : '-'}$${Math.abs(v).toFixed(2)}</td>`;
+  };
+  const name = m => {
+    const [y, mo] = m.split('-');
+    return new Date(+y, +mo - 1, 1).toLocaleString('en-US', { month: 'short' }) + ' ' + y;
+  };
+  let t = { core: 0, sd: 0, cd: 0, ph: 0, tot: 0, days: 0 };
+  const body = rows.map(r => {
+    t.core += r.core_pnl; t.sd += r.split_dip_pnl; t.cd += r.core_dip_pnl;
+    t.ph += r.phantom_pnl; t.tot += r.total_pnl; t.days += r.days;
+    return `<tr><td><b>${name(r.month)}</b></td><td>${r.days}</td>
+      ${money(r.core_pnl)}${money(r.split_dip_pnl)}${money(r.core_dip_pnl)}
+      ${money(r.total_pnl)}${money(r.per_day)}
+      <td style="opacity:.65">${r.phantom_pnl >= 0 ? '+' : '-'}$${Math.abs(r.phantom_pnl).toFixed(2)}</td>
+      <td style="opacity:.8">${r.core_wr}%</td></tr>`;
+  }).join('');
+  const pd = t.days ? t.tot / t.days : 0;
+  const tr = `<tr style="border-top:2px solid var(--border);font-weight:700">
+    <td>ALL</td><td>${t.days}</td>${money(t.core)}${money(t.sd)}${money(t.cd)}${money(t.tot)}${money(pd)}
+    <td style="opacity:.65">${t.ph >= 0 ? '+' : '-'}$${Math.abs(t.ph).toFixed(2)}</td><td></td></tr>`;
+  el.innerHTML = `<div class="card" style="margin-bottom:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <h3 style="margin:0">Monthly P&L</h3>
+      <div style="font-size:12px;color:var(--muted)">real money only — phantom shown separately, never added in</div>
+    </div>
+    <div class="scroll-table"><table>
+      <thead><tr><th>Month</th><th>Days</th><th>Core</th><th>Split dips</th><th>Core dips</th>
+        <th>Total</th><th>Per day</th><th>Phantom</th><th>Core WR</th></tr></thead>
+      <tbody>${body}${tr}</tbody></table></div>
+  </div>`;
+}
+
 function renderDipAnalytics(dip) {
   const div = document.getElementById('dipAnalyticsContent');
   const hdr = document.getElementById('dipSectionHeader');
@@ -1572,6 +1617,7 @@ function renderScoreBot() {
   document.getElementById('scoreKpis').innerHTML = kpis.map(k =>
     `<div class="kpi"><div class="label">${k.label}</div><div class="value ${k.cls}">${k.value}</div><div class="sub">${k.sub}</div></div>`
   ).join('');
+  renderMonthlyPnl(d);
 
   // Cumulative P&L chart — with time filters
   const _allScoreTrades = (d.recent_bets || []).filter(b => b.action === 'trade' && (b.result === 'win' || b.result === 'loss') && !b.dip_add);
