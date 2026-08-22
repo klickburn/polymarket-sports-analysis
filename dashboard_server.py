@@ -873,12 +873,11 @@ def _build_scaling_performance(resolved, status=None):
         tiers = {}
         for b in dip_trades:
             _t = (b.get("dip_type") or "split")
-            # Core = ETH-yes only AND excluding fills whose window turned into
-            # a split, matching _core above exactly. Filtering on side alone left
-            # the tier row counting split_window fills the cards excluded, so the
-            # two views reported different totals for the same book.
-            if _t == "core" and ((b.get("side") or "").lower() != "yes"
-                                 or b.get("split_window")):
+            # Core = all four cells now, but still excluding fills whose window
+            # turned into a split, matching _core below exactly. When the two
+            # views disagreed before it was because the tier row kept
+            # split_window fills that the cards dropped.
+            if _t == "core" and b.get("split_window"):
                 continue
             t = b.get("dip_tier") or f"{int(round(b.get('price', 0.10)*100))}c"
             if len(_types) > 1:
@@ -971,12 +970,11 @@ def _build_scaling_performance(resolved, status=None):
             for e in sorted(_byday.values(), key=lambda x: x["day"], reverse=True)
         ]
 
-        # The core book is ETH-YES only. ETH-no was run briefly as a control,
-        # tested at ~breakeven and is now sized to 0; leaving its fills in the
-        # stats would blend a live position with an abandoned experiment.
+        # The core book is all four cells (BTC yes/no, ETH yes/no) flat at 1
+        # contract. split_window fills are still excluded: those were topped up
+        # by the split tier, so their size and P&L belong to that book.
         _core = [b for b in dip_trades
                  if b.get("dip_type") == "core"
-                 and (b.get("side") or "").lower() == "yes"
                  and not b.get("split_window")]
         dip["streak"] = _streak([b for b in dip_trades
                                   if (b.get("dip_type") or "split") == "split"])
@@ -1019,6 +1017,28 @@ def _build_scaling_performance(resolved, status=None):
                                  "pnl_at_100": round(v["pnl_at_100"], 2),
                                  "win_rate": round(v["wins"] / v["count"] * 100, 1)}
                              for k, v in sorted(_grid.items())}
+
+        # Core book by crypto x side -- the whole point of running all four flat.
+        # Every cell is 1 contract, so as-traded P&L is already comparable; the
+        # @100c column is kept so core cells can be read against the split grid.
+        _cg = {}
+        for b in _core:
+            k = f"{b.get('crypto')} {b.get('side')}"
+            g = _cg.setdefault(k, {"count": 0, "wins": 0, "pnl": 0.0,
+                                   "pnl_at_100": 0.0, "contracts": 0})
+            g["count"] += 1
+            g["wins"] += 1 if b["result"] == "win" else 0
+            g["pnl"] += b.get("pnl", 0)
+            g["contracts"] += b.get("filled_count", b.get("contracts", 0)) or 0
+            p = b.get("fill_price") or b.get("price") or 0
+            if 0 < p < 1:
+                f100 = _bet_fee(b, 100, p)
+                g["pnl_at_100"] += (100 * (1 - p) - f100) if b["result"] == "win" \
+                    else (-100 * p - f100)
+        dip["grid_core"] = {k: {**v, "pnl": round(v["pnl"], 2),
+                                "pnl_at_100": round(v["pnl_at_100"], 2),
+                                "win_rate": round(v["wins"] / v["count"] * 100, 1)}
+                            for k, v in sorted(_cg.items())}
 
         dip["by_day_core"] = [
             {**e, "pnl": round(e["pnl"], 2), "pnl_at_100": round(e["pnl_at_100"], 2),

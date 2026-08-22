@@ -146,17 +146,19 @@ SPLIT_DIP_TIERS = [(SPLIT_DIP_PRICE, SPLIT_DIP_COUNT)] + _parse_tiers(_extra)
 # ── Core dips: the same 10c recovery bet on NON-split windows ────────────
 # Split dips only ever covered windows where BTC and ETH took opposite sides.
 # A candlestick replay showed the other ~85% of windows are the larger and (for
-# ETH-yes) stronger population. Starting at 1 contract on both ETH sides as a
-# live A/B; CORE_DIP_ENABLED=0 turns it off with no redeploy.
+# ETH-yes) stronger population. Now running all four cells -- BTC yes/no and
+# ETH yes/no -- flat at 1 contract each, so every cell generates real fills
+# instead of only the one the simulation liked. Sizing follows later, once the
+# live win rates say which cells deserve it. CORE_DIP_ENABLED=0 turns it off.
 CORE_DIP_ENABLED = os.environ.get("CORE_DIP_ENABLED", "0") == "1"
 CORE_DIP_PRICE = float(os.environ.get("CORE_DIP_PRICE", "0.10"))
 CORE_DIP_COUNT = int(os.environ.get("CORE_DIP_COUNT", "1"))
 CORE_DIP_CRYPTOS = [c.strip().upper() for c in
-                    os.environ.get("CORE_DIP_CRYPTOS", "ETH").split(",") if c.strip()]
-# Per-side size override, "yes:25,no:1". The candlestick study put ETH-yes at
-# 25.4% recovery against ~10% for every other cell, so the two sides are being
-# run at different sizes: yes as the position, no as a 1-contract control that
-# still generates data. Falls back to CORE_DIP_COUNT for any side not listed.
+                    os.environ.get("CORE_DIP_CRYPTOS", "BTC,ETH").split(",") if c.strip()]
+# Per-side size override, "yes:25,no:1". Empty by default: every cell runs flat
+# at CORE_DIP_COUNT so the four books stay comparable. Set it only to promote a
+# cell once its live fills justify the size. Falls back to CORE_DIP_COUNT for
+# any side not listed.
 def _parse_side_sizes(sv):
     out = {}
     for part in (sv or "").split(","):
@@ -904,9 +906,10 @@ def _place_core_dips(bets, window_end_iso):
     overall and 0.1pp on the ETH-yes cell, and the dip candles carry real
     volume (median ~12.6k contracts, zero phantom prints).
 
-    Starting at 1 contract on BOTH ETH sides: the no-side is expected to be a
-    coin flip, but running it alongside gives a real-fill A/B rather than
-    trusting the simulation's side split. CORE_DIP_ENABLED=0 reverts."""
+    Running all four cells flat at 1 contract rather than only ETH-yes: the
+    other three are expected to be coin flips, but a simulation that reproduces
+    the split book to 0.6pp is still a simulation, and 1 contract is a cheap
+    price for a real-fill answer on every cell. CORE_DIP_ENABLED=0 reverts."""
     if not CORE_DIP_ENABLED:
         return False
     if any(b.get("dip_add") and b.get("dip_type") == "core"

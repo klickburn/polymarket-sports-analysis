@@ -1246,6 +1246,45 @@ function splitGridTable(dip) {
   </div>`;
 }
 
+// Core book by crypto x side. All four cells run flat at 1 contract, so unlike
+// the split grid the as-traded column is already apples-to-apples; @100c is
+// carried only so the two grids can be read against each other. Break-even is
+// 10% -- the simulation put ETH-yes at 25.4% and the other three near 10%, and
+// this table is what settles that with real fills.
+function coreGridTable(dip) {
+  const g = dip.grid_core || {};
+  const keys = Object.keys(g);
+  if (!keys.length) return '';
+  let tw = 0, tn = 0, tp = 0, t1 = 0;
+  const body = keys.map(k => {
+    const r = g[k];
+    tw += r.wins; tn += r.count; tp += r.pnl; t1 += (r.pnl_at_100 || 0);
+    const pc = r.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    const p1 = r.pnl_at_100 || 0;
+    const pc1 = p1 >= 0 ? 'var(--green)' : 'var(--red)';
+    const ec = (r.win_rate - 10) >= 0 ? 'var(--green)' : 'var(--red)';
+    return `<tr><td>${k}</td><td>${r.count}</td><td>${r.contracts || ''}</td><td>${r.wins}</td>
+      <td>${r.win_rate}%</td>
+      <td style="color:${ec}">${(r.win_rate - 10) >= 0 ? '+' : ''}${(r.win_rate - 10).toFixed(1)}pp</td>
+      <td style="color:${pc}">$${r.pnl >= 0 ? '+' : ''}${r.pnl.toFixed(2)}</td>
+      <td style="color:${pc1};opacity:.85">$${p1 >= 0 ? '+' : ''}${p1.toFixed(2)}</td></tr>`;
+  }).join('');
+  const tr = `<tr style="border-top:2px solid var(--border);font-weight:700">
+    <td>TOTAL</td><td>${tn}</td><td></td><td>${tw}</td>
+    <td>${tn ? (tw / tn * 100).toFixed(1) : 0}%</td><td></td>
+    <td style="color:${tp>=0?'var(--green)':'var(--red)'}">$${tp>=0?'+':''}${tp.toFixed(2)}</td>
+    <td style="color:${t1>=0?'var(--green)':'var(--red)'}">$${t1>=0?'+':''}${t1.toFixed(2)}</td></tr>`;
+  return `<div class="card" style="margin-top:14px">
+    <div style="font-size:13px;color:var(--muted);margin-bottom:10px">
+      <b>Core dips by crypto &amp; side</b> — break-even is 10%. All four cells run flat at
+      1 contract, so <b>P&L (as traded)</b> compares directly; the simulation predicted
+      ETH-yes ~25% and the other three ~10%, and these fills are the live check on that.</div>
+    <div class="scroll-table"><table>
+      <thead><tr><th>Market</th><th>Fills</th><th>Contracts</th><th>Wins</th><th>Win%</th><th>Edge</th><th>P&L (as traded)</th><th>P&L @100c</th></tr></thead>
+      <tbody>${body}${tr}</tbody></table></div>
+  </div>`;
+}
+
 function coreDailyTable(dip) {
   const rows = dip.by_day_core || [];
   if (!rows.length) return '';
@@ -1403,7 +1442,7 @@ function renderDipAnalytics(dip) {
         <tr style="border-top:2px solid var(--border);font-weight:700"><td>TOTAL</td><td>${dip.count}</td><td>${dip.contracts||''}</td><td>${dip.win_rate}%</td><td>—</td><td>—</td><td style="color:${tc}">$${dip.pnl.toFixed(2)}</td><td></td></tr>
       </tbody></table></div>
     <div class="chart-container med" style="margin-top:14px"><canvas id="dipTierChart"></canvas></div>
-  </div>` + splitGridTable(dip) + dipDailyTable(dip) + coreDailyTable(dip);
+  </div>` + splitGridTable(dip) + dipDailyTable(dip) + coreGridTable(dip) + coreDailyTable(dip);
   div.innerHTML = table;
 
   // ── Bar chart: win rate vs break-even per tier ──
