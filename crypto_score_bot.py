@@ -172,6 +172,13 @@ def _parse_side_sizes(sv):
             pass
     return out
 CORE_DIP_SIDE_SIZES = _parse_side_sizes(os.environ.get("CORE_DIP_SIDE_SIZES", ""))
+# When a window reveals itself as a split AFTER a core dip is already resting,
+# CORE_DIP_ABSORB=1 hands the contracts to the split tier (tags them
+# split_window and shortens the top-up). Default 0: the core dip stays a core
+# dip and the split tier rests its full size on top. Absorbing made sense while
+# core was 25 contracts against a 100 split; at 1 contract it costs the core
+# experiment ~18% of its fills to save 1% of split size.
+CORE_DIP_ABSORB = os.environ.get("CORE_DIP_ABSORB", "0") == "1"
 
 
 def _core_dip_size(side):
@@ -872,7 +879,16 @@ def _absorb_core_dips(bets, window_end_iso):
         at the intended size rather than core + split stacked on top.
 
     Nothing is deleted and no API call can fail: worst case the top-up is short
-    by the core amount, never long."""
+    by the core amount, never long.
+
+    Only when CORE_DIP_ABSORB=1. By default the core dip is left alone: it keeps
+    its own identity, stays in the core-dip book, and the split tier rests its
+    full size on top. The window then carries CORE_DIP_COUNT extra contracts at
+    the 10c tier -- 1 on top of 100 today. Handing the trade to the split book
+    was worth it when core rested 25; at 1 contract it costs the core experiment
+    roughly 18% of its fills to save 1% of split size. `became_split` is still
+    recorded either way so these windows stay findable, but nothing filters on
+    it."""
     absorbed = defaultdict(int)
     touched = 0
     for b in bets:
@@ -881,14 +897,21 @@ def _absorb_core_dips(bets, window_end_iso):
             continue
         if b.get("result") in ("dip_expired", "unfilled"):
             continue                      # never made it to the book
-        if not b.get("split_window"):
-            b["split_window"] = True
+        if not b.get("became_split"):
+            b["became_split"] = True      # informational; nothing filters on it
             touched += 1
-        absorbed[(b.get("crypto"), b.get("side"))] += (b.get("contracts") or 0)
+        if CORE_DIP_ABSORB:
+            if not b.get("split_window"):
+                b["split_window"] = True  # the tag the core book excludes on
+            absorbed[(b.get("crypto"), b.get("side"))] += (b.get("contracts") or 0)
     if touched:
         save_bets(bets)
-        P(f"  [CORE-DIP] window became a split — tagged {touched} core dip(s) "
-          f"split_window; split tier will top up the remainder")
+        if CORE_DIP_ABSORB:
+            P(f"  [CORE-DIP] window became a split — tagged {touched} core dip(s) "
+              f"split_window; split tier will top up the remainder")
+        else:
+            P(f"  [CORE-DIP] window became a split — keeping {touched} core dip(s) "
+              f"as core; split tier rests its full size on top")
     return absorbed
 
 
