@@ -774,6 +774,29 @@ def compute_score(sym, side, price, indicators):
 
 
 # ── Take profit ────────────────────────────────────────────────────────
+# Kalshi splits markets across exchanges and the V2 order endpoint resolves the
+# ticker WITHIN the exchange named by exchange_index -- omit it and you get a
+# 404 market_not_found for a market that GET /markets happily returns. The 15m
+# crypto series moved to exchange_index 2 on 2026-08-25; it is read from the
+# market rather than hardcoded so a future move needs no code change.
+_XIDX_CACHE = {}
+
+
+def _exchange_index(ticker):
+    """exchange_index for a ticker, or None if it cannot be determined."""
+    if ticker in _XIDX_CACHE:
+        return _XIDX_CACHE[ticker]
+    xi = None
+    try:
+        m = (public_get(f"/markets/{ticker}") or {}).get("market") or {}
+        xi = m.get("exchange_index")
+    except Exception as e:
+        P(f"    [XIDX] lookup failed for {ticker}: {e}")
+    if xi is not None:
+        _XIDX_CACHE[ticker] = xi
+    return xi
+
+
 def place_dip_order(ticker, side, count, dip_price):
     """Rest a limit BUY of `count` contracts of `side` at `dip_price` (fills at
     that price or cheaper). Bounded-risk contrarian add for split windows."""
@@ -792,9 +815,12 @@ def place_dip_order(ticker, side, count, dip_price):
         "self_trade_prevention_type": "taker_at_cross",
         "client_order_id": str(uuid.uuid4()),
     }
+    _xi = _exchange_index(ticker)
+    if _xi is not None:
+        order["exchange_index"] = _xi
     try:
         P(f"    [DIP] resting BUY {count} {side.upper()} @ {dip_price*100:.0f}c ({ticker})")
-        result = auth_post("/portfolio/orders", data=order)
+        result = auth_post("/portfolio/events/orders", data=order)
         oid = result.get("order_id", "")
         return oid or None
     except Exception as e:
@@ -1045,9 +1071,12 @@ def place_take_profit(ticker, side, count):
         "self_trade_prevention_type": "taker_at_cross",
         "client_order_id": str(uuid.uuid4()),
     }
+    _xi = _exchange_index(ticker)
+    if _xi is not None:
+        order["exchange_index"] = _xi
     try:
         P(f"    Take-profit: SELL {count} @ {tp_cents}c ({side.upper()})")
-        result = auth_post("/portfolio/orders", data=order)
+        result = auth_post("/portfolio/events/orders", data=order)
         order_id = result.get("order_id", "")
         P(f"    TP order {order_id}: placed")
         return {"order": {"order_id": order_id, "status": "resting"}}
