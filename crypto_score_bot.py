@@ -794,7 +794,7 @@ def place_dip_order(ticker, side, count, dip_price):
     }
     try:
         P(f"    [DIP] resting BUY {count} {side.upper()} @ {dip_price*100:.0f}c ({ticker})")
-        result = auth_post("/portfolio/events/orders", data=order)
+        result = auth_post("/portfolio/orders", data=order)
         oid = result.get("order_id", "")
         return oid or None
     except Exception as e:
@@ -1047,7 +1047,7 @@ def place_take_profit(ticker, side, count):
     }
     try:
         P(f"    Take-profit: SELL {count} @ {tp_cents}c ({side.upper()})")
-        result = auth_post("/portfolio/events/orders", data=order)
+        result = auth_post("/portfolio/orders", data=order)
         order_id = result.get("order_id", "")
         P(f"    TP order {order_id}: placed")
         return {"order": {"order_id": order_id, "status": "resting"}}
@@ -2454,13 +2454,13 @@ def run(live=False):
                         else:
                             P(f"    {po['crypto']}: Unfilled (status={check_status}), canceling order {po['order_id']}...")
                             try:
-                                cancel_resp = auth_delete(f"/portfolio/events/orders/{po['order_id']}")
+                                cancel_resp = auth_delete(f"/portfolio/orders/{po['order_id']}")
                                 P(f"    {po['crypto']}: Canceled (reduced_by={cancel_resp.get('reduced_by', '?')})")
                             except Exception as ce:
                                 P(f"    {po['crypto']}: Cancel error: {ce}")
                                 try:
                                     time.sleep(1)
-                                    cancel_resp = auth_delete(f"/portfolio/events/orders/{po['order_id']}")
+                                    cancel_resp = auth_delete(f"/portfolio/orders/{po['order_id']}")
                                     P(f"    {po['crypto']}: Cancel retry ok")
                                 except Exception as ce2:
                                     P(f"    {po['crypto']}: Cancel retry also failed: {ce2}")
