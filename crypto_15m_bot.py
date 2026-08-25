@@ -198,11 +198,11 @@ def auth_post(path, data=None):
     return r.json()
 
 
-def auth_delete(path):
+def auth_delete(path, params=None):
     url = f"{API_BASE}{path}"
     full_path = f"/trade-api/v2{path}"
-    headers = auth_headers("DELETE", full_path)
-    r = session.delete(url, headers=headers, timeout=30)
+    headers = auth_headers("DELETE", full_path)   # signature covers the path only
+    r = session.delete(url, headers=headers, params=params, timeout=30)
     r.raise_for_status()
     return r.json()
 
@@ -293,6 +293,11 @@ def place_order(ticker, side, price_dollars, amount_dollars, count=None):
         "time_in_force": "good_till_canceled",
         "self_trade_prevention_type": "taker_at_cross",
         "client_order_id": str(uuid.uuid4()),
+        # -1 = auto-route to whichever shard holds this ticker. Required, despite
+        # the docs saying omission auto-routes -- omitting it really resolves
+        # against shard 0 and 404s for anything else. Auto-routed writes also use
+        # the unscoped rate budget, where a pinned nonzero shard uses a per-shard one.
+        "exchange_index": -1,
     }
 
     try:

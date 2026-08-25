@@ -797,6 +797,19 @@ def _exchange_index(ticker):
     return xi
 
 
+def _cancel_order(order_id, ticker=None):
+    """Cancel via the V2 endpoint, routed to the shard holding the order.
+
+    exchange_index is required here too, and -1 is NOT usable: the API answers
+    market_ticker_is_required_when_exchange_index=-1. So resolve the real shard
+    from the ticker and pass that."""
+    params = {}
+    xi = _exchange_index(ticker) if ticker else None
+    if xi is not None:
+        params["exchange_index"] = xi
+    return auth_delete(f"/portfolio/events/orders/{order_id}", params=params or None)
+
+
 def place_dip_order(ticker, side, count, dip_price):
     """Rest a limit BUY of `count` contracts of `side` at `dip_price` (fills at
     that price or cheaper). Bounded-risk contrarian add for split windows."""
@@ -815,9 +828,7 @@ def place_dip_order(ticker, side, count, dip_price):
         "self_trade_prevention_type": "taker_at_cross",
         "client_order_id": str(uuid.uuid4()),
     }
-    _xi = _exchange_index(ticker)
-    if _xi is not None:
-        order["exchange_index"] = _xi
+    order["exchange_index"] = -1          # auto-route; see place_order
     try:
         P(f"    [DIP] resting BUY {count} {side.upper()} @ {dip_price*100:.0f}c ({ticker})")
         result = auth_post("/portfolio/events/orders", data=order)
@@ -1071,9 +1082,7 @@ def place_take_profit(ticker, side, count):
         "self_trade_prevention_type": "taker_at_cross",
         "client_order_id": str(uuid.uuid4()),
     }
-    _xi = _exchange_index(ticker)
-    if _xi is not None:
-        order["exchange_index"] = _xi
+    order["exchange_index"] = -1          # auto-route; see place_order
     try:
         P(f"    Take-profit: SELL {count} @ {tp_cents}c ({side.upper()})")
         result = auth_post("/portfolio/events/orders", data=order)
@@ -2483,13 +2492,13 @@ def run(live=False):
                         else:
                             P(f"    {po['crypto']}: Unfilled (status={check_status}), canceling order {po['order_id']}...")
                             try:
-                                cancel_resp = auth_delete(f"/portfolio/orders/{po['order_id']}")
+                                cancel_resp = _cancel_order(po["order_id"], po.get("ticker"))
                                 P(f"    {po['crypto']}: Canceled (reduced_by={cancel_resp.get('reduced_by', '?')})")
                             except Exception as ce:
                                 P(f"    {po['crypto']}: Cancel error: {ce}")
                                 try:
                                     time.sleep(1)
-                                    cancel_resp = auth_delete(f"/portfolio/orders/{po['order_id']}")
+                                    cancel_resp = _cancel_order(po["order_id"], po.get("ticker"))
                                     P(f"    {po['crypto']}: Cancel retry ok")
                                 except Exception as ce2:
                                     P(f"    {po['crypto']}: Cancel retry also failed: {ce2}")
