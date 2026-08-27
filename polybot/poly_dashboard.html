@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Polymarket 15m Bot</title>
+<style>
+  :root{--bg:#0f1116;--card:#171a21;--border:#2a2d3a;--text:#e6e8ef;--muted:#8b8fa3;
+        --green:#22c55e;--red:#ef4444;--amber:#eab308;--blue:#3b82f6}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:1180px;margin:0 auto;padding:20px}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:18px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:10px;
+        padding:16px;margin-bottom:14px}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:14px}
+  .kpi{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px}
+  .kpi .label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+  .kpi .value{font-size:24px;font-weight:600;margin-top:4px}
+  .kpi .note{color:var(--muted);font-size:12px;margin-top:2px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;color:var(--muted);font-weight:600;padding:6px 8px;
+     border-bottom:1px solid var(--border);white-space:nowrap}
+  td{padding:6px 8px;border-bottom:1px solid rgba(42,45,58,.5)}
+  .scroll{overflow-x:auto}
+  .g{color:var(--green)} .r{color:var(--red)} .m{color:var(--muted)} .a{color:var(--amber)}
+  h3{margin:0 0 10px;font-size:15px}
+  .bar{height:8px;background:var(--blue);border-radius:4px;display:inline-block;vertical-align:middle}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;
+        border:1px solid var(--border);color:var(--muted)}
+  .banner{border-left:3px solid var(--amber);padding-left:12px;color:var(--muted);font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Polymarket 15m Bot</h1>
+  <div class="sub" id="sub">loading…</div>
+  <div class="kpis" id="kpis"></div>
+  <div class="card">
+    <h3>Entry-band scan rate</h3>
+    <div class="banner" id="scanNote"></div>
+    <div id="scanBody" style="margin-top:12px"></div>
+  </div>
+  <div class="card"><h3>Books</h3><div class="scroll"><table id="books"></table></div></div>
+  <div class="card"><h3>Daily P&amp;L (last 14)</h3><div class="scroll"><table id="daily"></table></div></div>
+  <div class="card"><h3>Recent scans</h3><div class="scroll"><table id="recent"></table></div></div>
+</div>
+<script>
+const money = v => { const c = v>0?'g':(v<0?'r':'m'); const s=v>=0?'+':'-';
+  return `<span class="${c}">${s}$${Math.abs(v).toFixed(2)}</span>`; };
+
+async function load(){
+  let d; try { d = await (await fetch('/api/poly-data')).json(); }
+  catch(e){ document.getElementById('sub').textContent='failed to load'; return; }
+  const c=d.config, s=d.scan;
+  document.getElementById('sub').innerHTML =
+    `<span class="pill">${d.mode}</span> &nbsp; band ${c.band[0]}–${c.band[1]} &nbsp;·&nbsp;
+     core <b>${c.phantom==='all'?'phantom':'live'}</b> &nbsp;·&nbsp;
+     split dip ${c.split_dip[0]?c.split_dip[1]:'off'} &nbsp;·&nbsp;
+     core dip ${c.core_dip[0]?c.core_dip[1]:'off'} &nbsp;·&nbsp;
+     ${c.cryptos.join('/')} &nbsp;·&nbsp; ${new Date(d.generated).toLocaleTimeString()}`;
+
+  document.getElementById('kpis').innerHTML = [
+    {l:'Windows scanned', v:s.windows, n:`${s.rows} rows`},
+    {l:'Qualified', v:`${s.qualify_rate}%`, n:`${s.qualified_windows} of ${s.windows} windows`},
+    {l:'Best price seen', v:s.max_price==null?'—':s.max_price.toFixed(2),
+     n:`median ${s.median_price==null?'—':s.median_price.toFixed(2)}`},
+    {l:'Balance', v:d.balance==null?'—':'$'+d.balance.toFixed(2), n:d.mode}
+  ].map(k=>`<div class="kpi"><div class="label">${k.l}</div>
+      <div class="value">${k.v}</div><div class="note">${k.n}</div></div>`).join('');
+
+  document.getElementById('scanNote').innerHTML = s.windows === 0
+    ? 'No windows scanned yet.'
+    : (s.qualified_windows === 0
+       ? `No window has reached the ${c.band[0]}–${c.band[1]} entry band yet. Polymarket prices each
+          window against its own opening price rather than a fixed strike, so the favourite tends to
+          sit near 0.50. Highest seen so far: <b>${s.max_price==null?'—':s.max_price.toFixed(2)}</b>.`
+       : `${s.qualified_windows} of ${s.windows} windows reached the entry band.`);
+
+  const b=s.buckets||{}, keys=Object.keys(b), max=Math.max(1,...Object.values(b));
+  document.getElementById('scanBody').innerHTML = keys.length===0 ? '' :
+    `<table><thead><tr><th>Best price</th><th>Windows</th><th style="width:60%">Distribution</th></tr></thead>
+     <tbody>${keys.map(k=>{const inBand = (+k)>=c.band[0] && (+k)<=c.band[1];
+       return `<tr><td>${k}${inBand?' <span class="a">◂ in band</span>':''}</td><td>${b[k]}</td>
+       <td><span class="bar" style="width:${b[k]/max*100}%"></span></td></tr>`;}).join('')}</tbody></table>`;
+
+  document.getElementById('books').innerHTML =
+    `<thead><tr><th>Book</th><th>Placed</th><th>Resolved</th><th>Wins</th><th>Win%</th>
+     <th>Contracts</th><th>P&amp;L</th></tr></thead><tbody>` +
+    d.books.map(k=>`<tr><td>${k.label}</td><td>${k.placed}</td><td>${k.resolved}</td>
+      <td>${k.wins}</td><td>${k.win_rate}%</td><td>${k.contracts||''}</td>
+      <td>${money(k.pnl)}</td></tr>`).join('') + '</tbody>';
+
+  document.getElementById('daily').innerHTML =
+    `<thead><tr><th>Day</th><th>Fills</th><th>Wins</th><th>Win%</th><th>P&amp;L</th></tr></thead><tbody>` +
+    (d.by_day.length?d.by_day.map(r=>`<tr><td>${r.day}</td><td>${r.fills}</td><td>${r.wins}</td>
+      <td>${r.fills?(r.wins/r.fills*100).toFixed(1):0}%</td><td>${money(r.pnl)}</td></tr>`).join('')
+      :'<tr><td colspan="5" class="m">no resolved fills yet</td></tr>') + '</tbody>';
+
+  document.getElementById('recent').innerHTML =
+    `<thead><tr><th>Time</th><th>Crypto</th><th>Yes</th><th>No</th><th>Best</th>
+     <th>Score</th><th>Result</th></tr></thead><tbody>` +
+    (d.recent.length?d.recent.map(r=>`<tr>
+      <td class="m">${(r.timestamp||'').slice(11,19)}</td><td>${r.crypto}</td>
+      <td>${r.yes_price==null?'—':(+r.yes_price).toFixed(3)}</td>
+      <td>${r.no_price==null?'—':(+r.no_price).toFixed(3)}</td>
+      <td>${r.best_side||''} ${r.best_price==null?'':(+r.best_price).toFixed(2)}</td>
+      <td>${r.score==null?'—':r.score}</td>
+      <td class="${r.qualified?'g':'m'}">${r.qualified?'qualified':(r.reason||'')}</td></tr>`).join('')
+      :'<tr><td colspan="7" class="m">no scans yet</td></tr>') + '</tbody>';
+}
+load(); setInterval(load, 20000);
+</script>
+</body>
+</html>
