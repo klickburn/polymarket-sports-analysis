@@ -47,10 +47,15 @@ RESOLVE_SLEEP = float(os.environ.get("RESOLVE_SLEEP", "0.15"))
 # Phantom trading: record a trade in full but place no order. The record still
 # feeds the sizing brain (group scaling, cool-off, count floor, WR ladder), so
 # the strategy's state evolves exactly as if it had traded — only the money is
-# withheld. "boosted_only" places real orders solely for WR-boosted trades.
+# withheld. Modes:
+#   "off"           every core trade is ordered for real
+#   "boosted_only"  real orders solely for WR-boosted trades
+#   "all"           no core trade is ever ordered; the book runs on paper
 # Backtest over 77d: 1x trades net -$153, boosted net +$475.
-# WARNING: this concentrates 100% of realised P&L into ~15% of trades, all of
-# them selected by the WR ladder. PHANTOM_MODE=off reverts instantly.
+# WARNING: "boosted_only" concentrates 100% of realised P&L into ~15% of trades,
+# all of them selected by the WR ladder. PHANTOM_MODE=off reverts instantly.
+# NOTE: this gate covers the CORE book only. Split dips and core dips are placed
+# by _place_split_dips/_place_core_dips and stay REAL MONEY under every mode.
 PHANTOM_MODE = os.environ.get("PHANTOM_MODE", "off").strip().lower()
 MIN_PRICE = float(os.environ.get("SCORE_MIN_PRICE", "0.78"))
 MAX_PRICE = float(os.environ.get("SCORE_MAX_PRICE", "0.99"))
@@ -2369,7 +2374,9 @@ def run(live=False):
                 # size and enters `bets` normally, so every downstream reader
                 # (group scaling, cool-off, count floor, WR ladder) sees the
                 # identical history — only the order is withheld.
-                if PHANTOM_MODE == "boosted_only" and not tq["bet_record"].get("wr_boosted"):
+                _ph_all = PHANTOM_MODE == "all"
+                if _ph_all or (PHANTOM_MODE == "boosted_only"
+                               and not tq["bet_record"].get("wr_boosted")):
                     tq["bet_record"]["phantom"] = True
                     tq["bet_record"]["status"] = "phantom"
                     tq["bet_record"]["order_id"] = None
@@ -2379,7 +2386,7 @@ def run(live=False):
                     save_bets(bets)
                     placed_this_window.add(tq["crypto"])
                     P(f"    {tq['crypto']}: PHANTOM {current_contracts}x @ {tq['price']:.2f} "
-                      f"(not boosted — recorded, no order placed)")
+                      f"({'all-phantom' if _ph_all else 'not boosted'} — recorded, no order placed)")
                     continue
                 try:
                     result = place_order(tq["ticker"], tq["side"], tq["price"], BET_AMOUNT, count=current_contracts)
