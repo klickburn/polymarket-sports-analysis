@@ -838,9 +838,26 @@ def place_dip_order(ticker, side, count, dip_price):
         P(f"    [DIP] resting BUY {count} {side.upper()} @ {dip_price*100:.0f}c ({ticker})")
         result = auth_post("/portfolio/events/orders", data=order)
         oid = result.get("order_id", "")
-        return oid or None
+        if not oid:
+            # Accepted but no id: the caller writes no record, so without this
+            # the leg vanishes silently.
+            P(f"    [DIP-FAIL] no order_id  {ticker} {side} n={count} @ "
+              f"{dip_price*100:.0f}c  resp={str(result)[:200]}")
+            return None
+        return oid
     except Exception as e:
-        P(f"    [DIP] order failed: {e}")
+        # Full context on failure. 86.5% of split windows ended up with only ONE
+        # leg dipped (577 of 667), and the cause was not diagnosable after the
+        # fact because the old line logged the exception with no ticker, side,
+        # size or response body. A dropped leg leaves no record at all, so this
+        # log is the only trace it ever happened.
+        body = ""
+        try:
+            body = f"  body={e.response.text[:200]}"
+        except Exception:
+            pass
+        P(f"    [DIP-FAIL] {ticker} {side} n={count} @ {dip_price*100:.0f}c  "
+          f"{type(e).__name__}: {e}{body}")
         return None
 
 
@@ -873,6 +890,7 @@ def _place_split_dips(bets, window_end_iso):
     # from before the second leg landed; absorb it rather than cancel (see
     # _absorb_core_dips) and subtract what it already holds from each tier.
     absorbed = _absorb_core_dips(bets, window_end_iso) if CORE_DIP_ENABLED else {}
+    _split_leg_results = []
     tier_str = ", ".join(f"{c}@{p*100:.0f}c" for p, c in SPLIT_DIP_TIERS)
     P(f"  [DIP] split window ({sides[0]}/{sides[1]}) — resting tiers [{tier_str}] on both sides")
     for cr, b in wtr.items():
@@ -889,6 +907,7 @@ def _place_split_dips(bets, window_end_iso):
             if count <= 0:
                 continue
             oid = place_dip_order(b["ticker"], b["side"], count, price)
+            _split_leg_results.append((cr, b["side"], price, count, bool(oid)))
             if oid:
                 bets.append({
                     "crypto": cr, "ticker": b["ticker"], "side": b["side"],
@@ -903,6 +922,13 @@ def _place_split_dips(bets, window_end_iso):
                 })
                 save_bets(bets)
             time.sleep(0.25)
+    ok = [r for r in _split_leg_results if r[4]]
+    bad = [r for r in _split_leg_results if not r[4]]
+    if bad:
+        P(f"  [DIP] SPLIT PARTIAL — {len(ok)}/{len(_split_leg_results)} legs placed. "
+          f"missing: {[(r[0], r[1], f'{r[2]*100:.0f}c') for r in bad]}")
+    else:
+        P(f"  [DIP] split complete — {len(ok)}/{len(_split_leg_results)} legs placed")
     return True
 
 
