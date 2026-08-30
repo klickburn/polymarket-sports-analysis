@@ -515,10 +515,17 @@
   <div class="grid-2">
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <h3 style="margin:0">Dip P&amp;L — split vs core</h3>
-        <div class="subtitle" style="font-size:12px">cumulative, as traded</div>
+        <h3 style="margin:0">Split-Dip P&amp;L</h3>
+        <div class="subtitle" style="font-size:12px" id="splitDipNote"></div>
       </div>
-      <div class="chart-container tall"><canvas id="dipPnlChart"></canvas></div>
+      <div class="chart-container tall"><canvas id="splitDipChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <h3 style="margin:0">Core-Dip P&amp;L</h3>
+        <div class="subtitle" style="font-size:12px" id="coreDipNote"></div>
+      </div>
+      <div class="chart-container tall"><canvas id="coreDipChart"></canvas></div>
     </div>
   </div>
 
@@ -1366,33 +1373,50 @@ function renderMonthlyPnl(d) {
   </div>`;
 }
 
-// Split-dip vs core-dip cumulative P&L. Replaces the old Cumulative P&L chart:
-// core runs PHANTOM_MODE=all, so a combined line was mostly imaginary money.
-// These two series are the books that actually trade.
-function renderDipPnlChart(dip) {
-  const canvas = document.getElementById('dipPnlChart');
+// One chart per dip book, side by side. Kept separate rather than two series on
+// one axis because the books trade at very different sizes -- split dips have
+// run at 100/25/26 contracts, core dips at 1 -- so a shared y-axis flattens the
+// core line into the baseline and hides its shape entirely.
+function _dipSeries(rows) {
+  const asc = (rows || []).slice().reverse();
+  let t = 0;
+  return { days: asc.map(r => r.day), cum: asc.map(r => (t += (r.pnl || 0)).toFixed(2)) };
+}
+
+function _drawDipChart(key, canvasId, noteId, rows, colour, rgba) {
+  const canvas = document.getElementById(canvasId);
   if (!canvas) return;
-  if (_scoreCharts.dipPnl) { _scoreCharts.dipPnl.destroy(); _scoreCharts.dipPnl = null; }
-  if (!dip) return;
-  const split = (dip.by_day || []).slice().reverse();
-  const core  = (dip.by_day_core || []).slice().reverse();
-  const days = Array.from(new Set([...split.map(r=>r.day), ...core.map(r=>r.day)])).sort();
-  const cum = (rows) => { const m = Object.fromEntries(rows.map(r=>[r.day, r.pnl||0]));
-    let t = 0; return days.map(d => (t += (m[d]||0)).toFixed(2)); };
-  _scoreCharts.dipPnl = new Chart(canvas.getContext('2d'), {
+  if (_scoreCharts[key]) { _scoreCharts[key].destroy(); _scoreCharts[key] = null; }
+  const { days, cum } = _dipSeries(rows);
+  const note = document.getElementById(noteId);
+  if (!days.length) {
+    if (note) note.textContent = 'no resolved fills yet';
+    return;
+  }
+  const net = +cum[cum.length - 1];
+  if (note) {
+    note.innerHTML = `${days.length} days &middot; net ` +
+      `<span style="color:${net >= 0 ? 'var(--green)' : 'var(--red)'};font-weight:600">` +
+      `${net >= 0 ? '+' : '-'}$${Math.abs(net).toFixed(2)}</span>`;
+  }
+  _scoreCharts[key] = new Chart(canvas.getContext('2d'), {
     type: 'line',
-    data: { labels: days, datasets: [
-      { label: 'Split dips', data: cum(split), borderColor: '#06b6d4',
-        backgroundColor: 'rgba(6,182,212,0.12)', fill: true, tension: 0.25, pointRadius: 0, borderWidth: 2 },
-      { label: 'Core dips', data: cum(core), borderColor: '#a855f7',
-        backgroundColor: 'rgba(168,85,247,0.10)', fill: true, tension: 0.25, pointRadius: 0, borderWidth: 2 }
-    ]},
+    data: { labels: days, datasets: [{ label: 'Cumulative P&L', data: cum,
+      borderColor: colour, backgroundColor: rgba, fill: true,
+      tension: 0.25, pointRadius: 0, borderWidth: 2 }] },
     options: { responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { labels: { color: '#c9ccd6' } } },
-      scales: { x: { ticks: { color: '#8b8fa3' }, grid: { display: false } },
+      plugins: { legend: { display: false } },
+      scales: { x: { ticks: { color: '#8b8fa3', maxTicksLimit: 8 }, grid: { display: false } },
                 y: { ticks: { color: '#8b8fa3', callback: v => '$' + v },
                      grid: { color: 'rgba(42,45,58,0.3)' } } } }
   });
+}
+
+function renderDipPnlChart(dip) {
+  _drawDipChart('splitDip', 'splitDipChart', 'splitDipNote',
+                dip && dip.by_day, '#06b6d4', 'rgba(6,182,212,0.12)');
+  _drawDipChart('coreDip', 'coreDipChart', 'coreDipNote',
+                dip && dip.by_day_core, '#a855f7', 'rgba(168,85,247,0.10)');
 }
 
 function renderDipAnalytics(dip) {
