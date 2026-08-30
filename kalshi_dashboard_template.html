@@ -1517,7 +1517,9 @@ function renderTrailCompare(tc) {
 
   if (_scoreCharts.trail) { _scoreCharts.trail.destroy(); _scoreCharts.trail=null; }
   const labels = tc.labels.map(ts => new Date(ts).toLocaleDateString('en-US', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}));
-  const ctx = _el('trailCompareChart').getContext('2d');
+  const _tcCanvas = document.getElementById('trailCompareChart');
+  if (!_tcCanvas) return;              // section removed from this dashboard
+  const ctx = _tcCanvas.getContext('2d');
   _scoreCharts.trail = new Chart(ctx, {
     type:'line',
     data:{ labels, datasets:[
@@ -1679,7 +1681,8 @@ function renderScoreBot() {
       else scoreStats[raw].losses++;
     });
     const ssKeys = Object.keys(scoreStats).map(Number).sort((a,b) => a - b);
-    const canvas = _el('scoreWinRateChart');
+    const canvas = document.getElementById('scoreWinRateChart');
+    if (!canvas) return;                 // section removed from this dashboard
 
     if (ssKeys.length === 0) {
       if (_scoreCharts.winRate) { _scoreCharts.winRate.destroy(); _scoreCharts.winRate = null; }
