@@ -147,6 +147,12 @@ def _parse_tiers(s):
     return tiers
 # Full tier list: primary (from SPLIT_DIP_PRICE/COUNT) + extras
 SPLIT_DIP_TIERS = [(SPLIT_DIP_PRICE, SPLIT_DIP_COUNT)] + _parse_tiers(_extra)
+# Everything beyond the primary tier is an EXPERIMENT. Its fills are tagged so
+# the production book stays clean: mixing an untested 20c tier into the 10c
+# numbers would silently change the win rate and break-even of the only book
+# with a demonstrated edge. Filtering on dip_tier alone would be fragile -- the
+# primary tier can be re-priced -- so intent is recorded explicitly.
+_EXPERIMENT_TIERS = {p for p, _ in _parse_tiers(_extra)}
 
 # ── Core dips: the same 10c recovery bet on NON-split windows ────────────
 # Split dips only ever covered windows where BTC and ETH took opposite sides.
@@ -914,6 +920,7 @@ def _place_split_dips(bets, window_end_iso):
                     "price": price, "score": b.get("score", 0),
                     "action": "trade", "result": "dip_pending", "dip_add": True,
                     "dip_type": "split", "dip_tier": f"{price*100:.0f}c",
+                    "experiment": price in _EXPERIMENT_TIERS,
                     "order_id": oid, "contracts": count,
                     "event_ticker": b.get("event_ticker", ""),
                     "window_end": window_end_iso,

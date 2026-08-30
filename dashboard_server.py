@@ -847,7 +847,12 @@ def _build_scaling_performance(resolved, status=None):
 
     # Dip-add effectiveness, broken down by price tier (10c / 20c / 5c ...)
     dip = None
-    dip_trades = [b for b in resolved if b.get("dip_add") and b.get("result") in ("win", "loss")]
+    # Production book only. Experiment tiers (SPLIT_DIP_EXTRA_TIERS) are excluded
+    # everywhere on this page: folding an untested 20c tier into the 10c numbers
+    # would silently move the win rate and break-even of the one book with a
+    # demonstrated edge. They are served separately by /api/experiments.
+    dip_trades = [b for b in resolved if b.get("dip_add")
+                  and b.get("result") in ("win", "loss") and not b.get("experiment")]
     if dip_trades:
         def _stat(ts, tier_price=None):
             if not ts:
@@ -1693,6 +1698,71 @@ def get_score_data():
         except Exception:
             pass
     return JSONResponse(_build_score_report(bets, status))
+
+
+@app.get("/api/experiments")
+def api_experiments():
+    """Experimental dip tiers, kept entirely out of the main dashboard."""
+    try:
+        with open(SCORE_BETS_FILE) as f:
+            bets = json.load(f)
+    except Exception as e:
+        return JSONResponse({"error": str(e), "tiers": {}})
+
+    def _fee(n, p):
+        return math.ceil(0.07 * n * p * (1 - p) * 100) / 100.0 if 0 < p < 1 else 0.0
+
+    rows = [b for b in bets if b.get("experiment")
+            and b.get("result") in ("win", "loss")]
+    # dedupe on identity: the GitHub-backup merge leaves stripped shadow copies
+    seen, uniq = set(), []
+    for b in rows:
+        k = (b.get("crypto"), (b.get("side") or "").lower(),
+             b.get("timestamp"), b.get("dip_tier"))
+        if k in seen:
+            continue
+        seen.add(k)
+        uniq.append(b)
+
+    tiers, by_day = {}, {}
+    for b in uniq:
+        t = b.get("dip_tier") or "?"
+        price = b.get("fill_price") or b.get("price") or 0
+        n = float(b.get("filled_count") or b.get("contracts") or 0)
+        e = tiers.setdefault(t, {"tier": t, "fills": 0, "wins": 0, "pnl": 0.0,
+                                 "contracts": 0.0, "price": price})
+        e["fills"] += 1
+        e["wins"] += 1 if b["result"] == "win" else 0
+        e["pnl"] += b.get("pnl", 0)
+        e["contracts"] += n
+        d = by_day.setdefault((b.get("timestamp") or "")[:10],
+                              {"day": (b.get("timestamp") or "")[:10], "fills": 0,
+                               "wins": 0, "pnl": 0.0})
+        d["fills"] += 1
+        d["wins"] += 1 if b["result"] == "win" else 0
+        d["pnl"] += b.get("pnl", 0)
+    for t, e in tiers.items():
+        be = (e["price"] or 0) * 100          # break-even % == entry price in cents
+        e["win_rate"] = round(e["wins"] / e["fills"] * 100, 2) if e["fills"] else 0
+        e["break_even"] = round(be, 1)
+        e["edge_pp"] = round(e["win_rate"] - be, 2)
+        e["pnl"] = round(e["pnl"], 2)
+    return JSONResponse({
+        "tiers": dict(sorted(tiers.items(), key=lambda kv: kv[1]["price"])),
+        "by_day": sorted(by_day.values(), key=lambda x: x["day"], reverse=True)[:30],
+        "total_fills": len(uniq),
+        "total_pnl": round(sum(b.get("pnl", 0) for b in uniq), 2),
+        "generated": datetime.now(timezone.utc).isoformat(),
+    })
+
+
+@app.get("/experiments", response_class=HTMLResponse)
+def experiments_page():
+    try:
+        with open(os.path.join(os.path.dirname(__file__), "experiments.html")) as f:
+            return HTMLResponse(f.read())
+    except FileNotFoundError:
+        return HTMLResponse("<h1>experiments.html missing</h1>", status_code=500)
 
 
 @app.get("/api/window-sides")
