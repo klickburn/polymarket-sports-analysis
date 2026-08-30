@@ -515,15 +515,10 @@
   <div class="grid-2">
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <h3 style="margin:0">Cumulative P&L</h3>
-        <div class="a-tab-row" id="pnlTimeFilters">
-          <button class="a-tab active" onclick="filterScorePnl('1d')">1D</button>
-          <button class="a-tab" onclick="filterScorePnl('1w')">1W</button>
-          <button class="a-tab" onclick="filterScorePnl('1m')">1M</button>
-          <button class="a-tab" onclick="filterScorePnl('all')">All</button>
-        </div>
+        <h3 style="margin:0">Dip P&amp;L — split vs core</h3>
+        <div class="subtitle" style="font-size:12px">cumulative, as traded</div>
       </div>
-      <div class="chart-container tall"><canvas id="scorePnlChart"></canvas></div>
+      <div class="chart-container tall"><canvas id="dipPnlChart"></canvas></div>
     </div>
   </div>
 
@@ -1371,6 +1366,35 @@ function renderMonthlyPnl(d) {
   </div>`;
 }
 
+// Split-dip vs core-dip cumulative P&L. Replaces the old Cumulative P&L chart:
+// core runs PHANTOM_MODE=all, so a combined line was mostly imaginary money.
+// These two series are the books that actually trade.
+function renderDipPnlChart(dip) {
+  const canvas = document.getElementById('dipPnlChart');
+  if (!canvas) return;
+  if (_scoreCharts.dipPnl) { _scoreCharts.dipPnl.destroy(); _scoreCharts.dipPnl = null; }
+  if (!dip) return;
+  const split = (dip.by_day || []).slice().reverse();
+  const core  = (dip.by_day_core || []).slice().reverse();
+  const days = Array.from(new Set([...split.map(r=>r.day), ...core.map(r=>r.day)])).sort();
+  const cum = (rows) => { const m = Object.fromEntries(rows.map(r=>[r.day, r.pnl||0]));
+    let t = 0; return days.map(d => (t += (m[d]||0)).toFixed(2)); };
+  _scoreCharts.dipPnl = new Chart(canvas.getContext('2d'), {
+    type: 'line',
+    data: { labels: days, datasets: [
+      { label: 'Split dips', data: cum(split), borderColor: '#06b6d4',
+        backgroundColor: 'rgba(6,182,212,0.12)', fill: true, tension: 0.25, pointRadius: 0, borderWidth: 2 },
+      { label: 'Core dips', data: cum(core), borderColor: '#a855f7',
+        backgroundColor: 'rgba(168,85,247,0.10)', fill: true, tension: 0.25, pointRadius: 0, borderWidth: 2 }
+    ]},
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#c9ccd6' } } },
+      scales: { x: { ticks: { color: '#8b8fa3' }, grid: { display: false } },
+                y: { ticks: { color: '#8b8fa3', callback: v => '$' + v },
+                     grid: { color: 'rgba(42,45,58,0.3)' } } } }
+  });
+}
+
 function renderDipAnalytics(dip) {
   const div = document.getElementById('dipAnalyticsContent');
   const hdr = document.getElementById('dipSectionHeader');
@@ -1576,6 +1600,9 @@ function renderScoreBot() {
     { label: 'Win Rate', value: d.resolved > 0 ? `${wr}%` : '--', cls: wr >= 55 ? 'green' : wr >= 45 ? 'orange' : 'red', sub: `${d.wins}W - ${d.losses}L of ${d.resolved}` },
     { label: 'Total Trades', value: `${d.total_trades}`, cls: 'purple', sub: `${d.resolved} resolved` },
   ];
+  const _dip = (d.scaling_performance || {}).dip_add;
+  renderDipAnalytics(_dip);
+  renderDipPnlChart(_dip);
   document.getElementById('scoreKpis').innerHTML = kpis.map(k =>
     `<div class="kpi"><div class="label">${k.label}</div><div class="value ${k.cls}">${k.value}</div><div class="sub">${k.sub}</div></div>`
   ).join('');
@@ -1603,6 +1630,7 @@ function renderScoreBot() {
     const filtered = cutoff ? _allScoreTrades.filter(b => new Date(b.timestamp) >= cutoff) : _allScoreTrades;
     if (_scoreCharts.pnl) { _scoreCharts.pnl.destroy(); _scoreCharts.pnl = null; }
     const canvas = document.getElementById('scorePnlChart');
+    if (!canvas) return;                 // chart removed from this dashboard
     if (filtered.length === 0) {
       canvas.style.display = 'none';
       let msg = canvas.parentElement.querySelector('.no-data-msg');
