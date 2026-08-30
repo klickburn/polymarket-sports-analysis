@@ -1756,15 +1756,6 @@ def api_experiments():
     })
 
 
-@app.get("/experiments", response_class=HTMLResponse)
-def experiments_page():
-    try:
-        with open(os.path.join(os.path.dirname(__file__), "experiments.html")) as f:
-            return HTMLResponse(f.read())
-    except FileNotFoundError:
-        return HTMLResponse("<h1>experiments.html missing</h1>", status_code=500)
-
-
 @app.get("/api/window-sides")
 def api_window_sides(limit: int = 8):
     """Per-window BTC/ETH sides — a few hundred bytes, for the Polymarket bot.

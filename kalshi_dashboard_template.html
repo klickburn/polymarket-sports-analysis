@@ -362,6 +362,7 @@
 <!-- Mode Tabs -->
 <div class="mode-tabs">
   <div class="mode-tab active-score" id="tabScore" onclick="switchMode('score')">Score Bot</div>
+  <div class="mode-tab" id="tabExp" onclick="switchMode('exp')">Tier Experiments</div>
 </div>
 
 <!-- ═══════════════════ OVERVIEW SECTION ═══════════════════ -->
@@ -506,6 +507,35 @@
   </div>
 </div> -->
 
+<!-- ═══════════════════ TIER EXPERIMENTS ═══════════════════ -->
+<div class="mode-section" id="sectionExp">
+  <div class="section-header">
+    <h2>Dip Tier Experiments</h2>
+    <span class="badge" style="background:rgba(234,179,8,0.2);color:var(--yellow)">isolated from production</span>
+  </div>
+  <div style="color:var(--muted);font-size:13px;margin-bottom:14px">
+    Extra split-dip tiers at 1 contract each. These fills carry
+    <code>experiment=true</code> and are excluded from every number on the
+    Score Bot tab. Each tier is scored against <b>its own</b> break-even —
+    a 20c dip needs 20% to break even, not 10%.
+  </div>
+
+  <div class="kpi-row" id="expKpis"></div>
+
+  <div class="card"><h3>By tier</h3>
+    <div class="scroll-table"><table id="expTierTable"></table></div></div>
+
+  <div class="grid-2">
+    <div class="card"><h3>Win rate vs break-even</h3>
+      <div class="chart-container med"><canvas id="expEdgeChart"></canvas></div></div>
+    <div class="card"><h3>Cumulative P&amp;L</h3>
+      <div class="chart-container med"><canvas id="expPnlChart"></canvas></div></div>
+  </div>
+
+  <div class="card" style="margin-bottom:24px"><h3>Daily</h3>
+    <div class="scroll-table"><table id="expDayTable"></table></div></div>
+</div>
+
 <!-- ═══════════════════ SCORE BOT SECTION ═══════════════════ -->
 <div class="mode-section active" id="sectionScore">
   <div class="kpi-row" id="scoreKpis"></div>
@@ -600,7 +630,78 @@ function resetScoreData() {
 function switchMode(mode) {
   document.getElementById('sectionScore').classList.toggle('active', mode === 'score');
   document.getElementById('tabScore').className = 'mode-tab' + (mode === 'score' ? ' active-score' : '');
+  const es = document.getElementById('sectionExp'), et = document.getElementById('tabExp');
+  if (es) es.classList.toggle('active', mode === 'exp');
+  if (et) et.className = 'mode-tab' + (mode === 'exp' ? ' active-analytics' : '');
   if (mode === 'score' && !window._scoreLoaded) { loadScoreData(); }
+  // Loaded on demand: the experiment tiers are a side investigation and should
+  // not cost a fetch on every dashboard open.
+  if (mode === 'exp') { loadExperiments(); }
+}
+
+const _expCharts = {};
+async function loadExperiments() {
+  let d;
+  try { d = await (await fetch('/api/experiments')).json(); }
+  catch (e) {
+    document.getElementById('expKpis').innerHTML =
+      '<div class="card" style="grid-column:1/-1">failed to load experiments</div>';
+    return;
+  }
+  const tiers = d.tiers || {}, keys = Object.keys(tiers);
+  const money = v => { const c = v > 0 ? 'var(--green)' : (v < 0 ? 'var(--red)' : 'var(--muted)');
+    return `<span style="color:${c}">${v >= 0 ? '+' : '-'}$${Math.abs(v).toFixed(2)}</span>`; };
+
+  document.getElementById('expKpis').innerHTML = [
+    { l: 'Tiers live', v: keys.length, cls: 'blue', sub: keys.join(' / ') || '—' },
+    { l: 'Fills', v: d.total_fills || 0, cls: 'purple', sub: 'experiment only' },
+    { l: 'Net P&L', v: ((d.total_pnl || 0) >= 0 ? '+' : '-') + '$' + Math.abs(d.total_pnl || 0).toFixed(2),
+      cls: (d.total_pnl || 0) >= 0 ? 'green' : 'red', sub: '1 contract — read the edge, not this' },
+    { l: 'Best tier', v: keys.length ? keys.reduce((a, b) => tiers[a].edge_pp >= tiers[b].edge_pp ? a : b) : '—',
+      cls: 'cyan', sub: 'by edge vs break-even' }
+  ].map(k => `<div class="kpi"><div class="label">${k.l}</div>
+      <div class="value ${k.cls}">${k.v}</div><div class="sub">${k.sub}</div></div>`).join('');
+
+  document.getElementById('expTierTable').innerHTML =
+    `<thead><tr><th>Tier</th><th>Fills</th><th>Contracts</th><th>Wins</th><th>Win%</th>
+     <th>Break-even</th><th>Edge</th><th>P&L</th></tr></thead><tbody>` +
+    (keys.length ? keys.map(k => { const t = tiers[k];
+      const ec = t.edge_pp >= 0 ? 'var(--green)' : 'var(--red)';
+      return `<tr><td><b>${t.tier}</b></td><td>${t.fills}</td><td>${t.contracts}</td>
+        <td>${t.wins}</td><td>${t.win_rate}%</td><td>${t.break_even}%</td>
+        <td style="color:${ec}">${t.edge_pp >= 0 ? '+' : ''}${t.edge_pp}pp</td>
+        <td>${money(t.pnl)}</td></tr>`; }).join('')
+      : '<tr><td colspan="8" style="color:var(--muted)">no experiment fills yet — waiting on the next split window</td></tr>')
+    + '</tbody>';
+
+  const AX = { responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { labels: { color: '#c9ccd6' } } },
+    scales: { x: { ticks: { color: '#8b8fa3' }, grid: { display: false } },
+              y: { ticks: { color: '#8b8fa3' }, grid: { color: 'rgba(42,45,58,0.3)' } } } };
+  const draw = (id, cfg) => { const el = document.getElementById(id); if (!el) return;
+    if (_expCharts[id]) _expCharts[id].destroy();
+    _expCharts[id] = new Chart(el.getContext('2d'), cfg); };
+
+  draw('expEdgeChart', { type: 'bar', data: { labels: keys, datasets: [
+      { label: 'Win rate %', data: keys.map(k => tiers[k].win_rate),
+        backgroundColor: keys.map(k => tiers[k].edge_pp >= 0 ? 'rgba(34,197,94,0.75)' : 'rgba(239,68,68,0.75)') },
+      { label: 'Break-even %', data: keys.map(k => tiers[k].break_even), type: 'line',
+        borderColor: '#eab308', pointBackgroundColor: '#eab308', fill: false }
+    ]}, options: { ...AX, scales: { ...AX.scales,
+      y: { ...AX.scales.y, ticks: { color: '#8b8fa3', callback: v => v + '%' }, beginAtZero: true } } } });
+
+  const days = (d.by_day || []).slice().reverse(); let t = 0;
+  draw('expPnlChart', { type: 'line', data: { labels: days.map(x => x.day),
+      datasets: [{ label: 'Cumulative P&L', data: days.map(x => (t += x.pnl).toFixed(2)),
+        borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.12)', fill: true,
+        tension: 0.25, pointRadius: 0 }] }, options: AX });
+
+  document.getElementById('expDayTable').innerHTML =
+    `<thead><tr><th>Day</th><th>Fills</th><th>Wins</th><th>Win%</th><th>P&L</th></tr></thead><tbody>` +
+    ((d.by_day || []).length ? d.by_day.map(r => `<tr><td>${r.day}</td><td>${r.fills}</td>
+      <td>${r.wins}</td><td>${r.fills ? (r.wins / r.fills * 100).toFixed(1) : 0}%</td>
+      <td>${money(r.pnl)}</td></tr>`).join('')
+      : '<tr><td colspan="5" style="color:var(--muted)">no data yet</td></tr>') + '</tbody>';
 }
 
 function getDate(ts) {
