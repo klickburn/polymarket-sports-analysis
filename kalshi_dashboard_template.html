@@ -525,64 +525,13 @@
       </div>
       <div class="chart-container tall"><canvas id="scorePnlChart"></canvas></div>
     </div>
-    <div class="card">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <h3 style="margin:0">Win Rate & P&L by Score</h3>
-        <div class="a-tab-row" id="wrTimeFilters">
-          <button class="a-tab active" onclick="filterScoreWR('1d')">1D</button>
-          <button class="a-tab" onclick="filterScoreWR('1w')">1W</button>
-          <button class="a-tab" onclick="filterScoreWR('1m')">1M</button>
-          <button class="a-tab" onclick="filterScoreWR('all')">All</button>
-        </div>
-      </div>
-      <div class="chart-container tall"><canvas id="scoreWinRateChart"></canvas></div>
-    </div>
   </div>
 
   <hr class="section-divider">
-  <div class="section-header"><h2>Scaling Strategy</h2><span id="scalingBadge" class="badge" style="background:rgba(34,197,94,0.2);color:var(--green)">1↔? Contracts</span></div>
-  <div class="kpi-row" id="scalingKpis"></div>
-  <div id="scalingStatusCards" style="display:flex;gap:16px;margin-top:16px;flex-wrap:wrap"></div>
-  <div class="card" style="margin-top:16px">
-    <h3>Grouped Scaling Performance (BTC+ETH Combined)</h3>
-    <div class="scroll-table">
-      <table>
-        <thead><tr><th>Group</th><th>At 1x</th><th>1x WR%</th><th>1x P&L</th><th>Scaled</th><th>Scaled WR%</th><th>Scaled P&L</th><th>Scaled Edge</th></tr></thead>
-        <tbody id="scalingTableBody"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <hr class="section-divider" id="trailCompareDivider" style="display:none">
-  <div class="section-header" id="trailCompareHeader" style="display:none"><h2>Protection Stack: With vs Without</h2><span class="badge" id="trailCompareBadge" style="background:rgba(239,68,68,0.15);color:#ef4444">🛑 $20/$18</span></div>
-  <div id="trailCompareContent"></div>
-
-  <hr class="section-divider">
-  <div class="section-header"><h2>Daily P&L</h2><span class="badge" style="background:rgba(168,85,247,0.2);color:var(--purple)">Per Day</span></div>
-  <div id="scoreDailyContent"></div>
-
   <hr class="section-divider" id="dipSectionDivider" style="display:none">
   <div class="section-header" id="dipSectionHeader" style="display:none"><h2>Split-Dip Analytics</h2><span class="badge" style="background:rgba(6,182,212,0.2);color:var(--cyan,#06b6d4)">🎯 By Tier</span></div>
   <div id="dipAnalyticsContent"></div>
 
-  <hr class="section-divider">
-  <div class="section-header"><h2>Recent Decisions</h2><span class="badge" style="background:rgba(59,130,246,0.2);color:var(--blue)">Trade Log</span></div>
-  <div class="card" style="margin-bottom:24px">
-    <div class="analytics-indicator-tabs" id="scoreTabs">
-      <button class="a-tab active" onclick="filterScoreTable('all',this)">All</button>
-      <button class="a-tab" onclick="filterScoreTable('trades',this)">Trades</button>
-      <button class="a-tab" onclick="filterScoreTable('skips',this)">Skips</button>
-      <button class="a-tab" onclick="filterScoreTable('wins',this)">Wins</button>
-      <button class="a-tab" onclick="filterScoreTable('losses',this)">Losses</button>
-    </div>
-    <div class="scroll-table" style="margin-top:12px">
-      <table>
-        <thead><tr><th>Date</th><th>Ver</th><th>Crypto</th><th>Side</th><th>Price</th><th>Score</th><th>Qty</th><th>Reasons</th><th>Action</th><th>P&L</th><th>Status</th></tr></thead>
-        <tbody id="scoreBetsBody"></tbody>
-      </table>
-    </div>
-  </div>
-</div>
 
 
 <!-- ═══════════════════ ANALYTICS SECTION ═══════════════════ -->
@@ -592,6 +541,17 @@
   <div style="color:var(--muted);font-size:14px">Fetching live data from Kalshi API</div>
 </div>
 
+<script>
+// Sections for the CORE book were removed from this dashboard (dips only), but
+// the render functions that fed them are shared code. _el() returns a harmless
+// stand-in for a missing node so a removed section cannot throw and abort the
+// rest of the render.
+function _el(id) {
+  return document.getElementById(id) || { innerHTML: '', textContent: '',
+    style: {}, classList: { add(){}, remove(){} }, getContext(){ return null; },
+    appendChild(){}, querySelectorAll(){ return []; } };
+}
+</script>
 <script>
 // ═══ Data ═══
 let SR, CR, SPORTS_BETS, CRYPTO_BETS, DATA_REFRESHED_AT;
@@ -1511,10 +1471,10 @@ function renderDipAnalytics(dip) {
 }
 
 function renderTrailCompare(tc) {
-  const div = document.getElementById('trailCompareContent');
-  const hdr = document.getElementById('trailCompareHeader');
-  const divider = document.getElementById('trailCompareDivider');
-  const badge = document.getElementById('trailCompareBadge');
+  const div = _el('trailCompareContent');
+  const hdr = _el('trailCompareHeader');
+  const divider = _el('trailCompareDivider');
+  const badge = _el('trailCompareBadge');
   if (!tc || !tc.labels || tc.labels.length < 2) { div.innerHTML=''; hdr.style.display='none'; divider.style.display='none'; return; }
   hdr.style.display=''; divider.style.display='';
   const delta = tc.delta || 0;
@@ -1557,7 +1517,7 @@ function renderTrailCompare(tc) {
 
   if (_scoreCharts.trail) { _scoreCharts.trail.destroy(); _scoreCharts.trail=null; }
   const labels = tc.labels.map(ts => new Date(ts).toLocaleDateString('en-US', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}));
-  const ctx = document.getElementById('trailCompareChart').getContext('2d');
+  const ctx = _el('trailCompareChart').getContext('2d');
   _scoreCharts.trail = new Chart(ctx, {
     type:'line',
     data:{ labels, datasets:[
@@ -1719,7 +1679,7 @@ function renderScoreBot() {
       else scoreStats[raw].losses++;
     });
     const ssKeys = Object.keys(scoreStats).map(Number).sort((a,b) => a - b);
-    const canvas = document.getElementById('scoreWinRateChart');
+    const canvas = _el('scoreWinRateChart');
 
     if (ssKeys.length === 0) {
       if (_scoreCharts.winRate) { _scoreCharts.winRate.destroy(); _scoreCharts.winRate = null; }
@@ -1824,19 +1784,19 @@ function renderScoreBot() {
     });
     tblHtml += '</tr></tbody></table></div></div>';
     // Daily P&L bar chart removed — the table below carries the same numbers.
-    document.getElementById('scoreDailyContent').innerHTML = tblHtml;
+    _el('scoreDailyContent').innerHTML = tblHtml;
     if (_scoreCharts.daily) { _scoreCharts.daily.destroy(); _scoreCharts.daily = null; }
   }
 
   // Scaling performance
   const sp = d.scaling_performance || {};
   const scaleMax = sp.scale_up_count || 2;
-  document.getElementById('scalingBadge').textContent = `1↔${scaleMax} Contracts`;
+  _el('scalingBadge').textContent = `1↔${scaleMax} Contracts`;
   const o1 = sp.overall_at_1 || {};
   const o2 = sp.overall_at_scaled || {};
   const pctScaled = sp.pct_at_scaled || 0;
   const edgePerTrade = o2.trades > 0 ? ((o2.pnl / o2.trades) - (o1.trades > 0 ? o1.pnl / o1.trades : 0)) : 0;
-  document.getElementById('scalingKpis').innerHTML = `
+  _el('scalingKpis').innerHTML = `
     <div class="kpi"><div class="label">Trades at 1x</div><div class="value">${o1.trades||0}</div></div>
     <div class="kpi"><div class="label">1x Win Rate</div><div class="value">${o1.win_rate||0}%</div></div>
     <div class="kpi"><div class="label">1x P&L</div><div class="value ${(o1.pnl||0)>=0?'green':'red'}">$${(o1.pnl||0).toFixed(2)}</div></div>
@@ -1983,7 +1943,7 @@ function renderScoreBot() {
       trailBanner = `<div style="flex-basis:100%;font-size:12px;color:var(--muted);padding:0 4px">🛡️ Trailing stop: day +$${tr.day_pnl.toFixed(0)} — arms once the day is up $${tr.arm.toFixed(0)}${shTag}</div>`;
     }
   }
-  document.getElementById('scalingStatusCards').innerHTML = coBanner + trailBanner + dipBanner + Object.entries(ss).map(([gname, s]) => {
+  _el('scalingStatusCards').innerHTML = coBanner + trailBanner + dipBanner + Object.entries(ss).map(([gname, s]) => {
     const isScaled = s.current > 1;
     const borderColor = isScaled ? 'var(--green)' : 'var(--yellow)';
     const statusLabel = isScaled ? `${s.current}x SCALED UP` : '1x BASE';
@@ -2012,7 +1972,7 @@ function renderScoreBot() {
 
   const bd = sp.breakdown || {};
   const sortedKeys = Object.keys(bd).sort();
-  document.getElementById('scalingTableBody').innerHTML = sortedKeys.map(key => {
+  _el('scalingTableBody').innerHTML = sortedKeys.map(key => {
     const s1 = bd[key].at_1 || {};
     const s2 = bd[key].at_scaled || {};
     const edge = s2.trades > 0 && s1.trades > 0 ? (s2.win_rate - s1.win_rate) : null;
@@ -2034,7 +1994,7 @@ let _allScoreBets = [];
 function renderScoreTable(bets) {
   _allScoreBets = bets;
   const reversed = [...bets].reverse();
-  document.getElementById('scoreBetsBody').innerHTML = reversed.map(b => {
+  _el('scoreBetsBody').innerHTML = reversed.map(b => {
     const allReasons = b.reasons || [];
     // For v7, first reason is "Signal Score" with raw count — show remaining as breakdown
     const isV7 = allReasons.length > 0 && allReasons[0][0] === 'Signal Score';
