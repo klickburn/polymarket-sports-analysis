@@ -1695,6 +1695,46 @@ def get_score_data():
     return JSONResponse(_build_score_report(bets, status))
 
 
+@app.get("/api/window-sides")
+def api_window_sides(limit: int = 8):
+    """Per-window BTC/ETH sides — a few hundred bytes, for the Polymarket bot.
+
+    Deliberately tiny and read-only. /api/score-data is ~5MB, so polling it to
+    learn two sides would move half a gigabyte a day and risk stalling the
+    caller on a slow response. This reads the bets already on disk and returns
+    only what a mirror needs.
+
+    Touches no trading code and writes nothing. If it breaks, or this whole
+    service is down, the Polymarket bot falls back to its own split detection --
+    the dependency is one-directional and non-essential by design.
+    """
+    try:
+        with open(SCORE_BETS_FILE) as f:
+            bets = json.load(f)
+    except Exception as e:
+        return JSONResponse({"error": str(e), "windows": []}, status_code=200)
+    byw = {}
+    for b in bets:
+        if b.get("action") != "trade" or b.get("dip_add"):
+            continue
+        if b.get("crypto") not in ("BTC", "ETH"):
+            continue
+        we = b.get("window_end")
+        if not we:
+            continue
+        byw.setdefault(we, {})[b["crypto"]] = (b.get("side") or "").lower()
+    out = []
+    for we in sorted(byw, reverse=True)[:max(1, min(limit, 50))]:
+        sides = byw[we]
+        out.append({
+            "window_end": we,
+            "sides": sides,
+            "split": len(sides) > 1 and len(set(sides.values())) > 1,
+        })
+    return JSONResponse({"windows": out,
+                         "generated": datetime.now(timezone.utc).isoformat()})
+
+
 @app.get("/api/score-debug")
 def score_debug():
     """Debug: show raw status file contents and resolved scale_state."""
