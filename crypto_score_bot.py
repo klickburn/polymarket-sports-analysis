@@ -190,6 +190,8 @@ CORE_DIP_SIDE_SIZES = _parse_side_sizes(os.environ.get("CORE_DIP_SIDE_SIZES", ""
 # core was 25 contracts against a 100 split; at 1 contract it costs the core
 # experiment ~18% of its fills to save 1% of split size.
 CORE_DIP_ABSORB = os.environ.get("CORE_DIP_ABSORB", "0") == "1"
+# Place the core dip on SPLIT windows as well, so a split leg holds both books.
+CORE_DIP_ON_SPLIT = os.environ.get("CORE_DIP_ON_SPLIT", "1") == "1"
 
 
 def _core_dip_size(side):
@@ -1039,9 +1041,16 @@ def _place_core_dips(bets, window_end_iso):
     # two minutes, so the cancel path is rare and the exposure is one resting
     # limit order for a couple of minutes.
     #
-    # Skip SPLIT windows — those are the existing rule's territory. A split is
-    # both cryptos on opposite sides; anything else is ours.
-    if len(wtr) > 1:
+    # Split windows: by default the core dip is placed there too, so the leg
+    # carries both books — 200 from the split tier plus 1 here. That overlap
+    # used to happen only by accident, in the ~12.7% of split windows where a
+    # core dip was already resting before the second leg revealed the split;
+    # placing it deliberately makes the two books consistent instead of
+    # depending on which poll a leg happened to land in.
+    #
+    # CORE_DIP_ON_SPLIT=0 restores the old behaviour, where split windows were
+    # the split rule's territory alone.
+    if not CORE_DIP_ON_SPLIT and len(wtr) > 1:
         sides = [wtr["BTC"].get("side"), wtr["ETH"].get("side")]
         if all(sides) and sides[0] != sides[1]:
             return False
