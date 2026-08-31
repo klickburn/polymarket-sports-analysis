@@ -1718,7 +1718,7 @@ def api_experiments():
     seen, uniq = set(), []
     for b in rows:
         k = (b.get("crypto"), (b.get("side") or "").lower(),
-             b.get("timestamp"), b.get("dip_tier"))
+             b.get("timestamp"), b.get("dip_tier"), b.get("dip_type"))
         if k in seen:
             continue
         seen.add(k)
@@ -1726,11 +1726,16 @@ def api_experiments():
 
     tiers, by_day = {}, {}
     for b in uniq:
-        t = b.get("dip_tier") or "?"
+        # Key on book AND tier. A 20c split dip and a 20c core dip are different
+        # experiments -- split dips hold opposite sides of correlated assets,
+        # core dips a single side -- and pooling them would average away the
+        # only thing being tested.
+        book = "split" if (b.get("dip_type") or "split") == "split" else "core"
+        t = f"{b.get('dip_tier') or '?'} {book}"
         price = b.get("fill_price") or b.get("price") or 0
         n = float(b.get("filled_count") or b.get("contracts") or 0)
-        e = tiers.setdefault(t, {"tier": t, "fills": 0, "wins": 0, "pnl": 0.0,
-                                 "contracts": 0.0, "price": price})
+        e = tiers.setdefault(t, {"tier": t, "book": book, "fills": 0, "wins": 0,
+                                 "pnl": 0.0, "contracts": 0.0, "price": price})
         e["fills"] += 1
         e["wins"] += 1 if b["result"] == "win" else 0
         e["pnl"] += b.get("pnl", 0)
@@ -1748,7 +1753,8 @@ def api_experiments():
         e["edge_pp"] = round(e["win_rate"] - be, 2)
         e["pnl"] = round(e["pnl"], 2)
     return JSONResponse({
-        "tiers": dict(sorted(tiers.items(), key=lambda kv: kv[1]["price"])),
+        "tiers": dict(sorted(tiers.items(),
+                             key=lambda kv: (kv[1]["book"], kv[1]["price"]))),
         "by_day": sorted(by_day.values(), key=lambda x: x["day"], reverse=True)[:30],
         "total_fills": len(uniq),
         "total_pnl": round(sum(b.get("pnl", 0) for b in uniq), 2),

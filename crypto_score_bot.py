@@ -192,6 +192,11 @@ CORE_DIP_SIDE_SIZES = _parse_side_sizes(os.environ.get("CORE_DIP_SIDE_SIZES", ""
 CORE_DIP_ABSORB = os.environ.get("CORE_DIP_ABSORB", "0") == "1"
 # Place the core dip on SPLIT windows as well, so a split leg holds both books.
 CORE_DIP_ON_SPLIT = os.environ.get("CORE_DIP_ON_SPLIT", "1") == "1"
+# Extra core-dip tiers, "price:count,...", same shape as SPLIT_DIP_EXTRA_TIERS.
+# Everything beyond the primary CORE_DIP_PRICE is tagged experiment=true and is
+# excluded from the production book on the dashboard.
+CORE_DIP_EXTRA = _parse_tiers(os.environ.get("CORE_DIP_EXTRA_TIERS", ""))
+_CORE_EXPERIMENT_TIERS = {p for p, _ in CORE_DIP_EXTRA}
 
 
 def _core_dip_size(side):
@@ -1060,28 +1065,31 @@ def _place_core_dips(bets, window_end_iso):
         b = wtr.get(cr)
         if not b or not b.get("side"):
             continue
-        _n = _core_dip_size(b["side"])
-        if _n <= 0:
-            continue
-        oid = place_dip_order(b["ticker"], b["side"], _n, CORE_DIP_PRICE)
-        if oid:
-            bets.append({
-                "crypto": cr, "ticker": b["ticker"], "side": b["side"],
-                "price": CORE_DIP_PRICE, "score": b.get("score", 0),
-                "action": "trade", "result": "dip_pending", "dip_add": True,
-                "dip_type": "core", "dip_tier": f"{CORE_DIP_PRICE*100:.0f}c",
-                "order_id": oid, "contracts": _n,
-                "event_ticker": b.get("event_ticker", ""),
-                "window_end": window_end_iso,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "strategy_version": SCORE_VERSION,
-                "indicators": b.get("indicators"),
-            })
-            save_bets(bets)
-            done.add(cr)
-            P(f"  [CORE-DIP] {cr} {b['side']} — rested {_n}x @ "
-              f"{CORE_DIP_PRICE*100:.0f}c (non-split window)")
-        time.sleep(0.25)
+        for _price, _count in [(CORE_DIP_PRICE, _core_dip_size(b["side"]))] + CORE_DIP_EXTRA:
+            if _count <= 0:
+                continue
+            _is_exp = _price in _CORE_EXPERIMENT_TIERS
+            oid = place_dip_order(b["ticker"], b["side"], _count, _price)
+            if oid:
+                bets.append({
+                    "crypto": cr, "ticker": b["ticker"], "side": b["side"],
+                    "price": _price, "score": b.get("score", 0),
+                    "action": "trade", "result": "dip_pending", "dip_add": True,
+                    "dip_type": "core", "dip_tier": f"{_price*100:.0f}c",
+                    "experiment": _is_exp,
+                    "order_id": oid, "contracts": _count,
+                    "event_ticker": b.get("event_ticker", ""),
+                    "window_end": window_end_iso,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "strategy_version": SCORE_VERSION,
+                    "indicators": b.get("indicators"),
+                })
+                save_bets(bets)
+                if not _is_exp:
+                    done.add(cr)      # only the production tier latches the window
+                P(f"  [CORE-DIP] {cr} {b['side']} — rested {_count}x @ "
+                  f"{_price*100:.0f}c{' [experiment]' if _is_exp else ''}")
+            time.sleep(0.25)
     # Latch the window only when every configured cell is covered. Returning
     # True as soon as ANYTHING was placed is what stranded the second leg: the
     # caller set core_dips_done_this_window and never called again. A crypto
