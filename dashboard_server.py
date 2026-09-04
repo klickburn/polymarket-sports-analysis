@@ -1712,7 +1712,12 @@ def api_experiments():
     def _fee(n, p):
         return math.ceil(0.07 * n * p * (1 - p) * 100) / 100.0 if 0 < p < 1 else 0.0
 
+    # SPLIT dips only. Core-dip tiers were tested (5c/15c/20c, all negative
+    # edge) and are no longer run; their historical fills stay in the bets file
+    # but are not shown here, so the page reads as one experiment rather than
+    # two books averaged together.
     rows = [b for b in bets if b.get("experiment")
+            and (b.get("dip_type") or "split") == "split"
             and b.get("result") in ("win", "loss")]
     # dedupe on identity: the GitHub-backup merge leaves stripped shadow copies
     seen, uniq = set(), []
@@ -1730,8 +1735,8 @@ def api_experiments():
         # experiments -- split dips hold opposite sides of correlated assets,
         # core dips a single side -- and pooling them would average away the
         # only thing being tested.
-        book = "split" if (b.get("dip_type") or "split") == "split" else "core"
-        t = f"{b.get('dip_tier') or '?'} {book}"
+        book = "split"
+        t = b.get("dip_tier") or "?"
         price = b.get("fill_price") or b.get("price") or 0
         n = float(b.get("filled_count") or b.get("contracts") or 0)
         e = tiers.setdefault(t, {"tier": t, "book": book, "fills": 0, "wins": 0,

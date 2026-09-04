@@ -514,7 +514,8 @@
     <span class="badge" style="background:rgba(234,179,8,0.2);color:var(--yellow)">isolated from production</span>
   </div>
   <div style="color:var(--muted);font-size:13px;margin-bottom:14px">
-    Extra split-dip and core-dip tiers at 1 contract each. These fills carry
+    Extra <b>split-dip</b> tiers at 1 contract each, probing either side of the
+    production 10c. These fills carry
     <code>experiment=true</code> and are excluded from every number on the
     Score Bot tab. Each tier is scored against <b>its own</b> break-even —
     a 20c dip needs 20% to break even, not 10%.
@@ -663,18 +664,16 @@ async function loadExperiments() {
       <div class="value ${k.cls}">${k.v}</div><div class="sub">${k.sub}</div></div>`).join('');
 
   document.getElementById('expTierTable').innerHTML =
-    `<thead><tr><th>Tier</th><th>Book</th><th>Fills</th><th>Contracts</th><th>Wins</th><th>Win%</th>
+    `<thead><tr><th>Tier</th><th>Fills</th><th>Contracts</th><th>Wins</th><th>Win%</th>
      <th>Break-even</th><th>Edge</th><th>P&L</th></tr></thead><tbody>` +
     (keys.length ? keys.map(k => { const t = tiers[k];
       const ec = t.edge_pp >= 0 ? 'var(--green)' : 'var(--red)';
-      return `<tr><td><b>${t.tier.split(' ')[0]}</b></td>
-        <td><span class="badge" style="background:${t.book==='split'?'rgba(6,182,212,.2)':'rgba(168,85,247,.2)'};
-          color:${t.book==='split'?'var(--cyan)':'var(--purple)'}">${t.book}</span></td>
+      return `<tr><td><b>${t.tier}</b></td>
         <td>${t.fills}</td><td>${t.contracts}</td>
         <td>${t.wins}</td><td>${t.win_rate}%</td><td>${t.break_even}%</td>
         <td style="color:${ec}">${t.edge_pp >= 0 ? '+' : ''}${t.edge_pp}pp</td>
         <td>${money(t.pnl)}</td></tr>`; }).join('')
-      : '<tr><td colspan="9" style="color:var(--muted)">no experiment fills yet — waiting on the next split window</td></tr>')
+      : '<tr><td colspan="8" style="color:var(--muted)">no experiment fills yet — waiting on the next split window</td></tr>')
     + '</tbody>';
 
   const AX = { responsive: true, maintainAspectRatio: false,
