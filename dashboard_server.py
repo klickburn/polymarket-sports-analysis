@@ -978,9 +978,18 @@ def _build_scaling_performance(resolved, status=None):
         # The core book is all four cells (BTC yes/no, ETH yes/no) flat at 1
         # contract. split_window fills are still excluded: those were topped up
         # by the split tier, so their size and P&L belong to that book.
-        _core = [b for b in dip_trades
-                 if b.get("dip_type") == "core"
-                 and not b.get("split_window")]
+        # Two views of the core-dip book, because CORE_DIP_ON_SPLIT=1 makes it
+        # cover two structurally different populations. On a split window the
+        # core dip sits on the SAME leg as a split dip -- same market, same
+        # side, same 10c -- so those fills are effectively a 1-contract copy of
+        # the split book and carry its edge, not the core book's. Pooling them
+        # flatters the core numbers. The dashboard toggles between:
+        #   all  — every core dip
+        #   ex   — only windows that were never splits
+        _core_all = [b for b in dip_trades if b.get("dip_type") == "core"]
+        _core_ex = [b for b in _core_all
+                    if not b.get("split_window") and not b.get("became_split")]
+        _core = _core_ex
         dip["streak"] = _streak([b for b in dip_trades
                                   if (b.get("dip_type") or "split") == "split"])
         dip["streak_core"] = _streak(_core)
@@ -1026,6 +1035,47 @@ def _build_scaling_performance(resolved, status=None):
         # Core book by crypto x side -- the whole point of running all four flat.
         # Every cell is 1 contract, so as-traded P&L is already comparable; the
         # @100c column is kept so core cells can be read against the split grid.
+        def _core_views(rows):
+            g, bd = {}, {}
+            for b in rows:
+                k = f"{b.get('crypto')} {b.get('side')}"
+                e = g.setdefault(k, {"count": 0, "wins": 0, "pnl": 0.0,
+                                     "pnl_at_100": 0.0, "contracts": 0})
+                e["count"] += 1
+                e["wins"] += 1 if b["result"] == "win" else 0
+                e["pnl"] += b.get("pnl", 0)
+                e["contracts"] += b.get("filled_count", b.get("contracts", 0)) or 0
+                p = b.get("fill_price") or b.get("price") or 0
+                if 0 < p < 1:
+                    f100 = _bet_fee(b, 100, p)
+                    e["pnl_at_100"] += (100 * (1 - p) - f100) if b["result"] == "win" \
+                        else (-100 * p - f100)
+                k2 = (b.get("timestamp") or "")[:10]
+                d2 = bd.setdefault(k2, {"day": k2, "fills": 0, "wins": 0, "pnl": 0.0,
+                                        "contracts": 0, "pnl_at_100": 0.0})
+                d2["fills"] += 1
+                d2["wins"] += 1 if b["result"] == "win" else 0
+                d2["pnl"] += b.get("pnl", 0)
+                d2["contracts"] += b.get("filled_count", b.get("contracts", 0)) or 0
+                if 0 < p < 1:
+                    f100 = _bet_fee(b, 100, p)
+                    d2["pnl_at_100"] += (100 * (1 - p) - f100) if b["result"] == "win" \
+                        else (-100 * p - f100)
+            grid = {k: {**v, "pnl": round(v["pnl"], 2),
+                        "pnl_at_100": round(v["pnl_at_100"], 2),
+                        "win_rate": round(v["wins"] / v["count"] * 100, 1)}
+                    for k, v in sorted(g.items())}
+            daily = [{**e, "pnl": round(e["pnl"], 2),
+                      "pnl_at_100": round(e["pnl_at_100"], 2),
+                      "win_rate": round(e["wins"] / e["fills"] * 100, 1) if e["fills"] else 0}
+                     for e in sorted(bd.values(), key=lambda x: x["day"], reverse=True)]
+            return grid, daily
+
+        dip["grid_core_all"], dip["by_day_core_all"] = _core_views(_core_all)
+        dip["grid_core_ex"], dip["by_day_core_ex"] = _core_views(_core_ex)
+        dip["core_counts"] = {"all": len(_core_all), "ex": len(_core_ex),
+                              "in_split_windows": len(_core_all) - len(_core_ex)}
+
         _cg = {}
         for b in _core:
             k = f"{b.get('crypto')} {b.get('side')}"

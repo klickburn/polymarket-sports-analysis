@@ -1317,10 +1317,37 @@ function splitGridTable(dip) {
 // carried only so the two grids can be read against each other. Break-even is
 // 10% -- the simulation put ETH-yes at 25.4% and the other three near 10%, and
 // this table is what settles that with real fills.
+// Core-dip view. CORE_DIP_ON_SPLIT=1 means core dips also land on split
+// windows, where they sit on the SAME leg as a split dip -- same market, same
+// side, same 10c -- so those fills carry the split book's behaviour, not the
+// core book's. `ex` isolates windows that were never splits, which is the
+// population the core-dip win rate was originally measured on.
+window._coreView = window._coreView || 'ex';
+function _coreGrid(dip) {
+  return (window._coreView === 'all' ? dip.grid_core_all : dip.grid_core_ex)
+         || dip.grid_core || {};
+}
+function _coreDaily(dip) {
+  return (window._coreView === 'all' ? dip.by_day_core_all : dip.by_day_core_ex)
+         || dip.by_day_core || [];
+}
+function setCoreView(v) {
+  window._coreView = v;
+  if (typeof SCORE_DATA !== 'undefined' && SCORE_DATA) renderScoreBot();
+}
+
 function coreGridTable(dip) {
-  const g = dip.grid_core || {};
+  const g = _coreGrid(dip);
+  const c = dip.core_counts || {};
+  const toggle = `<div class="a-tab-row" style="margin-bottom:10px">
+    <button class="a-tab${window._coreView === 'ex' ? ' active' : ''}"
+      onclick="setCoreView('ex')">Excl. split windows${c.ex != null ? ` (${c.ex})` : ''}</button>
+    <button class="a-tab${window._coreView === 'all' ? ' active' : ''}"
+      onclick="setCoreView('all')">All core dips${c.all != null ? ` (${c.all})` : ''}</button>
+  </div>`;
   const keys = Object.keys(g);
-  if (!keys.length) return '';
+  if (!keys.length) return `<div class="card" style="margin-top:14px">${toggle}
+    <div class="empty-state"><div class="msg">no core dips in this view</div></div></div>`;
   let tw = 0, tn = 0, tp = 0, t1 = 0;
   const body = keys.map(k => {
     const r = g[k];
@@ -1341,6 +1368,7 @@ function coreGridTable(dip) {
     <td style="color:${tp>=0?'var(--green)':'var(--red)'}">$${tp>=0?'+':''}${tp.toFixed(2)}</td>
     <td style="color:${t1>=0?'var(--green)':'var(--red)'}">$${t1>=0?'+':''}${t1.toFixed(2)}</td></tr>`;
   return `<div class="card" style="margin-top:14px">
+    ${toggle}
     <div style="font-size:13px;color:var(--muted);margin-bottom:10px">
       <b>Core dips by crypto &amp; side</b> — break-even is 10%. All four cells run flat at
       1 contract, so <b>P&L (as traded)</b> compares directly; the simulation predicted
@@ -1352,7 +1380,7 @@ function coreGridTable(dip) {
 }
 
 function coreDailyTable(dip) {
-  const rows = dip.by_day_core || [];
+  const rows = _coreDaily(dip);
   if (!rows.length) return '';
   const tot = rows.reduce((a, r) => a + r.pnl, 0);
   const body = rows.map(r => {
@@ -1519,7 +1547,7 @@ function renderDipPnlChart(dip) {
   _drawDipChart('splitDip', 'splitDipChart', 'splitDipNote',
                 dip && dip.by_day, '#06b6d4', 'rgba(6,182,212,0.12)');
   _drawDipChart('coreDip', 'coreDipChart', 'coreDipNote',
-                dip && dip.by_day_core, '#a855f7', 'rgba(168,85,247,0.10)');
+                dip && _coreDaily(dip), '#a855f7', 'rgba(168,85,247,0.10)');
 }
 
 function renderDipAnalytics(dip) {
