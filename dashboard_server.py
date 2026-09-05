@@ -987,8 +987,20 @@ def _build_scaling_performance(resolved, status=None):
         #   all  — every core dip
         #   ex   — only windows that were never splits
         _core_all = [b for b in dip_trades if b.get("dip_type") == "core"]
+
+        # Exclude by WINDOW, not by tag. became_split is written by
+        # _absorb_core_dips, which only sees core dips that already exist when
+        # the split is detected -- and since CORE_DIP_ON_SPLIT=1 core dips are
+        # also placed AFTER that point, those never get tagged. Measured: 302
+        # core dips sit in split windows but only 233 carry a tag, so 69 were
+        # leaking into the "excluding splits" view. A window that produced a
+        # split dip is a split window, whatever the records happen to say.
+        _split_windows = {(b.get("window_end") or (b.get("timestamp") or "")[:16])
+                          for b in dip_trades
+                          if (b.get("dip_type") or "split") == "split"}
         _core_ex = [b for b in _core_all
-                    if not b.get("split_window") and not b.get("became_split")]
+                    if (b.get("window_end") or (b.get("timestamp") or "")[:16])
+                    not in _split_windows]
         _core = _core_ex
         dip["streak"] = _streak([b for b in dip_trades
                                   if (b.get("dip_type") or "split") == "split"])
