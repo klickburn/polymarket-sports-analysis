@@ -1797,11 +1797,16 @@ def api_experiments():
         # core dips a single side -- and pooling them would average away the
         # only thing being tested.
         book = "split" if (b.get("dip_type") or "split") == "split" else "core"
-        t = b.get("dip_tier") or "?"
+        # Key on book AND tier. Both books run the same prices, so keying on the
+        # tier alone collides: the two would share one entry and whichever landed
+        # first would claim the `book` field, leaving the other with no tiers.
+        tier_name = b.get("dip_tier") or "?"
+        t = f"{book}|{tier_name}"
         price = b.get("fill_price") or b.get("price") or 0
         n = float(b.get("filled_count") or b.get("contracts") or 0)
-        e = tiers.setdefault(t, {"tier": t, "book": book, "fills": 0, "wins": 0,
-                                 "pnl": 0.0, "contracts": 0.0, "price": price})
+        e = tiers.setdefault(t, {"tier": tier_name, "book": book, "fills": 0,
+                                 "wins": 0, "pnl": 0.0, "contracts": 0.0,
+                                 "price": price})
         e["fills"] += 1
         e["wins"] += 1 if b["result"] == "win" else 0
         e["pnl"] += b.get("pnl", 0)
@@ -1822,7 +1827,7 @@ def api_experiments():
     for bk in ("split", "core"):
         rows_b = [b for b in uniq
                   if ("split" if (b.get("dip_type") or "split") == "split" else "core") == bk]
-        t_b = {k: v for k, v in tiers.items() if v["book"] == bk}
+        t_b = {v["tier"]: v for k, v in tiers.items() if v["book"] == bk}
         d_b = {}
         for b in rows_b:
             day = (b.get("timestamp") or "")[:10]
