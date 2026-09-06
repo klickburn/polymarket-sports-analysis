@@ -674,14 +674,21 @@ async function loadExperiments() {
   const bestOf = t => { const k = Object.keys(t);
     return k.length ? k.reduce((a, b) => t[a].edge_pp >= t[b].edge_pp ? a : b) : '\u2014'; };
 
+  const cash = v => (v >= 0 ? '+' : '-') + '$' + Math.abs(v || 0).toFixed(2);
+  const sP = (books.split || {}).total_pnl || 0, cP = (books.core || {}).total_pnl || 0;
   document.getElementById('expKpis').innerHTML = [
-    { l: 'Split fills', v: (books.split || {}).total_fills || 0, cls: 'cyan',
-      sub: 'best ' + bestOf((books.split || {}).tiers || {}) },
-    { l: 'Core fills', v: (books.core || {}).total_fills || 0, cls: 'purple',
-      sub: 'best ' + bestOf((books.core || {}).tiers || {}) },
+    { l: 'Split-dip P&L', v: cash(sP), cls: sP >= 0 ? 'green' : 'red',
+      sub: `${(books.split || {}).total_fills || 0} fills @ 1 contract` },
+    { l: 'Core-dip P&L', v: cash(cP), cls: cP >= 0 ? 'green' : 'red',
+      sub: `${(books.core || {}).total_fills || 0} fills @ 1 contract` },
+    { l: 'Combined P&L', v: cash(sP + cP), cls: (sP + cP) >= 0 ? 'green' : 'red',
+      sub: 'experiments only' },
+    { l: 'Best split tier', v: bestOf((books.split || {}).tiers || {}), cls: 'cyan',
+      sub: 'by edge vs break-even' },
+    { l: 'Best core tier', v: bestOf((books.core || {}).tiers || {}), cls: 'purple',
+      sub: 'by edge vs break-even' },
     { l: 'Tiers running', v: Object.keys((books.split || {}).tiers || {}).length + ' / ' +
-        Object.keys((books.core || {}).tiers || {}).length, cls: 'blue', sub: 'split / core' },
-    { l: 'Total fills', v: d.total_fills || 0, cls: 'orange', sub: '1 contract each' }
+        Object.keys((books.core || {}).tiers || {}).length, cls: 'blue', sub: 'split / core' }
   ].map(k => `<div class="kpi"><div class="label">${k.l}</div>
       <div class="value ${k.cls}">${k.v}</div><div class="sub">${k.sub}</div></div>`).join('');
 
@@ -689,7 +696,11 @@ async function loadExperiments() {
     const B = books[bk] || {}, tiers = B.tiers || {}, keys = Object.keys(tiers);
     const cap = bk === 'split' ? 'Split' : 'Core';
     const badge = document.getElementById(bk === 'split' ? 'expSplitCount' : 'expCoreCount');
-    if (badge) badge.textContent = `${B.total_fills || 0} fills \u00b7 ${keys.length} tiers`;
+    if (badge) {
+      const p = B.total_pnl || 0;
+      badge.innerHTML = `${B.total_fills || 0} fills \u00b7 ${keys.length} tiers \u00b7 ` +
+        `<b>${p >= 0 ? '+' : '-'}$${Math.abs(p).toFixed(2)}</b>`;
+    }
 
     document.getElementById(`expTierTable${cap}`).innerHTML =
       `<thead><tr><th>Tier</th><th>Fills</th><th>Contracts</th><th>Wins</th><th>Win%</th>
