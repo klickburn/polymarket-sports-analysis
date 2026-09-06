@@ -523,18 +523,30 @@
 
   <div class="kpi-row" id="expKpis"></div>
 
-  <div class="card"><h3>By tier</h3>
-    <div class="scroll-table"><table id="expTierTable"></table></div></div>
-
+  <div class="section-header" style="margin-top:8px">
+    <h2 style="font-size:17px">Split dips</h2>
+    <span class="badge" style="background:rgba(6,182,212,.2);color:var(--cyan)" id="expSplitCount"></span>
+  </div>
+  <div class="card"><div class="scroll-table"><table id="expTierTableSplit"></table></div></div>
   <div class="grid-2">
     <div class="card"><h3>Win rate vs break-even</h3>
-      <div class="chart-container med"><canvas id="expEdgeChart"></canvas></div></div>
+      <div class="chart-container med"><canvas id="expEdgeChartSplit"></canvas></div></div>
     <div class="card"><h3>Cumulative P&amp;L</h3>
-      <div class="chart-container med"><canvas id="expPnlChart"></canvas></div></div>
+      <div class="chart-container med"><canvas id="expPnlChartSplit"></canvas></div></div>
   </div>
 
-  <div class="card" style="margin-bottom:24px"><h3>Daily</h3>
-    <div class="scroll-table"><table id="expDayTable"></table></div></div>
+  <hr class="section-divider">
+  <div class="section-header">
+    <h2 style="font-size:17px">Core dips</h2>
+    <span class="badge" style="background:rgba(168,85,247,.2);color:var(--purple)" id="expCoreCount"></span>
+  </div>
+  <div class="card"><div class="scroll-table"><table id="expTierTableCore"></table></div></div>
+  <div class="grid-2" style="margin-bottom:24px">
+    <div class="card"><h3>Win rate vs break-even</h3>
+      <div class="chart-container med"><canvas id="expEdgeChartCore"></canvas></div></div>
+    <div class="card"><h3>Cumulative P&amp;L</h3>
+      <div class="chart-container med"><canvas id="expPnlChartCore"></canvas></div></div>
+  </div>
 </div>
 
 <!-- ═══════════════════ SCORE BOT SECTION ═══════════════════ -->
@@ -649,33 +661,9 @@ async function loadExperiments() {
       '<div class="card" style="grid-column:1/-1">failed to load experiments</div>';
     return;
   }
-  const tiers = d.tiers || {}, keys = Object.keys(tiers);
   const money = v => { const c = v > 0 ? 'var(--green)' : (v < 0 ? 'var(--red)' : 'var(--muted)');
     return `<span style="color:${c}">${v >= 0 ? '+' : '-'}$${Math.abs(v).toFixed(2)}</span>`; };
-
-  document.getElementById('expKpis').innerHTML = [
-    { l: 'Tiers live', v: keys.length, cls: 'blue', sub: keys.join(' / ') || '—' },
-    { l: 'Fills', v: d.total_fills || 0, cls: 'purple', sub: 'experiment only' },
-    { l: 'Net P&L', v: ((d.total_pnl || 0) >= 0 ? '+' : '-') + '$' + Math.abs(d.total_pnl || 0).toFixed(2),
-      cls: (d.total_pnl || 0) >= 0 ? 'green' : 'red', sub: '1 contract — read the edge, not this' },
-    { l: 'Best tier', v: keys.length ? keys.reduce((a, b) => tiers[a].edge_pp >= tiers[b].edge_pp ? a : b) : '—',
-      cls: 'cyan', sub: 'by edge vs break-even' }
-  ].map(k => `<div class="kpi"><div class="label">${k.l}</div>
-      <div class="value ${k.cls}">${k.v}</div><div class="sub">${k.sub}</div></div>`).join('');
-
-  document.getElementById('expTierTable').innerHTML =
-    `<thead><tr><th>Tier</th><th>Fills</th><th>Contracts</th><th>Wins</th><th>Win%</th>
-     <th>Break-even</th><th>Edge</th><th>P&L</th></tr></thead><tbody>` +
-    (keys.length ? keys.map(k => { const t = tiers[k];
-      const ec = t.edge_pp >= 0 ? 'var(--green)' : 'var(--red)';
-      return `<tr><td><b>${t.tier}</b></td>
-        <td>${t.fills}</td><td>${t.contracts}</td>
-        <td>${t.wins}</td><td>${t.win_rate}%</td><td>${t.break_even}%</td>
-        <td style="color:${ec}">${t.edge_pp >= 0 ? '+' : ''}${t.edge_pp}pp</td>
-        <td>${money(t.pnl)}</td></tr>`; }).join('')
-      : '<tr><td colspan="8" style="color:var(--muted)">no experiment fills yet — waiting on the next split window</td></tr>')
-    + '</tbody>';
-
+  const books = d.books || {};
   const AX = { responsive: true, maintainAspectRatio: false,
     plugins: { legend: { labels: { color: '#c9ccd6' } } },
     scales: { x: { ticks: { color: '#8b8fa3' }, grid: { display: false } },
@@ -683,27 +671,53 @@ async function loadExperiments() {
   const draw = (id, cfg) => { const el = document.getElementById(id); if (!el) return;
     if (_expCharts[id]) _expCharts[id].destroy();
     _expCharts[id] = new Chart(el.getContext('2d'), cfg); };
+  const bestOf = t => { const k = Object.keys(t);
+    return k.length ? k.reduce((a, b) => t[a].edge_pp >= t[b].edge_pp ? a : b) : '\u2014'; };
 
-  draw('expEdgeChart', { type: 'bar', data: { labels: keys, datasets: [
-      { label: 'Win rate %', data: keys.map(k => tiers[k].win_rate),
-        backgroundColor: keys.map(k => tiers[k].edge_pp >= 0 ? 'rgba(34,197,94,0.75)' : 'rgba(239,68,68,0.75)') },
-      { label: 'Break-even %', data: keys.map(k => tiers[k].break_even), type: 'line',
-        borderColor: '#eab308', pointBackgroundColor: '#eab308', fill: false }
-    ]}, options: { ...AX, scales: { ...AX.scales,
-      y: { ...AX.scales.y, ticks: { color: '#8b8fa3', callback: v => v + '%' }, beginAtZero: true } } } });
+  document.getElementById('expKpis').innerHTML = [
+    { l: 'Split fills', v: (books.split || {}).total_fills || 0, cls: 'cyan',
+      sub: 'best ' + bestOf((books.split || {}).tiers || {}) },
+    { l: 'Core fills', v: (books.core || {}).total_fills || 0, cls: 'purple',
+      sub: 'best ' + bestOf((books.core || {}).tiers || {}) },
+    { l: 'Tiers running', v: Object.keys((books.split || {}).tiers || {}).length + ' / ' +
+        Object.keys((books.core || {}).tiers || {}).length, cls: 'blue', sub: 'split / core' },
+    { l: 'Total fills', v: d.total_fills || 0, cls: 'orange', sub: '1 contract each' }
+  ].map(k => `<div class="kpi"><div class="label">${k.l}</div>
+      <div class="value ${k.cls}">${k.v}</div><div class="sub">${k.sub}</div></div>`).join('');
 
-  const days = (d.by_day || []).slice().reverse(); let t = 0;
-  draw('expPnlChart', { type: 'line', data: { labels: days.map(x => x.day),
-      datasets: [{ label: 'Cumulative P&L', data: days.map(x => (t += x.pnl).toFixed(2)),
-        borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.12)', fill: true,
-        tension: 0.25, pointRadius: 0 }] }, options: AX });
+  for (const bk of ['split', 'core']) {
+    const B = books[bk] || {}, tiers = B.tiers || {}, keys = Object.keys(tiers);
+    const cap = bk === 'split' ? 'Split' : 'Core';
+    const badge = document.getElementById(bk === 'split' ? 'expSplitCount' : 'expCoreCount');
+    if (badge) badge.textContent = `${B.total_fills || 0} fills \u00b7 ${keys.length} tiers`;
 
-  document.getElementById('expDayTable').innerHTML =
-    `<thead><tr><th>Day</th><th>Fills</th><th>Wins</th><th>Win%</th><th>P&L</th></tr></thead><tbody>` +
-    ((d.by_day || []).length ? d.by_day.map(r => `<tr><td>${r.day}</td><td>${r.fills}</td>
-      <td>${r.wins}</td><td>${r.fills ? (r.wins / r.fills * 100).toFixed(1) : 0}%</td>
-      <td>${money(r.pnl)}</td></tr>`).join('')
-      : '<tr><td colspan="5" style="color:var(--muted)">no data yet</td></tr>') + '</tbody>';
+    document.getElementById(`expTierTable${cap}`).innerHTML =
+      `<thead><tr><th>Tier</th><th>Fills</th><th>Contracts</th><th>Wins</th><th>Win%</th>
+       <th>Break-even</th><th>Edge</th><th>P&L</th></tr></thead><tbody>` +
+      (keys.length ? keys.map(k => { const t = tiers[k];
+        const ec = t.edge_pp >= 0 ? 'var(--green)' : 'var(--red)';
+        return `<tr><td><b>${t.tier}</b></td><td>${t.fills}</td><td>${t.contracts}</td>
+          <td>${t.wins}</td><td>${t.win_rate}%</td><td>${t.break_even}%</td>
+          <td style="color:${ec}">${t.edge_pp >= 0 ? '+' : ''}${t.edge_pp}pp</td>
+          <td>${money(t.pnl)}</td></tr>`; }).join('')
+        : `<tr><td colspan="8" style="color:var(--muted)">no ${bk}-dip experiment fills yet</td></tr>`)
+      + '</tbody>';
+
+    draw(`expEdgeChart${cap}`, { type: 'bar', data: { labels: keys, datasets: [
+        { label: 'Win rate %', data: keys.map(k => tiers[k].win_rate),
+          backgroundColor: keys.map(k => tiers[k].edge_pp >= 0 ? 'rgba(34,197,94,0.75)' : 'rgba(239,68,68,0.75)') },
+        { label: 'Break-even %', data: keys.map(k => tiers[k].break_even), type: 'line',
+          borderColor: '#eab308', pointBackgroundColor: '#eab308', fill: false }
+      ]}, options: { ...AX, scales: { ...AX.scales,
+        y: { ...AX.scales.y, ticks: { color: '#8b8fa3', callback: v => v + '%' }, beginAtZero: true } } } });
+
+    const days = (B.by_day || []).slice().reverse(); let t = 0;
+    draw(`expPnlChart${cap}`, { type: 'line', data: { labels: days.map(x => x.day),
+        datasets: [{ label: 'Cumulative P&L', data: days.map(x => (t += x.pnl).toFixed(2)),
+          borderColor: bk === 'split' ? '#06b6d4' : '#a855f7',
+          backgroundColor: bk === 'split' ? 'rgba(6,182,212,0.12)' : 'rgba(168,85,247,0.12)',
+          fill: true, tension: 0.25, pointRadius: 0 }] }, options: AX });
+  }
 }
 
 function getDate(ts) {

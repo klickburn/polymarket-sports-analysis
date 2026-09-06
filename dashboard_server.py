@@ -1774,12 +1774,11 @@ def api_experiments():
     def _fee(n, p):
         return math.ceil(0.07 * n * p * (1 - p) * 100) / 100.0 if 0 < p < 1 else 0.0
 
-    # SPLIT dips only. Core-dip tiers were tested (5c/15c/20c, all negative
-    # edge) and are no longer run; their historical fills stay in the bets file
-    # but are not shown here, so the page reads as one experiment rather than
-    # two books averaged together.
+    # Both books, reported SEPARATELY. Split dips hold opposite sides of two
+    # correlated assets, where one leg is nearly forced to win; core dips hold a
+    # single side. Their tier curves are different questions and pooling them
+    # averages away the thing being measured.
     rows = [b for b in bets if b.get("experiment")
-            and (b.get("dip_type") or "split") == "split"
             and b.get("result") in ("win", "loss")]
     # dedupe on identity: the GitHub-backup merge leaves stripped shadow copies
     seen, uniq = set(), []
@@ -1797,7 +1796,7 @@ def api_experiments():
         # experiments -- split dips hold opposite sides of correlated assets,
         # core dips a single side -- and pooling them would average away the
         # only thing being tested.
-        book = "split"
+        book = "split" if (b.get("dip_type") or "split") == "split" else "core"
         t = b.get("dip_tier") or "?"
         price = b.get("fill_price") or b.get("price") or 0
         n = float(b.get("filled_count") or b.get("contracts") or 0)
@@ -1819,7 +1818,26 @@ def api_experiments():
         e["break_even"] = round(be, 1)
         e["edge_pp"] = round(e["win_rate"] - be, 2)
         e["pnl"] = round(e["pnl"], 2)
+    books = {}
+    for bk in ("split", "core"):
+        rows_b = [b for b in uniq
+                  if ("split" if (b.get("dip_type") or "split") == "split" else "core") == bk]
+        t_b = {k: v for k, v in tiers.items() if v["book"] == bk}
+        d_b = {}
+        for b in rows_b:
+            day = (b.get("timestamp") or "")[:10]
+            e = d_b.setdefault(day, {"day": day, "fills": 0, "wins": 0, "pnl": 0.0})
+            e["fills"] += 1
+            e["wins"] += 1 if b["result"] == "win" else 0
+            e["pnl"] += b.get("pnl", 0)
+        books[bk] = {
+            "tiers": dict(sorted(t_b.items(), key=lambda kv: kv[1]["price"])),
+            "by_day": sorted(d_b.values(), key=lambda x: x["day"], reverse=True)[:30],
+            "total_fills": len(rows_b),
+            "total_pnl": round(sum(b.get("pnl", 0) for b in rows_b), 2),
+        }
     return JSONResponse({
+        "books": books,
         "tiers": dict(sorted(tiers.items(),
                              key=lambda kv: (kv[1]["book"], kv[1]["price"]))),
         "by_day": sorted(by_day.values(), key=lambda x: x["day"], reverse=True)[:30],
