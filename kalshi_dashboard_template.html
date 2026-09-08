@@ -351,7 +351,6 @@
     <div class="subtitle">Sports + Crypto Automated Trading</div>
   </div>
   <div style="text-align:right;display:flex;align-items:center;gap:12px">
-    <button onclick="resetScoreData()" style="padding:6px 14px;border-radius:6px;border:1px solid var(--red);background:transparent;color:var(--red);font-size:12px;font-weight:600;cursor:pointer">Reset Data</button>
     <div>
       <div style="color:var(--muted);font-size:12px">Data refreshed</div>
       <div style="font-size:14px;font-weight:600" id="lastUpdated"></div>
@@ -632,13 +631,10 @@ const stratColors = { S1: '#3b82f6', S2: '#eab308', S3: '#a855f7', S4: '#06b6d4'
 const cryptoColors = { BTC: '#f7931a', ETH: '#627eea', SOL: '#00ffa3', XRP: '#00a2e0', DOGE: '#c4b040', HYPE: '#00ced1', BNB: '#f3ba2f' };
 
 // ═══ Mode switching ═══
-function resetScoreData() {
-  if (!confirm('Clear all crypto score bot trade history? This cannot be undone.')) return;
-  fetch('/api/score-reset', { method: 'POST' })
-    .then(r => r.json())
-    .then(d => { alert(d.message || 'Done'); window._scoreLoaded = false; loadScoreData(); })
-    .catch(e => alert('Reset failed: ' + e));
-}
+// Reset Data button removed from the header. One misclick would have wiped the
+// whole trade history -- including the split-dip book the account is built on --
+// and a confirm() dialog is thin protection for that. The /api/score-reset
+// endpoint still exists for deliberate use.
 
 function switchMode(mode) {
   document.getElementById('sectionScore').classList.toggle('active', mode === 'score');
