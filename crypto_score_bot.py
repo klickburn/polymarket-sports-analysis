@@ -2019,7 +2019,17 @@ def _resolve_open_bets(bets):
             contracts = bet.get("filled_count", bet.get("contracts", 1))
             fee = bet.get("fee")
             if fee is None:
-                fee = math.ceil(0.07 * contracts * price * (1 - price) * 100) / 100.0 if 0 < price < 1 else 0.0
+                # Kalshi bills TAKERS only. Measured over 19,713 fills since the
+                # last reset: 12,867 maker fills were billed $0.00 and 6,846
+                # taker fills $597.88. A dip is a resting limit order well below
+                # the market, so it fills as a maker and costs nothing; charging
+                # it the taker formula overstated fees by ~$497 and was roughly
+                # half the drift between recorded P&L and the account balance.
+                # Core entries cross the spread and genuinely are takers.
+                if bet.get("dip_add"):
+                    fee = 0.0
+                else:
+                    fee = math.ceil(0.07 * contracts * price * (1 - price) * 100) / 100.0 if 0 < price < 1 else 0.0
             if won:
                 bet["pnl"] = round(contracts * (1.0 - price) - fee, 2)
             else:

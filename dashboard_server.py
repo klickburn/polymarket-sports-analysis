@@ -458,9 +458,19 @@ def kalshi_fee(contracts, price):
         return 0.0
 
 def _bet_fee(bet, contracts, price):
-    """Real fee if reconciled from fills, else estimate."""
+    """Real fee if reconciled from fills, else estimated by fill role.
+
+    Kalshi bills takers only -- 12,867 maker fills since the last reset were
+    billed $0.00 against $597.88 on 6,846 taker fills. Dips rest below the
+    market and fill as makers, so they cost nothing; core entries cross the
+    spread and pay the quadratic fee.
+    """
     f = bet.get("fee")
-    return f if f is not None else kalshi_fee(contracts, price)
+    if f is not None:
+        return f
+    if bet.get("dip_add"):
+        return 0.0
+    return kalshi_fee(contracts, price)
 
 
 def _resolve_score_bets():
@@ -1833,11 +1843,11 @@ def api_experiments():
         # At 1 contract that rounding alone adds a full percentage point: a 10c
         # dip needs 11.00%, not 10%. Ignoring it overstated every tier's edge by
         # ~1pp and made 5c look positive when it is not.
-        avg_n = (e["contracts"] / e["fills"]) if e["fills"] else 1
-        avg_n = max(avg_n, 1)
-        p = e["price"] or 0
-        f = _bet_fee({}, avg_n, p) if p else 0
-        be = (p + (f / avg_n if avg_n else 0)) * 100
+        # Dips rest as MAKER orders and Kalshi bills makers nothing, so a dip's
+        # break-even is exactly its entry price. My earlier "fees make this
+        # higher" correction was wrong for this book -- it assumed the taker
+        # formula applied and pushed every tier's bar up by ~1pp.
+        be = (e["price"] or 0) * 100
         e["win_rate"] = round(e["wins"] / e["fills"] * 100, 2) if e["fills"] else 0
         e["break_even"] = round(be, 1)
         e["edge_pp"] = round(e["win_rate"] - be, 2)
