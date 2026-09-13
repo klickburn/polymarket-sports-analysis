@@ -1932,7 +1932,33 @@ def api_fee_audit():
         if n and 0 < p < 1:
             recorded += _bet_fee(b, n, p)
 
+    # Split the billed fee by maker/taker. Dips rest by design, so if makers are
+    # billed at a lower rate (or nothing) the dip books carry the whole error.
+    def _bucket(rows):
+        n = len(rows)
+        fee = sum(float(f.get("fee_cost") or 0) for f in rows)
+        mod = 0.0
+        for f in rows:
+            c = float(f.get("count") or 0)
+            yp = f.get("yes_price")
+            if yp in (None, "") or not c:
+                continue
+            p = float(yp)
+            p = p / 100.0 if p > 1 else p
+            mod += kalshi_fee(c, p)
+        return {"fills": n, "billed": round(fee, 2), "modelled": round(mod, 2),
+                "billed_per_fill": round(fee / n, 4) if n else 0,
+                "modelled_per_fill": round(mod / n, 4) if n else 0}
+
+    by_role = {"taker": _bucket([f for f in fills if f.get("is_taker")]),
+               "maker": _bucket([f for f in fills if not f.get("is_taker")])}
+    sample = [{k: f.get(k) for k in ("count", "yes_price", "no_price", "fee_cost",
+                                     "is_taker", "side", "action")}
+              for f in fills[:3]]
+
     return JSONResponse({
+        "by_role": by_role,
+        "fill_sample": sample,
         "fills_since_reset": len(fills),
         "taker_fills": taker,
         "maker_fills": len(fills) - taker,
