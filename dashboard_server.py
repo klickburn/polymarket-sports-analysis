@@ -1818,7 +1818,17 @@ def api_experiments():
         d["wins"] += 1 if b["result"] == "win" else 0
         d["pnl"] += b.get("pnl", 0)
     for t, e in tiers.items():
-        be = (e["price"] or 0) * 100          # break-even % == entry price in cents
+        # Break-even is NOT just the entry price. Solving EV=0 for a dip bought
+        # at `price` with `n` contracts gives  p* = price + fee/n , and Kalshi's
+        # fee rounds UP to the balance precision ($0.01 for non-direct members).
+        # At 1 contract that rounding alone adds a full percentage point: a 10c
+        # dip needs 11.00%, not 10%. Ignoring it overstated every tier's edge by
+        # ~1pp and made 5c look positive when it is not.
+        avg_n = (e["contracts"] / e["fills"]) if e["fills"] else 1
+        avg_n = max(avg_n, 1)
+        p = e["price"] or 0
+        f = _bet_fee({}, avg_n, p) if p else 0
+        be = (p + (f / avg_n if avg_n else 0)) * 100
         e["win_rate"] = round(e["wins"] / e["fills"] * 100, 2) if e["fills"] else 0
         e["break_even"] = round(be, 1)
         e["edge_pp"] = round(e["win_rate"] - be, 2)
