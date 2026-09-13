@@ -436,6 +436,15 @@ _score_lock = threading.Lock()
 
 import math
 
+def _epoch_ts(ts):
+    """ISO-8601 -> epoch seconds, or None. Module-level twin of the helper
+    nested inside /api/reconcile, so other endpoints can use it too."""
+    try:
+        return datetime.fromisoformat((ts or "").replace("Z", "+00:00")).timestamp()
+    except Exception:
+        return None
+
+
 def kalshi_fee(contracts, price):
     """Estimate Kalshi taker fee: ceil(0.07 * C * P * (1-P)) rounded up to cent.
     Used for live P&L; the audit overwrites with exact fee_cost from fills."""
@@ -1858,6 +1867,80 @@ def api_experiments():
         "by_day": sorted(by_day.values(), key=lambda x: x["day"], reverse=True)[:30],
         "total_fills": len(uniq),
         "total_pnl": round(sum(b.get("pnl", 0) for b in uniq), 2),
+        "generated": datetime.now(timezone.utc).isoformat(),
+    })
+
+
+@app.get("/api/fee-audit")
+def api_fee_audit():
+    """Actual fees Kalshi billed vs what our P&L model charges.
+
+    The dashboard's drift (account change minus recorded P&L) has been growing.
+    Uncaptured orders explain only a little of it, so the next suspect is the fee
+    model: every recorded P&L subtracts an ESTIMATED fee, and if that estimate is
+    too high the account outperforms the record by exactly the excess.
+    """
+    try:
+        with open(SCORE_BETS_FILE) as f:
+            bets = json.load(f)
+    except Exception as e:
+        return JSONResponse({"error": str(e)})
+    rb = _load_reset_baseline() or {}
+    cutoff = _epoch_ts(rb.get("at")) or 0
+
+    fills, cursor, pages = [], None, 0
+    try:
+        while pages < 40:
+            params = {"limit": 1000}
+            if cursor:
+                params["cursor"] = cursor
+            resp = auth_get("/portfolio/fills", params=params)
+            fl = resp.get("fills", [])
+            fills.extend(fl)
+            cursor = resp.get("cursor")
+            pages += 1
+            if not cursor or not fl:
+                break
+            if min((_epoch_ts(f.get("created_time")) or 1e18) for f in fl) < cutoff:
+                break
+    except Exception as e:
+        return JSONResponse({"error": f"fills fetch failed: {e}", "fills": len(fills)})
+
+    fills = [f for f in fills if (_epoch_ts(f.get("created_time")) or 0) >= cutoff]
+    actual = sum(float(f.get("fee_cost") or 0) for f in fills)
+    taker = sum(1 for f in fills if f.get("is_taker"))
+
+    # what our model would charge for those same fills
+    modelled = 0.0
+    for f in fills:
+        c = float(f.get("count") or 0)
+        yp = f.get("yes_price")
+        if yp is None or not c:
+            continue
+        p = yp / 100.0 if yp > 1 else float(yp)
+        modelled += kalshi_fee(c, p)
+
+    # and what the recorded bets subtracted
+    recorded = 0.0
+    for b in bets:
+        if b.get("result") not in ("win", "loss"):
+            continue
+        if (b.get("timestamp") or "") < (rb.get("at") or ""):
+            continue
+        n = b.get("filled_count") or b.get("contracts") or 0
+        p = b.get("fill_price") or b.get("price") or 0
+        if n and 0 < p < 1:
+            recorded += _bet_fee(b, n, p)
+
+    return JSONResponse({
+        "fills_since_reset": len(fills),
+        "taker_fills": taker,
+        "maker_fills": len(fills) - taker,
+        "actual_fees_billed": round(actual, 2),
+        "model_on_same_fills": round(modelled, 2),
+        "overcharge_vs_actual": round(modelled - actual, 2),
+        "recorded_fees_in_pnl": round(recorded, 2),
+        "recorded_minus_actual": round(recorded - actual, 2),
         "generated": datetime.now(timezone.utc).isoformat(),
     })
 
