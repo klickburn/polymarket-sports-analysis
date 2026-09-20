@@ -2000,6 +2000,7 @@ def api_window_sides(limit: int = 8):
     except Exception as e:
         return JSONResponse({"error": str(e), "windows": []}, status_code=200)
     byw = {}
+    bywt = {}
     for b in bets:
         if b.get("action") != "trade" or b.get("dip_add"):
             continue
@@ -2009,12 +2010,16 @@ def api_window_sides(limit: int = 8):
         if not we:
             continue
         byw.setdefault(we, {})[b["crypto"]] = (b.get("side") or "").lower()
+        bywt.setdefault(we, {})[b["crypto"]] = b.get("ticker") or ""
     out = []
     for we in sorted(byw, reverse=True)[:max(1, min(limit, 50))]:
         sides = byw[we]
         out.append({
             "window_end": we,
             "sides": sides,
+            # Same contract, same strike -- an "opposite side" mirror must buy
+            # the other side of THIS ticker, not of a market it picked itself.
+            "tickers": {k: v for k, v in (bywt.get(we) or {}).items() if v},
             "split": len(sides) > 1 and len(set(sides.values())) > 1,
         })
     return JSONResponse({"windows": out,
