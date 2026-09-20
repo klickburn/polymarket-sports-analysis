@@ -226,11 +226,14 @@ COIN_IDS = {
 }
 
 COINGECKO = "https://api.coingecko.com/api/v3"
-CG_API_KEYS = [
+CG_API_KEYS = [k for k in [
     os.environ.get("CG_API_KEY", "CG-djNqgGcv7UfYvqDfKsxWX1ii"),
     os.environ.get("CG_API_KEY_2", "CG-hx9L9wzotJeCZ1xeeLoJqJT9"),
     os.environ.get("CG_API_KEY_3", "CG-5sTc7yccYpF1zWVWfDduHT8i"),
-]
+    os.environ.get("CG_API_KEY_4", "CG-JvsgRXEcRMGJkKGZLpecgZ8U"),
+] if k]
+# Filtered: a variable set to an empty string would otherwise rotate an empty
+# key into the round-robin and fail one request in four.
 _cg_key_index = 0
 
 # ── CoinGecko data fetching ────────────────────────────────────────────
