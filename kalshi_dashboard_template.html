@@ -701,16 +701,43 @@ async function loadExperiments() {
     const _cfgEl = document.getElementById('expLiveConfig');
     if (_cfgEl && d.production) {
       const pr = d.production, cfg = d.configured || {};
-      const line = bk => {
-        const p = pr[bk] || {};
-        const ex = Object.keys(cfg).filter(k => k.startsWith(bk + '|'))
-          .sort((a, b) => parseInt(a.split('|')[1]) - parseInt(b.split('|')[1]))
-          .map(k => `${k.split('|')[1]}\u00d7${cfg[k]}`).join(' · ');
-        return `<b>${bk} dip</b> — production ${p.tier || '?'} \u00d7 ${p.count}` +
-               (ex ? `  |  experiments ${ex}` : '  |  no experiment tiers');
+      // One chip per tier, sized by price. A run-on line of "13c x100 . 14c x100"
+      // is unreadable at a glance, and the whole point of this block is to see
+      // at a glance what size each tier is trading right now.
+      const chip = (label, count, kind) => {
+        const big = count >= 100;
+        const col = kind === 'prod' ? 'var(--teal)' : (big ? 'var(--orange)' : 'var(--muted)');
+        const bg  = kind === 'prod' ? 'rgba(20,184,166,0.15)'
+                  : (big ? 'rgba(245,158,11,0.15)' : 'rgba(139,143,163,0.10)');
+        return `<span style="display:inline-flex;align-items:baseline;gap:5px;
+          padding:5px 10px;border-radius:8px;background:${bg};border:1px solid ${col};
+          margin:3px 4px 3px 0;white-space:nowrap">
+          <b style="color:${col};font-size:13px">${label}</b>
+          <span style="color:var(--text);font-size:12px">&times;${count}</span></span>`;
       };
-      _cfgEl.innerHTML = `<div style="color:var(--text);font-size:12px;line-height:1.8">
-        ${line('split')}<br>${line('core')}</div>`;
+      const row = bk => {
+        const p = pr[bk] || {};
+        const keys = Object.keys(cfg).filter(k => k.startsWith(bk + '|'))
+          .sort((a, b) => parseInt(a.split('|')[1]) - parseInt(b.split('|')[1]));
+        const exposure = (p.count || 0) * (parseInt(p.tier) || 0) / 100 +
+          keys.reduce((a, k) => a + cfg[k] * parseInt(k.split('|')[1]) / 100, 0);
+        return `<div style="margin-bottom:10px">
+          <div style="color:var(--muted);font-size:11px;text-transform:uppercase;
+            letter-spacing:.5px;margin-bottom:5px">${bk} dip
+            <span style="color:var(--text);text-transform:none;letter-spacing:0">
+              &nbsp;$${exposure.toFixed(2)}/leg</span></div>
+          ${chip(p.tier || '?', p.count, 'prod')}
+          ${keys.length ? keys.map(k => chip(k.split('|')[1], cfg[k], 'exp')).join('')
+                        : '<span style="color:var(--muted);font-size:12px">no experiment tiers</span>'}
+        </div>`;
+      };
+      _cfgEl.innerHTML = `<div style="background:var(--card);border:1px solid var(--border);
+        border-radius:10px;padding:14px 16px;margin-top:10px">
+        <div style="color:var(--muted);font-size:11px;margin-bottom:10px">
+          LIVE SIZING &nbsp;<span style="color:var(--teal)">&#9632;</span> production
+          &nbsp;<span style="color:var(--orange)">&#9632;</span> promoted (100+)
+          &nbsp;<span style="color:var(--muted)">&#9632;</span> probe</div>
+        ${row('split')}${row('core')}</div>`;
     }
     document.getElementById(`expTierTable${cap}`).innerHTML =
       `<thead><tr><th>Tier</th><th>Size now</th><th>Fills</th><th>Contracts</th><th>Wins</th><th>Win%</th>
