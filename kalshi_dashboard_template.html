@@ -513,11 +513,11 @@
     <span class="badge" style="background:rgba(234,179,8,0.2);color:var(--yellow)">isolated from production</span>
   </div>
   <div style="color:var(--muted);font-size:13px;margin-bottom:14px">
-    Extra <b>split-dip</b> tiers at 1 contract each, probing either side of the
-    production 10c. These fills carry
-    <code>experiment=true</code> and are excluded from every number on the
+    Extra dip tiers probing either side of the production price. These fills
+    carry <code>experiment=true</code> and are excluded from every number on the
     Score Bot tab. Each tier is scored against <b>its own</b> break-even —
     a 20c dip needs 20% to break even, not 10%.
+    <div id="expLiveConfig" style="margin-top:8px"></div>
   </div>
 
   <div class="kpi-row" id="expKpis"></div>
@@ -698,16 +698,33 @@ async function loadExperiments() {
         `<b>${p >= 0 ? '+' : '-'}$${Math.abs(p).toFixed(2)}</b>`;
     }
 
+    const _cfgEl = document.getElementById('expLiveConfig');
+    if (_cfgEl && d.production) {
+      const pr = d.production, cfg = d.configured || {};
+      const line = bk => {
+        const p = pr[bk] || {};
+        const ex = Object.keys(cfg).filter(k => k.startsWith(bk + '|'))
+          .sort((a, b) => parseInt(a.split('|')[1]) - parseInt(b.split('|')[1]))
+          .map(k => `${k.split('|')[1]}\u00d7${cfg[k]}`).join(' · ');
+        return `<b>${bk} dip</b> — production ${p.tier || '?'} \u00d7 ${p.count}` +
+               (ex ? `  |  experiments ${ex}` : '  |  no experiment tiers');
+      };
+      _cfgEl.innerHTML = `<div style="color:var(--text);font-size:12px;line-height:1.8">
+        ${line('split')}<br>${line('core')}</div>`;
+    }
     document.getElementById(`expTierTable${cap}`).innerHTML =
-      `<thead><tr><th>Tier</th><th>Fills</th><th>Contracts</th><th>Wins</th><th>Win%</th>
+      `<thead><tr><th>Tier</th><th>Size now</th><th>Fills</th><th>Contracts</th><th>Wins</th><th>Win%</th>
        <th>Break-even</th><th>Edge</th><th>P&L</th></tr></thead><tbody>` +
       (keys.length ? keys.map(k => { const t = tiers[k];
         const ec = t.edge_pp >= 0 ? 'var(--green)' : 'var(--red)';
-        return `<tr><td><b>${t.tier}</b></td><td>${t.fills}</td><td>${t.contracts}</td>
+        const sz = t.configured_count == null
+          ? '<span style="color:var(--muted)">off</span>'
+          : `<b>${t.configured_count}</b>`;
+        return `<tr><td><b>${t.tier}</b></td><td>${sz}</td><td>${t.fills}</td><td>${t.contracts}</td>
           <td>${t.wins}</td><td>${t.win_rate}%</td><td>${t.break_even}%</td>
           <td style="color:${ec}">${t.edge_pp >= 0 ? '+' : ''}${t.edge_pp}pp</td>
           <td>${money(t.pnl)}</td></tr>`; }).join('')
-        : `<tr><td colspan="8" style="color:var(--muted)">no ${bk}-dip experiment fills yet</td></tr>`)
+        : `<tr><td colspan="9" style="color:var(--muted)">no ${bk}-dip experiment fills yet</td></tr>`)
       + '</tbody>';
 
     draw(`expEdgeChart${cap}`, { type: 'bar', data: { labels: keys, datasets: [

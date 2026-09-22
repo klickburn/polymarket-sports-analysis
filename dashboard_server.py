@@ -1870,8 +1870,36 @@ def api_experiments():
             "total_fills": len(rows_b),
             "total_pnl": round(sum(b.get("pnl", 0) for b in rows_b), 2),
         }
+    # Currently configured size per tier, read from the bot's own config rather
+    # than re-parsing the env var, so the dashboard cannot drift from what is
+    # actually being traded. Keyed book|tier like `tiers` above.
+    configured, production = {}, {}
+    try:
+        from crypto_score_bot import (SPLIT_DIP_EXTRA_TIERS_CFG, CORE_DIP_EXTRA,
+                                      SPLIT_DIP_COUNT, SPLIT_DIP_PRICE,
+                                      CORE_DIP_COUNT, CORE_DIP_PRICE)
+        for pr, ct in SPLIT_DIP_EXTRA_TIERS_CFG:
+            configured[f"split|{int(round(pr * 100))}c"] = ct
+        for pr, ct in CORE_DIP_EXTRA:
+            configured[f"core|{int(round(pr * 100))}c"] = ct
+        production = {
+            "split": {"tier": f"{int(round(SPLIT_DIP_PRICE * 100))}c",
+                      "count": SPLIT_DIP_COUNT},
+            "core": {"tier": f"{int(round(CORE_DIP_PRICE * 100))}c",
+                     "count": CORE_DIP_COUNT},
+        }
+    except Exception as e:
+        configured = {"_error": str(e)}
+    for k, e in tiers.items():
+        e["configured_count"] = configured.get(k)
+    for bk, blob in books.items():
+        for tname, e in blob["tiers"].items():
+            e["configured_count"] = configured.get(f"{bk}|{tname}")
+
     return JSONResponse({
         "books": books,
+        "configured": configured,
+        "production": production,
         "tiers": dict(sorted(tiers.items(),
                              key=lambda kv: (kv[1]["book"], kv[1]["price"]))),
         "by_day": sorted(by_day.values(), key=lambda x: x["day"], reverse=True)[:30],

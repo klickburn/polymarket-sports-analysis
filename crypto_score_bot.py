@@ -153,6 +153,8 @@ SPLIT_DIP_TIERS = [(SPLIT_DIP_PRICE, SPLIT_DIP_COUNT)] + _parse_tiers(_extra)
 # with a demonstrated edge. Filtering on dip_tier alone would be fragile -- the
 # primary tier can be re-priced -- so intent is recorded explicitly.
 _EXPERIMENT_TIERS = {p for p, _ in _parse_tiers(_extra)}
+# Same list, under a name the dashboard imports to show the live size per tier.
+SPLIT_DIP_EXTRA_TIERS_CFG = _parse_tiers(_extra)
 
 # ── Core dips: the same 10c recovery bet on NON-split windows ────────────
 # Split dips only ever covered windows where BTC and ETH took opposite sides.
