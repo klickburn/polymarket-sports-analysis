@@ -2029,7 +2029,24 @@ def api_window_sides(limit: int = 8):
         return JSONResponse({"error": str(e), "windows": []}, status_code=200)
     byw = {}
     bywt = {}
+    # Fill state of the PRODUCTION 10c split dip, per window per crypto, so a
+    # mirror can gate on "the main account actually got filled" rather than on
+    # "a split window exists". _resolve_dip_orders refreshes this every 20s
+    # against the fills feed, so it is live during the window, not only after
+    # it closes.
+    bywd = {}
     for b in bets:
+        if (b.get("dip_add") and (b.get("dip_type") or "split") == "split"
+                and not b.get("experiment")
+                and abs(float(b.get("price") or 0) - 0.10) < 1e-9):
+            we_d, c_d = b.get("window_end"), b.get("crypto")
+            if we_d and c_d:
+                n = int(b.get("filled_count") or 0)
+                e = bywd.setdefault(we_d, {}).setdefault(
+                    c_d, {"filled": 0, "ordered": 0, "status": None})
+                e["filled"] += n
+                e["ordered"] += int(b.get("contracts") or 0)
+                e["status"] = b.get("result")
         if b.get("action") != "trade" or b.get("dip_add"):
             continue
         if b.get("crypto") not in ("BTC", "ETH"):
@@ -2048,6 +2065,7 @@ def api_window_sides(limit: int = 8):
             # Same contract, same strike -- an "opposite side" mirror must buy
             # the other side of THIS ticker, not of a market it picked itself.
             "tickers": {k: v for k, v in (bywt.get(we) or {}).items() if v},
+            "dips": bywd.get(we) or {},
             "split": len(sides) > 1 and len(set(sides.values())) > 1,
         })
     return JSONResponse({"windows": out,
