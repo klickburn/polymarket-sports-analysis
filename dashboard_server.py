@@ -2009,6 +2009,49 @@ def api_fee_audit():
     })
 
 
+# Live fill lookup for dips the bot has not resolved yet.
+#
+# crypto_score_bot resolves dip fills in _resolve_open_bets, which runs only at
+# a window BOUNDARY -- so filled_count stays 0 for the whole window a dip is
+# actually working in, and only becomes accurate after that window closed. A
+# mirror gating on "has the main dip filled" therefore never sees a fill in
+# time. This reads the fills feed directly so the answer is current.
+#
+# Strictly read-only: queries /portfolio/fills and returns numbers. It never
+# writes the bets file, never touches bot state, and every failure falls back
+# to the stored filled_count.
+_FILLS_CACHE = {"at": 0.0, "by_order": {}}
+_FILLS_TTL = 10.0
+
+
+def _live_fills_by_order():
+    now = time.time()
+    if _FILLS_CACHE["by_order"] and now - _FILLS_CACHE["at"] < _FILLS_TTL:
+        return _FILLS_CACHE["by_order"]
+    agg, cursor = {}, None
+    try:
+        from crypto_score_bot import auth_get as _auth_get
+        for _ in range(2):                      # ~400 recent fills
+            params = {"limit": 200}
+            if cursor:
+                params["cursor"] = cursor
+            resp = _auth_get("/portfolio/fills", params=params)
+            fl = resp.get("fills", []) or []
+            for f in fl:
+                oid = f.get("order_id")
+                if not oid:
+                    continue
+                agg[oid] = agg.get(oid, 0.0) + float(
+                    f.get("count_fp") or f.get("count") or 0)
+            cursor = resp.get("cursor")
+            if not fl or not cursor:
+                break
+    except Exception:
+        return _FILLS_CACHE["by_order"]         # stale beats wrong
+    _FILLS_CACHE.update({"at": now, "by_order": agg})
+    return agg
+
+
 @app.get("/api/window-sides")
 def api_window_sides(limit: int = 8):
     """Per-window BTC/ETH sides — a few hundred bytes, for the Polymarket bot.
@@ -2035,6 +2078,7 @@ def api_window_sides(limit: int = 8):
     # against the fills feed, so it is live during the window, not only after
     # it closes.
     bywd = {}
+    live_marks = []
     for b in bets:
         if (b.get("dip_add") and (b.get("dip_type") or "split") == "split"
                 and not b.get("experiment")
@@ -2042,6 +2086,11 @@ def api_window_sides(limit: int = 8):
             we_d, c_d = b.get("window_end"), b.get("crypto")
             if we_d and c_d:
                 n = int(b.get("filled_count") or 0)
+                # Not yet resolved by the bot -> ask the fills feed directly.
+                if n <= 0 and b.get("result") == "dip_pending":
+                    n = int(_live_fills_by_order().get(b.get("order_id"), 0))
+                    if n > 0:
+                        live_marks.append((we_d, c_d))
                 e = bywd.setdefault(we_d, {}).setdefault(
                     c_d, {"filled": 0, "ordered": 0, "status": None})
                 e["filled"] += n
@@ -2066,6 +2115,7 @@ def api_window_sides(limit: int = 8):
             # the other side of THIS ticker, not of a market it picked itself.
             "tickers": {k: v for k, v in (bywt.get(we) or {}).items() if v},
             "dips": bywd.get(we) or {},
+            "dips_live": [c for (w_, c) in live_marks if w_ == we],
             "split": len(sides) > 1 and len(set(sides.values())) > 1,
         })
     return JSONResponse({"windows": out,
