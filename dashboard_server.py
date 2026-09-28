@@ -1412,7 +1412,9 @@ def _build_score_report(bets, status, balance_info=None):
         e = _months.setdefault(k, {"month": k, "core_pnl": 0.0, "split_dip_pnl": 0.0,
                                    "core_dip_pnl": 0.0, "phantom_pnl": 0.0,
                                    "core_fills": 0, "core_wins": 0, "dip_fills": 0,
-                                   "dip_wins": 0, "days": set()})
+                                   "dip_wins": 0, "days": set(),
+                                   "split_dip_fills": 0, "split_dip_wins": 0,
+                                   "core_dip_fills": 0, "core_dip_wins": 0})
         e["days"].add((b.get("timestamp") or "")[:10])
         won = b.get("result") == "win"
         pnl = b.get("pnl", 0)
@@ -1421,11 +1423,19 @@ def _build_score_report(bets, status, balance_info=None):
         if b.get("dip_add"):
             e["dip_fills"] += 1
             e["dip_wins"] += 1 if won else 0
-            if not b.get("phantom"):
+            # Experiment tiers run 5c-15c against the 10c production price.
+            # Pooling them into a single monthly figure averages ten different
+            # break-evens together and makes the win rate unreadable, so the
+            # per-book columns count PRODUCTION fills only.
+            if not b.get("phantom") and not b.get("experiment"):
                 if b.get("dip_type") == "core":
                     e["core_dip_pnl"] += pnl
+                    e["core_dip_fills"] += 1
+                    e["core_dip_wins"] += 1 if won else 0
                 else:
                     e["split_dip_pnl"] += pnl
+                    e["split_dip_fills"] += 1
+                    e["split_dip_wins"] += 1 if won else 0
         else:
             e["core_fills"] += 1
             e["core_wins"] += 1 if won else 0
@@ -1446,6 +1456,14 @@ def _build_score_report(bets, status, balance_info=None):
             "core_wr": round(e["core_wins"] / e["core_fills"] * 100, 1) if e["core_fills"] else 0,
             "dip_fills": e["dip_fills"], "dip_wins": e["dip_wins"],
             "dip_wr": round(e["dip_wins"] / e["dip_fills"] * 100, 1) if e["dip_fills"] else 0,
+            "split_dip_fills": e["split_dip_fills"],
+            "split_dip_wins": e["split_dip_wins"],
+            "split_dip_wr": (round(e["split_dip_wins"] / e["split_dip_fills"] * 100, 1)
+                             if e["split_dip_fills"] else None),
+            "core_dip_fills": e["core_dip_fills"],
+            "core_dip_wins": e["core_dip_wins"],
+            "core_dip_wr": (round(e["core_dip_wins"] / e["core_dip_fills"] * 100, 1)
+                            if e["core_dip_fills"] else None),
         })
 
     # ── Scaling performance breakdown ──────────────────────────────────

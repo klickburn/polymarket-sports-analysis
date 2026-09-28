@@ -1543,27 +1543,41 @@ function renderMonthlyPnl(d) {
     const [y, mo] = m.split('-');
     return new Date(+y, +mo - 1, 1).toLocaleString('en-US', { month: 'short' }) + ' ' + y;
   };
-  let t = { core: 0, sd: 0, cd: 0, ph: 0, tot: 0, days: 0 };
+  const wr = (v, fills) => {
+    if (v == null) return '<td style="color:var(--muted)">\u2014</td>';
+    const c = v >= 10 ? 'var(--green)' : 'var(--red)';
+    return `<td style="color:${c}">${v.toFixed(1)}%<span style="color:var(--muted);font-size:11px">` +
+           ` /${fills}</span></td>`;
+  };
+  let t = { sd: 0, cd: 0, ph: 0, tot: 0, days: 0,
+            sdf: 0, sdw: 0, cdf: 0, cdw: 0 };
   const body = rows.map(r => {
-    t.core += r.core_pnl; t.sd += r.split_dip_pnl; t.cd += r.core_dip_pnl;
+    t.sd += r.split_dip_pnl; t.cd += r.core_dip_pnl;
     t.ph += r.phantom_pnl; t.tot += r.total_pnl; t.days += r.days;
-    return `<tr><td><b>${name(r.month)}</b></td><td>${r.days}</td>
-      ${money(r.core_pnl)}${money(r.split_dip_pnl)}${money(r.core_dip_pnl)}
+    t.sdf += r.split_dip_fills || 0; t.sdw += r.split_dip_wins || 0;
+    t.cdf += r.core_dip_fills || 0;  t.cdw += r.core_dip_wins || 0;
+    return `<tr><td><b>${name(r.month)}</b></td>
+      ${money(r.split_dip_pnl)}${wr(r.split_dip_wr, r.split_dip_fills || 0)}
+      ${money(r.core_dip_pnl)}${wr(r.core_dip_wr, r.core_dip_fills || 0)}
       ${money(r.total_pnl)}${money(r.per_day)}
       <td style="opacity:.65">${r.phantom_pnl >= 0 ? '+' : '-'}$${Math.abs(r.phantom_pnl).toFixed(2)}</td>
       <td style="opacity:.8">${r.core_wr}%</td></tr>`;
   }).join('');
   const pd = t.days ? t.tot / t.days : 0;
+  const sdAll = t.sdf ? t.sdw / t.sdf * 100 : null;
+  const cdAll = t.cdf ? t.cdw / t.cdf * 100 : null;
   const tr = `<tr style="border-top:2px solid var(--border);font-weight:700">
-    <td>ALL</td><td>${t.days}</td>${money(t.core)}${money(t.sd)}${money(t.cd)}${money(t.tot)}${money(pd)}
+    <td>ALL</td>${money(t.sd)}${wr(sdAll, t.sdf)}${money(t.cd)}${wr(cdAll, t.cdf)}
+    ${money(t.tot)}${money(pd)}
     <td style="opacity:.65">${t.ph >= 0 ? '+' : '-'}$${Math.abs(t.ph).toFixed(2)}</td><td></td></tr>`;
   el.innerHTML = `<div class="card" style="margin-bottom:14px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
       <h3 style="margin:0">Monthly P&L</h3>
-      <div style="font-size:12px;color:var(--muted)">real money only — phantom shown separately, never added in</div>
+      <div style="font-size:12px;color:var(--muted)">real money only, production tiers only — win rates vs a 10% break-even</div>
     </div>
     <div class="scroll-table"><table>
-      <thead><tr><th>Month</th><th>Days</th><th>Core</th><th>Split dips</th><th>Core dips</th>
+      <thead><tr><th>Month</th><th>Split dips</th><th>Split WR</th>
+        <th>Core dips</th><th>Core dip WR</th>
         <th>Total</th><th>Per day</th><th>Phantom</th><th>Core WR</th></tr></thead>
       <tbody>${body}${tr}</tbody></table></div>
   </div>`;
