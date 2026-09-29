@@ -1414,6 +1414,7 @@ def _build_score_report(bets, status, balance_info=None):
                                    "core_fills": 0, "core_wins": 0, "dip_fills": 0,
                                    "dip_wins": 0, "days": set(),
                                    "split_dip_fills": 0, "split_dip_wins": 0,
+                                   "split_dip_pnl_100": 0.0,
                                    "core_dip_fills": 0, "core_dip_wins": 0})
         e["days"].add((b.get("timestamp") or "")[:10])
         won = b.get("result") == "win"
@@ -1436,6 +1437,15 @@ def _build_score_report(bets, status, balance_info=None):
                     e["split_dip_pnl"] += pnl
                     e["split_dip_fills"] += 1
                     e["split_dip_wins"] += 1 if won else 0
+                    # Size-normalised: what the month would have paid if every
+                    # fill had been 100 contracts. The book has run at 10, 25,
+                    # 100, 400 and 600, so raw monthly P&L mostly tracks the
+                    # sizing decisions rather than the edge. A maker dip pays
+                    # (1-price) on a win and costs price on a loss, fee-free.
+                    _pr = float(b.get("fill_price") or b.get("price") or 0)
+                    if 0 < _pr < 1:
+                        e["split_dip_pnl_100"] += (100.0 * (1.0 - _pr) if won
+                                                   else -100.0 * _pr)
         else:
             e["core_fills"] += 1
             e["core_wins"] += 1 if won else 0
@@ -1458,6 +1468,7 @@ def _build_score_report(bets, status, balance_info=None):
             "dip_wr": round(e["dip_wins"] / e["dip_fills"] * 100, 1) if e["dip_fills"] else 0,
             "split_dip_fills": e["split_dip_fills"],
             "split_dip_wins": e["split_dip_wins"],
+            "split_dip_pnl_100": round(e["split_dip_pnl_100"], 2),
             "split_dip_wr": (round(e["split_dip_wins"] / e["split_dip_fills"] * 100, 1)
                              if e["split_dip_fills"] else None),
             "core_dip_fills": e["core_dip_fills"],
