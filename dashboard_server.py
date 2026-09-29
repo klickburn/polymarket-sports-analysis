@@ -1415,6 +1415,7 @@ def _build_score_report(bets, status, balance_info=None):
                                    "dip_wins": 0, "days": set(),
                                    "split_dip_fills": 0, "split_dip_wins": 0,
                                    "split_dip_pnl_100": 0.0,
+                                   "core_dip_pnl_100": 0.0,
                                    "core_dip_fills": 0, "core_dip_wins": 0})
         e["days"].add((b.get("timestamp") or "")[:10])
         won = b.get("result") == "win"
@@ -1433,6 +1434,13 @@ def _build_score_report(bets, status, balance_info=None):
                     e["core_dip_pnl"] += pnl
                     e["core_dip_fills"] += 1
                     e["core_dip_wins"] += 1 if won else 0
+                    # Same normalisation as split dips. This book has swung
+                    # between 1 and 100 contracts repeatedly, so its raw
+                    # monthly P&L is almost entirely a record of those changes.
+                    _pr = float(b.get("fill_price") or b.get("price") or 0)
+                    if 0 < _pr < 1:
+                        e["core_dip_pnl_100"] += (100.0 * (1.0 - _pr) if won
+                                                  else -100.0 * _pr)
                 else:
                     e["split_dip_pnl"] += pnl
                     e["split_dip_fills"] += 1
@@ -1473,6 +1481,7 @@ def _build_score_report(bets, status, balance_info=None):
                              if e["split_dip_fills"] else None),
             "core_dip_fills": e["core_dip_fills"],
             "core_dip_wins": e["core_dip_wins"],
+            "core_dip_pnl_100": round(e["core_dip_pnl_100"], 2),
             "core_dip_wr": (round(e["core_dip_wins"] / e["core_dip_fills"] * 100, 1)
                             if e["core_dip_fills"] else None),
         })
