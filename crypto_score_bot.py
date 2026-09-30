@@ -156,6 +156,51 @@ _EXPERIMENT_TIERS = {p for p, _ in _parse_tiers(_extra)}
 # Same list, under a name the dashboard imports to show the live size per tier.
 SPLIT_DIP_EXTRA_TIERS_CFG = _parse_tiers(_extra)
 
+# Reduced-size hours for split dips, by the window's START hour in UTC.
+# "15-21" means windows starting 15:00 through 20:45 UTC. Over 1,221 fills
+# (Jul 9 - Sep 30) that block won 7.57% against 14.61% the rest of the day and a
+# 10% break-even, and it held out of sample after the rule was found. Instead of
+# skipping it outright, every split tier is capped at SPLIT_DIP_REDUCED_COUNT so
+# the block keeps producing fills and its win rate stays measurable.
+#
+# UTC on purpose: the effect is tied to the clock, and a local-time rule would
+# shift an hour against it when daylight saving ends.
+#
+# Empty (the default) or unparseable means OFF -- the bot behaves exactly as it
+# did before this existed.
+def _parse_hour_ranges(s):
+    hours = set()
+    for part in (s or "").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            a, b = (part.split("-") + [None])[:2]
+            a = int(a)
+            b = int(b) if b is not None else a + 1
+            if not (0 <= a <= 23 and 1 <= b <= 24 and a < b):
+                raise ValueError
+            hours.update(range(a, b))
+        except Exception:
+            print(f"  [DIP] ignoring bad SPLIT_DIP_REDUCED_HOURS_UTC entry {part!r}",
+                  flush=True)
+    return hours
+SPLIT_DIP_REDUCED_HOURS = _parse_hour_ranges(
+    os.environ.get("SPLIT_DIP_REDUCED_HOURS_UTC", ""))
+SPLIT_DIP_REDUCED_COUNT = max(1, int(os.environ.get("SPLIT_DIP_REDUCED_COUNT", "1")))
+
+
+def _split_dip_reduced(window_end_iso):
+    """True if this window's START hour (UTC) is a reduced-size hour.
+    Any parse failure returns False, i.e. normal sizing -- today's behaviour."""
+    if not SPLIT_DIP_REDUCED_HOURS:
+        return False
+    try:
+        start = datetime.fromisoformat(window_end_iso) - timedelta(minutes=15)
+        return start.astimezone(timezone.utc).hour in SPLIT_DIP_REDUCED_HOURS
+    except Exception:
+        return False
+
 # ── Core dips: the same 10c recovery bet on NON-split windows ────────────
 # Split dips only ever covered windows where BTC and ETH took opposite sides.
 # A candlestick replay showed the other ~85% of windows are the larger and (for
@@ -909,10 +954,15 @@ def _place_split_dips(bets, window_end_iso):
     # _absorb_core_dips) and subtract what it already holds from each tier.
     absorbed = _absorb_core_dips(bets, window_end_iso) if CORE_DIP_ENABLED else {}
     _split_leg_results = []
+    reduced = _split_dip_reduced(window_end_iso)
     tier_str = ", ".join(f"{c}@{p*100:.0f}c" for p, c in SPLIT_DIP_TIERS)
     P(f"  [DIP] split window ({sides[0]}/{sides[1]}) — resting tiers [{tier_str}] on both sides")
+    if reduced:
+        P(f"  [DIP] reduced-size hour (UTC) — every split tier capped at "
+          f"{SPLIT_DIP_REDUCED_COUNT} contract(s) to keep tracking the win rate")
     for cr, b in wtr.items():
         for price, count in SPLIT_DIP_TIERS:
+            full_count = count
             # Only the tier at the core-dip price overlaps; deeper tiers are
             # untouched. Never go below zero, and skip the order entirely if the
             # core dip already covers the tier.
@@ -922,6 +972,8 @@ def _place_split_dips(bets, window_end_iso):
                     count = max(0, count - have)
                     P(f"  [DIP] {cr} {price*100:.0f}c tier reduced by {have} "
                       f"already held from the core dip -> {count}")
+            if reduced:
+                count = min(count, SPLIT_DIP_REDUCED_COUNT)
             if count <= 0:
                 continue
             oid = place_dip_order(b["ticker"], b["side"], count, price)
@@ -934,6 +986,8 @@ def _place_split_dips(bets, window_end_iso):
                     "dip_type": "split", "dip_tier": f"{price*100:.0f}c",
                     "experiment": price in _EXPERIMENT_TIERS,
                     "order_id": oid, "contracts": count,
+                    "reduced_hours": reduced,
+                    "full_count": full_count,
                     "event_ticker": b.get("event_ticker", ""),
                     "window_end": window_end_iso,
                     "timestamp": datetime.now(timezone.utc).isoformat(),
