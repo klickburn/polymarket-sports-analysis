@@ -246,9 +246,32 @@ CORE_DIP_EXTRA = _parse_tiers(os.environ.get("CORE_DIP_EXTRA_TIERS", ""))
 _CORE_EXPERIMENT_TIERS = {p for p, _ in CORE_DIP_EXTRA}
 
 
-def _core_dip_size(side):
-    """Contracts for this side — per-side override, else the flat count."""
-    return CORE_DIP_SIDE_SIZES.get((side or "").lower(), CORE_DIP_COUNT)
+# Per-crypto size override, "BTC:100,ETH:1". Empty by default: both cryptos run
+# at CORE_DIP_COUNT. A malformed entry is skipped, so that crypto falls back to
+# CORE_DIP_COUNT -- i.e. the behaviour before this override existed.
+def _parse_crypto_sizes(sv):
+    out = {}
+    for part in (sv or "").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            c, n = part.split(":")
+            out[c.strip().upper()] = int(n)
+        except ValueError:
+            print(f"  [CORE-DIP] ignoring bad CORE_DIP_CRYPTO_SIZES entry {part!r}",
+                  flush=True)
+    return out
+CORE_DIP_CRYPTO_SIZES = _parse_crypto_sizes(os.environ.get("CORE_DIP_CRYPTO_SIZES", ""))
+
+
+def _core_dip_size(side, crypto=None):
+    """Contracts for this cell. Precedence: the per-side override (if that side
+    is listed), then the per-crypto override, then the flat CORE_DIP_COUNT."""
+    s = (side or "").lower()
+    if s in CORE_DIP_SIDE_SIZES:
+        return CORE_DIP_SIDE_SIZES[s]
+    return CORE_DIP_CRYPTO_SIZES.get((crypto or "").upper(), CORE_DIP_COUNT)
 
 DATA_DIR = os.environ.get("SCORE_DATA_DIR", "/data")
 if not os.path.isdir(DATA_DIR):
@@ -1124,7 +1147,7 @@ def _place_core_dips(bets, window_end_iso):
         b = wtr.get(cr)
         if not b or not b.get("side"):
             continue
-        for _price, _count in [(CORE_DIP_PRICE, _core_dip_size(b["side"]))] + CORE_DIP_EXTRA:
+        for _price, _count in [(CORE_DIP_PRICE, _core_dip_size(b["side"], cr))] + CORE_DIP_EXTRA:
             if _count <= 0:
                 continue
             _is_exp = _price in _CORE_EXPERIMENT_TIERS

@@ -719,14 +719,21 @@ async function loadExperiments() {
         const p = pr[bk] || {};
         const keys = Object.keys(cfg).filter(k => k.startsWith(bk + '|'))
           .sort((a, b) => parseInt(a.split('|')[1]) - parseInt(b.split('|')[1]));
-        const exposure = (p.count || 0) * (parseInt(p.tier) || 0) / 100 +
-          keys.reduce((a, k) => a + cfg[k] * parseInt(k.split('|')[1]) / 100, 0);
+        const pc = p.per_crypto && Object.keys(p.per_crypto).length ? p.per_crypto : null;
+        const extra = keys.reduce((a, k) => a + cfg[k] * parseInt(k.split('|')[1]) / 100, 0);
+        const legCost = n => n * (parseInt(p.tier) || 0) / 100 + extra;
+        // Per-crypto sizing means the two legs cost different amounts, so show
+        // each rather than one misleading figure.
+        const expoTxt = pc
+          ? Object.entries(pc).map(([c, n]) => `${c} $${legCost(n).toFixed(2)}`).join(' · ') + '/leg'
+          : `$${legCost(p.count || 0).toFixed(2)}/leg`;
         return `<div style="margin-bottom:10px">
           <div style="color:var(--muted);font-size:11px;text-transform:uppercase;
             letter-spacing:.5px;margin-bottom:5px">${bk} dip
             <span style="color:var(--text);text-transform:none;letter-spacing:0">
-              &nbsp;$${exposure.toFixed(2)}/leg</span></div>
-          ${chip(p.tier || '?', p.count, 'prod')}
+              &nbsp;${expoTxt}</span></div>
+          ${pc ? Object.entries(pc).map(([c, n]) => chip(`${p.tier || '?'} ${c}`, n, 'prod')).join('')
+               : chip(p.tier || '?', p.count, 'prod')}
           ${keys.length ? keys.map(k => chip(k.split('|')[1], cfg[k], 'exp')).join('')
                         : '<span style="color:var(--muted);font-size:12px">no experiment tiers</span>'}
         </div>`;

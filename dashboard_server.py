@@ -1920,11 +1920,20 @@ def api_experiments():
             configured[f"split|{int(round(pr * 100))}c"] = ct
         for pr, ct in CORE_DIP_EXTRA:
             configured[f"core|{int(round(pr * 100))}c"] = ct
+        # Live per-crypto core-dip size, falling back to the flat count exactly
+        # as the bot does. Empty when no per-crypto override is configured.
+        try:
+            from crypto_score_bot import CORE_DIP_CRYPTO_SIZES as _cps, CORE_DIP_CRYPTOS as _cc
+            _core_per_crypto = ({c: _cps.get(c, CORE_DIP_COUNT) for c in _cc}
+                                if _cps else {})
+        except Exception:
+            _core_per_crypto = {}
         production = {
             "split": {"tier": f"{int(round(SPLIT_DIP_PRICE * 100))}c",
                       "count": SPLIT_DIP_COUNT},
             "core": {"tier": f"{int(round(CORE_DIP_PRICE * 100))}c",
-                     "count": CORE_DIP_COUNT},
+                     "count": CORE_DIP_COUNT,
+                     "per_crypto": _core_per_crypto},
         }
     except Exception as e:
         configured = {"_error": str(e)}
