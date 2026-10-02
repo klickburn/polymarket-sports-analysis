@@ -1414,6 +1414,7 @@ def _build_score_report(bets, status, balance_info=None):
                                    "core_fills": 0, "core_wins": 0, "dip_fills": 0,
                                    "dip_wins": 0, "days": set(),
                                    "split_dip_fills": 0, "split_dip_wins": 0,
+                                   "split_blk_fills": 0, "split_blk_wins": 0,
                                    "split_dip_pnl_100": 0.0,
                                    "core_dip_pnl_100": 0.0,
                                    "core_dip_fills": 0, "core_dip_wins": 0})
@@ -1445,6 +1446,17 @@ def _build_score_report(bets, status, balance_info=None):
                     e["split_dip_pnl"] += pnl
                     e["split_dip_fills"] += 1
                     e["split_dip_wins"] += 1 if won else 0
+                    # 15:00-21:00 UTC = 10am-4pm CDT (9am-3pm CST after DST
+                    # ends) -- the block the bot now trades at 1 contract.
+                    # Fixed in UTC like the bot's rule, so it tracks the same
+                    # windows whatever the local clock says.
+                    try:
+                        _h = datetime.fromisoformat(b.get("timestamp")).astimezone(timezone.utc).hour
+                    except Exception:
+                        _h = None
+                    if _h is not None and 15 <= _h < 21:
+                        e["split_blk_fills"] += 1
+                        e["split_blk_wins"] += 1 if won else 0
                     # Size-normalised: what the month would have paid if every
                     # fill had been 100 contracts. The book has run at 10, 25,
                     # 100, 400 and 600, so raw monthly P&L mostly tracks the
@@ -1479,6 +1491,10 @@ def _build_score_report(bets, status, balance_info=None):
             "split_dip_pnl_100": round(e["split_dip_pnl_100"], 2),
             "split_dip_wr": (round(e["split_dip_wins"] / e["split_dip_fills"] * 100, 1)
                              if e["split_dip_fills"] else None),
+            "split_blk_fills": e["split_blk_fills"],
+            "split_blk_wins": e["split_blk_wins"],
+            "split_blk_wr": (round(e["split_blk_wins"] / e["split_blk_fills"] * 100, 1)
+                             if e["split_blk_fills"] else None),
             "core_dip_fills": e["core_dip_fills"],
             "core_dip_wins": e["core_dip_wins"],
             "core_dip_pnl_100": round(e["core_dip_pnl_100"], 2),

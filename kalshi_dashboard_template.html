@@ -1557,16 +1557,17 @@ function renderMonthlyPnl(d) {
            ` /${fills}</span></td>`;
   };
   let t = { sd: 0, cd: 0, ph: 0, tot: 0, days: 0,
-            sdf: 0, sdw: 0, cdf: 0, cdw: 0, sd100: 0, cd100: 0 };
+            sdf: 0, sdw: 0, cdf: 0, cdw: 0, sd100: 0, cd100: 0, bf: 0, bw: 0 };
   const body = rows.map(r => {
     t.sd += r.split_dip_pnl; t.cd += r.core_dip_pnl;
     t.ph += r.phantom_pnl; t.tot += r.total_pnl; t.days += r.days;
     t.sdf += r.split_dip_fills || 0; t.sdw += r.split_dip_wins || 0;
+    t.bf += r.split_blk_fills || 0;  t.bw += r.split_blk_wins || 0;
     t.sd100 += r.split_dip_pnl_100 || 0;
     t.cd100 += r.core_dip_pnl_100 || 0;
     t.cdf += r.core_dip_fills || 0;  t.cdw += r.core_dip_wins || 0;
     return `<tr><td><b>${name(r.month)}</b></td>
-      ${money(r.split_dip_pnl)}${money(r.split_dip_pnl_100 || 0)}${wr(r.split_dip_wr, r.split_dip_fills || 0)}
+      ${money(r.split_dip_pnl)}${money(r.split_dip_pnl_100 || 0)}${wr(r.split_dip_wr, r.split_dip_fills || 0)}${wr(r.split_blk_wr, r.split_blk_fills || 0)}
       ${money(r.core_dip_pnl)}${money(r.core_dip_pnl_100 || 0)}${wr(r.core_dip_wr, r.core_dip_fills || 0)}
       ${money(r.total_pnl)}${money(r.per_day)}
       <td style="opacity:.65">${r.phantom_pnl >= 0 ? '+' : '-'}$${Math.abs(r.phantom_pnl).toFixed(2)}</td>
@@ -1575,8 +1576,9 @@ function renderMonthlyPnl(d) {
   const pd = t.days ? t.tot / t.days : 0;
   const sdAll = t.sdf ? t.sdw / t.sdf * 100 : null;
   const cdAll = t.cdf ? t.cdw / t.cdf * 100 : null;
+  const bAll = t.bf ? t.bw / t.bf * 100 : null;
   const tr = `<tr style="border-top:2px solid var(--border);font-weight:700">
-    <td>ALL</td>${money(t.sd)}${money(t.sd100)}${wr(sdAll, t.sdf)}${money(t.cd)}${money(t.cd100)}${wr(cdAll, t.cdf)}
+    <td>ALL</td>${money(t.sd)}${money(t.sd100)}${wr(sdAll, t.sdf)}${wr(bAll, t.bf)}${money(t.cd)}${money(t.cd100)}${wr(cdAll, t.cdf)}
     ${money(t.tot)}${money(pd)}
     <td style="opacity:.65">${t.ph >= 0 ? '+' : '-'}$${Math.abs(t.ph).toFixed(2)}</td><td></td></tr>`;
   el.innerHTML = `<div class="card" style="margin-bottom:14px">
@@ -1586,6 +1588,7 @@ function renderMonthlyPnl(d) {
     </div>
     <div class="scroll-table"><table>
       <thead><tr><th>Month</th><th>Split dips</th><th>Split P&amp;L @100</th><th>Split WR</th>
+        <th title="Windows starting 15:00-20:45 UTC: 10am-4pm CDT, 9am-3pm CST after Nov 1">Split WR 10a&ndash;4p</th>
         <th>Core dips</th><th>Core P&amp;L @100</th><th>Core dip WR</th>
         <th>Total</th><th>Per day</th><th>Phantom</th><th>Core WR</th></tr></thead>
       <tbody>${body}${tr}</tbody></table></div>
