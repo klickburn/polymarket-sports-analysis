@@ -249,7 +249,7 @@ _CORE_EXPERIMENT_TIERS = {p for p, _ in CORE_DIP_EXTRA}
 # Per-crypto size override, "BTC:100,ETH:1". Empty by default: both cryptos run
 # at CORE_DIP_COUNT. A malformed entry is skipped, so that crypto falls back to
 # CORE_DIP_COUNT -- i.e. the behaviour before this override existed.
-def _parse_crypto_sizes(sv):
+def _parse_crypto_sizes(sv, name="CORE_DIP_CRYPTO_SIZES"):
     out = {}
     for part in (sv or "").split(","):
         part = part.strip()
@@ -259,10 +259,15 @@ def _parse_crypto_sizes(sv):
             c, n = part.split(":")
             out[c.strip().upper()] = int(n)
         except ValueError:
-            print(f"  [CORE-DIP] ignoring bad CORE_DIP_CRYPTO_SIZES entry {part!r}",
-                  flush=True)
+            print(f"  [DIP] ignoring bad {name} entry {part!r}", flush=True)
     return out
 CORE_DIP_CRYPTO_SIZES = _parse_crypto_sizes(os.environ.get("CORE_DIP_CRYPTO_SIZES", ""))
+# Same shape for the PRODUCTION split-dip tier only ("BTC:600,ETH:300"). The
+# experiment tiers keep their own sizes. Empty (default) or malformed means that
+# crypto uses SPLIT_DIP_COUNT -- the behaviour before this override existed. The
+# reduced-hours cap still applies on top.
+SPLIT_DIP_CRYPTO_SIZES = _parse_crypto_sizes(
+    os.environ.get("SPLIT_DIP_CRYPTO_SIZES", ""), "SPLIT_DIP_CRYPTO_SIZES")
 
 
 def _core_dip_size(side, crypto=None):
@@ -983,8 +988,14 @@ def _place_split_dips(bets, window_end_iso):
     if reduced:
         P(f"  [DIP] reduced-size hour (UTC) — every split tier capped at "
           f"{SPLIT_DIP_REDUCED_COUNT} contract(s) to keep tracking the win rate")
+    if SPLIT_DIP_CRYPTO_SIZES:
+        P(f"  [DIP] per-crypto {SPLIT_DIP_PRICE*100:.0f}c size: " + ", ".join(
+            f"{c} {SPLIT_DIP_CRYPTO_SIZES.get(c, SPLIT_DIP_COUNT)}" for c in wtr))
     for cr, b in wtr.items():
         for price, count in SPLIT_DIP_TIERS:
+            if (abs(price - SPLIT_DIP_PRICE) < 1e-9
+                    and price not in _EXPERIMENT_TIERS):
+                count = SPLIT_DIP_CRYPTO_SIZES.get(cr, count)
             full_count = count
             # Only the tier at the core-dip price overlaps; deeper tiers are
             # untouched. Never go below zero, and skip the order entirely if the

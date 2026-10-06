@@ -1944,9 +1944,16 @@ def api_experiments():
                                 if _cps else {})
         except Exception:
             _core_per_crypto = {}
+        try:
+            from crypto_score_bot import SPLIT_DIP_CRYPTO_SIZES as _sps
+            _split_per_crypto = ({c: _sps.get(c, SPLIT_DIP_COUNT) for c in ("BTC", "ETH")}
+                                 if _sps else {})
+        except Exception:
+            _split_per_crypto = {}
         production = {
             "split": {"tier": f"{int(round(SPLIT_DIP_PRICE * 100))}c",
-                      "count": SPLIT_DIP_COUNT},
+                      "count": SPLIT_DIP_COUNT,
+                      "per_crypto": _split_per_crypto},
             "core": {"tier": f"{int(round(CORE_DIP_PRICE * 100))}c",
                      "count": CORE_DIP_COUNT,
                      "per_crypto": _core_per_crypto},
