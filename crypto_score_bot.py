@@ -168,7 +168,7 @@ SPLIT_DIP_EXTRA_TIERS_CFG = _parse_tiers(_extra)
 #
 # Empty (the default) or unparseable means OFF -- the bot behaves exactly as it
 # did before this existed.
-def _parse_hour_ranges(s):
+def _parse_hour_ranges(s, name="SPLIT_DIP_REDUCED_HOURS_UTC"):
     hours = set()
     for part in (s or "").split(","):
         part = part.strip()
@@ -182,7 +182,7 @@ def _parse_hour_ranges(s):
                 raise ValueError
             hours.update(range(a, b))
         except Exception:
-            print(f"  [DIP] ignoring bad SPLIT_DIP_REDUCED_HOURS_UTC entry {part!r}",
+            print(f"  [DIP] ignoring bad {name} entry {part!r}",
                   flush=True)
     return hours
 SPLIT_DIP_REDUCED_HOURS = _parse_hour_ranges(
@@ -268,6 +268,32 @@ CORE_DIP_CRYPTO_SIZES = _parse_crypto_sizes(os.environ.get("CORE_DIP_CRYPTO_SIZE
 # reduced-hours cap still applies on top.
 SPLIT_DIP_CRYPTO_SIZES = _parse_crypto_sizes(
     os.environ.get("SPLIT_DIP_CRYPTO_SIZES", ""), "SPLIT_DIP_CRYPTO_SIZES")
+
+# Reduced-size hours for CORE dips, by the window's START hour in UTC -- the
+# same mechanism as the split-dip cap, separate settings. "0-6" means windows
+# starting 00:00-05:45 UTC (7pm-1am CDT). Over 1,550 BTC core-dip fills
+# (Aug 22 - Oct 8) that block won 8.7% vs 12.2% the rest of the day and a 10%
+# break-even, weaker in both halves of the data; for ETH it was inconsistent,
+# hence CORE_DIP_REDUCED_CRYPTOS. Capped rather than skipped so the block keeps
+# being measured. Empty (default) or unparseable hours = OFF.
+CORE_DIP_REDUCED_HOURS = _parse_hour_ranges(
+    os.environ.get("CORE_DIP_REDUCED_HOURS_UTC", ""), "CORE_DIP_REDUCED_HOURS_UTC")
+CORE_DIP_REDUCED_COUNT = max(1, int(os.environ.get("CORE_DIP_REDUCED_COUNT", "1")))
+CORE_DIP_REDUCED_CRYPTOS = {c.strip().upper() for c in
+                            os.environ.get("CORE_DIP_REDUCED_CRYPTOS", "BTC,ETH").split(",")
+                            if c.strip()}
+
+
+def _core_dip_reduced(window_end_iso, crypto):
+    """True if this core dip falls in a reduced-size hour for this crypto.
+    Any parse failure returns False -- normal sizing."""
+    if not CORE_DIP_REDUCED_HOURS or (crypto or "").upper() not in CORE_DIP_REDUCED_CRYPTOS:
+        return False
+    try:
+        start = datetime.fromisoformat(window_end_iso) - timedelta(minutes=15)
+        return start.astimezone(timezone.utc).hour in CORE_DIP_REDUCED_HOURS
+    except Exception:
+        return False
 
 
 def _core_dip_size(side, crypto=None):
@@ -1158,7 +1184,11 @@ def _place_core_dips(bets, window_end_iso):
         b = wtr.get(cr)
         if not b or not b.get("side"):
             continue
+        _reduced = _core_dip_reduced(window_end_iso, cr)
         for _price, _count in [(CORE_DIP_PRICE, _core_dip_size(b["side"], cr))] + CORE_DIP_EXTRA:
+            _full = _count
+            if _reduced:
+                _count = min(_count, CORE_DIP_REDUCED_COUNT)
             if _count <= 0:
                 continue
             _is_exp = _price in _CORE_EXPERIMENT_TIERS
@@ -1171,6 +1201,7 @@ def _place_core_dips(bets, window_end_iso):
                     "dip_type": "core", "dip_tier": f"{_price*100:.0f}c",
                     "experiment": _is_exp,
                     "order_id": oid, "contracts": _count,
+                    "reduced_hours": _reduced, "full_count": _full,
                     "event_ticker": b.get("event_ticker", ""),
                     "window_end": window_end_iso,
                     "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -1181,7 +1212,8 @@ def _place_core_dips(bets, window_end_iso):
                 if not _is_exp:
                     done.add(cr)      # only the production tier latches the window
                 P(f"  [CORE-DIP] {cr} {b['side']} — rested {_count}x @ "
-                  f"{_price*100:.0f}c{' [experiment]' if _is_exp else ''}")
+                  f"{_price*100:.0f}c{' [experiment]' if _is_exp else ''}"
+                  f"{f' [reduced hour, full size {_full}]' if _reduced else ''}")
             time.sleep(0.25)
     # Latch the window only when every configured cell is covered. Returning
     # True as soon as ANYTHING was placed is what stranded the second leg: the
