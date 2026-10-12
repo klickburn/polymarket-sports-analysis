@@ -284,6 +284,42 @@ CORE_DIP_REDUCED_CRYPTOS = {c.strip().upper() for c in
                             if c.strip()}
 
 
+# ── Freeze: chosen weekday + UTC-hour blocks where EVERY dip (split tiers and
+# core dips, both cryptos) rests at DIP_FREEZE_COUNT, whatever the other caps
+# say. "mon:15-21" = Mondays 10am-4pm CDT. Several entries: "mon:15-21,fri:0-6".
+# Same window-START rule and UTC clock as the reduced hours. Empty = OFF.
+_DOW = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
+
+
+def _parse_freeze(s, name="DIP_FREEZE_UTC"):
+    out = set()
+    for part in (s or "").split(","):
+        part = part.strip().lower()
+        if not part:
+            continue
+        try:
+            day, hrs = part.split(":")
+            d = _DOW[day.strip()[:3]]
+            out.update((d, h) for h in _parse_hour_ranges(hrs, name))
+        except Exception:
+            print(f"  [DIP] ignoring bad {name} entry {part!r}", flush=True)
+    return out
+DIP_FREEZE = _parse_freeze(os.environ.get("DIP_FREEZE_UTC", ""))
+DIP_FREEZE_COUNT = max(1, int(os.environ.get("DIP_FREEZE_COUNT", "1")))
+
+
+def _dip_frozen(window_end_iso):
+    """True if this window STARTS in a freeze block (UTC weekday + hour)."""
+    if not DIP_FREEZE:
+        return False
+    try:
+        start = (datetime.fromisoformat(window_end_iso)
+                 - timedelta(minutes=15)).astimezone(timezone.utc)
+        return (start.weekday(), start.hour) in DIP_FREEZE
+    except Exception:
+        return False
+
+
 def _core_dip_reduced(window_end_iso, crypto):
     """True if this core dip falls in a reduced-size hour for this crypto.
     Any parse failure returns False -- normal sizing."""
@@ -1009,11 +1045,15 @@ def _place_split_dips(bets, window_end_iso):
     absorbed = _absorb_core_dips(bets, window_end_iso) if CORE_DIP_ENABLED else {}
     _split_leg_results = []
     reduced = _split_dip_reduced(window_end_iso)
+    frozen = _dip_frozen(window_end_iso)
     tier_str = ", ".join(f"{c}@{p*100:.0f}c" for p, c in SPLIT_DIP_TIERS)
     P(f"  [DIP] split window ({sides[0]}/{sides[1]}) — resting tiers [{tier_str}] on both sides")
     if reduced:
         P(f"  [DIP] reduced-size hour (UTC) — every split tier capped at "
           f"{SPLIT_DIP_REDUCED_COUNT} contract(s) to keep tracking the win rate")
+    if frozen:
+        P(f"  [DIP] freeze block (DIP_FREEZE_UTC) — every split tier capped at "
+          f"{DIP_FREEZE_COUNT} contract(s)")
     if SPLIT_DIP_CRYPTO_SIZES:
         P(f"  [DIP] per-crypto {SPLIT_DIP_PRICE*100:.0f}c size: " + ", ".join(
             f"{c} {SPLIT_DIP_CRYPTO_SIZES.get(c, SPLIT_DIP_COUNT)}" for c in wtr))
@@ -1034,6 +1074,8 @@ def _place_split_dips(bets, window_end_iso):
                       f"already held from the core dip -> {count}")
             if reduced:
                 count = min(count, SPLIT_DIP_REDUCED_COUNT)
+            if frozen:
+                count = min(count, DIP_FREEZE_COUNT)
             if count <= 0:
                 continue
             oid = place_dip_order(b["ticker"], b["side"], count, price)
@@ -1047,6 +1089,7 @@ def _place_split_dips(bets, window_end_iso):
                     "experiment": price in _EXPERIMENT_TIERS,
                     "order_id": oid, "contracts": count,
                     "reduced_hours": reduced,
+                    "frozen": frozen,
                     "full_count": full_count,
                     "event_ticker": b.get("event_ticker", ""),
                     "window_end": window_end_iso,
@@ -1185,10 +1228,13 @@ def _place_core_dips(bets, window_end_iso):
         if not b or not b.get("side"):
             continue
         _reduced = _core_dip_reduced(window_end_iso, cr)
+        _frozen = _dip_frozen(window_end_iso)
         for _price, _count in [(CORE_DIP_PRICE, _core_dip_size(b["side"], cr))] + CORE_DIP_EXTRA:
             _full = _count
             if _reduced:
                 _count = min(_count, CORE_DIP_REDUCED_COUNT)
+            if _frozen:
+                _count = min(_count, DIP_FREEZE_COUNT)
             if _count <= 0:
                 continue
             _is_exp = _price in _CORE_EXPERIMENT_TIERS
@@ -1201,7 +1247,7 @@ def _place_core_dips(bets, window_end_iso):
                     "dip_type": "core", "dip_tier": f"{_price*100:.0f}c",
                     "experiment": _is_exp,
                     "order_id": oid, "contracts": _count,
-                    "reduced_hours": _reduced, "full_count": _full,
+                    "reduced_hours": _reduced, "frozen": _frozen, "full_count": _full,
                     "event_ticker": b.get("event_ticker", ""),
                     "window_end": window_end_iso,
                     "timestamp": datetime.now(timezone.utc).isoformat(),
