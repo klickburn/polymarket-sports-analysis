@@ -308,13 +308,33 @@ DIP_FREEZE = _parse_freeze(os.environ.get("DIP_FREEZE_UTC", ""))
 DIP_FREEZE_COUNT = max(1, int(os.environ.get("DIP_FREEZE_COUNT", "1")))
 
 
+# One-off freeze that ends by itself: every dip rests at DIP_FREEZE_COUNT in
+# windows STARTING before this UTC time ("2026-10-12T21:00" = until 4pm CDT that
+# day). After it passes the bot is back to normal with no change needed.
+# Empty or unparseable = OFF.
+def _parse_until(s, name="DIP_FREEZE_UNTIL_UTC"):
+    s = (s or "").strip()
+    if not s:
+        return None
+    try:
+        t = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
+    except Exception:
+        print(f"  [DIP] ignoring bad {name} value {s!r}", flush=True)
+        return None
+DIP_FREEZE_UNTIL = _parse_until(os.environ.get("DIP_FREEZE_UNTIL_UTC", ""))
+
+
 def _dip_frozen(window_end_iso):
-    """True if this window STARTS in a freeze block (UTC weekday + hour)."""
-    if not DIP_FREEZE:
+    """True if this window STARTS in a freeze block (UTC weekday + hour) or
+    before the one-off DIP_FREEZE_UNTIL_UTC time."""
+    if not DIP_FREEZE and not DIP_FREEZE_UNTIL:
         return False
     try:
         start = (datetime.fromisoformat(window_end_iso)
                  - timedelta(minutes=15)).astimezone(timezone.utc)
+        if DIP_FREEZE_UNTIL and start < DIP_FREEZE_UNTIL:
+            return True
         return (start.weekday(), start.hour) in DIP_FREEZE
     except Exception:
         return False
@@ -1052,7 +1072,7 @@ def _place_split_dips(bets, window_end_iso):
         P(f"  [DIP] reduced-size hour (UTC) — every split tier capped at "
           f"{SPLIT_DIP_REDUCED_COUNT} contract(s) to keep tracking the win rate")
     if frozen:
-        P(f"  [DIP] freeze block (DIP_FREEZE_UTC) — every split tier capped at "
+        P(f"  [DIP] freeze (DIP_FREEZE_UTC / DIP_FREEZE_UNTIL_UTC) — every split tier capped at "
           f"{DIP_FREEZE_COUNT} contract(s)")
     if SPLIT_DIP_CRYPTO_SIZES:
         P(f"  [DIP] per-crypto {SPLIT_DIP_PRICE*100:.0f}c size: " + ", ".join(
