@@ -2161,6 +2161,7 @@ def api_window_sides(limit: int = 8):
         return JSONResponse({"error": str(e), "windows": []}, status_code=200)
     byw = {}
     bywt = {}
+    bywr = {}     # 1h return (%) the core pick saw, for the mirror's momentum cut
     # Fill state of the PRODUCTION 10c split dip, per window per crypto, so a
     # mirror can gate on "the main account actually got filled" rather than on
     # "a split window exists". _resolve_dip_orders refreshes this every 20s
@@ -2194,6 +2195,10 @@ def api_window_sides(limit: int = 8):
             continue
         byw.setdefault(we, {})[b["crypto"]] = (b.get("side") or "").lower()
         bywt.setdefault(we, {})[b["crypto"]] = b.get("ticker") or ""
+        try:
+            bywr.setdefault(we, {})[b["crypto"]] = round(float((b.get("indicators") or {})["ret_1h"]), 4)
+        except (KeyError, TypeError, ValueError):
+            pass
     out = []
     for we in sorted(byw, reverse=True)[:max(1, min(limit, 50))]:
         sides = byw[we]
@@ -2205,6 +2210,7 @@ def api_window_sides(limit: int = 8):
             "tickers": {k: v for k, v in (bywt.get(we) or {}).items() if v},
             "dips": bywd.get(we) or {},
             "dips_live": [c for (w_, c) in live_marks if w_ == we],
+            "ret_1h": bywr.get(we) or {},
             "split": len(sides) > 1 and len(set(sides.values())) > 1,
         })
     return JSONResponse({"windows": out,
