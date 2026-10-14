@@ -357,6 +357,155 @@ def _quarterly_expiry(year, month):
     return (last - timedelta(days=(last.weekday() - 4) % 7)).date()
 
 
+# ── Core-dip rules from the Oct 2026 tests (each OFF unless its variable is set) ──
+# 1) Momentum cut. When the coin had already moved our way over the last hour
+#    and the favourite still collapses to 10c, the move has usually turned for
+#    good: BTC core dips won 9.3% (462 live fills) when the aligned 1h return was
+#    >= +0.10%, against 11.9% otherwise; Kalshi's 10-month history agrees (9.2%
+#    in the "moved with us" third, both halves). Aligned = ret_1h of the core
+#    pick, sign-flipped for NO.  CORE_DIP_MOMENTUM_CUT=0.10 turns it on.
+CORE_DIP_MOMENTUM_CUT = float(os.environ.get("CORE_DIP_MOMENTUM_CUT", "0") or 0)
+CORE_DIP_MOMENTUM_COUNT = max(1, int(os.environ.get("CORE_DIP_MOMENTUM_COUNT", "1")))
+CORE_DIP_MOMENTUM_CRYPTOS = {c.strip().upper() for c in
+                             os.environ.get("CORE_DIP_MOMENTUM_CRYPTOS", "BTC").split(",") if c.strip()}
+# 2) Weekday cut. BTC core dips on Wednesdays (US Central) won 8.5% over 1,335
+#    fills in Kalshi's 10-month history (both halves) and 8.5% live; ETH fine.
+#    CORE_DIP_WEEKDAY_CUT="BTC:wed" turns it on (several: "BTC:wed,ETH:sun").
+CORE_DIP_WEEKDAY_COUNT = max(1, int(os.environ.get("CORE_DIP_WEEKDAY_COUNT", "1")))
+CORE_DIP_WEEKDAY_CUT = set()
+for _part in os.environ.get("CORE_DIP_WEEKDAY_CUT", "").split(","):
+    try:
+        _c, _d = _part.strip().split(":")
+        CORE_DIP_WEEKDAY_CUT.add((_c.strip().upper(), _DOW[_d.strip().lower()[:3]]))
+    except Exception:
+        if _part.strip():
+            print(f"  [CORE-DIP] ignoring bad CORE_DIP_WEEKDAY_CUT entry {_part!r}", flush=True)
+# 3) Take profit. Once a core dip fills, rest a SELL at CORE_DIP_TP_PRICE for
+#    what filled. Over 10 months the dipped side touched 90c and then still lost
+#    often enough that selling there beat holding (BTC +4% to +18%, ETH +15% to
+#    +52% at 100 contracts, the low end excluding spikes in the last 2 minutes).
+#    The cost is 10c a contract on legs that would have won anyway.
+#    CORE_DIP_TP_PRICE=0.90 turns it on.
+CORE_DIP_TP_PRICE = float(os.environ.get("CORE_DIP_TP_PRICE", "0") or 0)
+CORE_DIP_TP_CRYPTOS = {c.strip().upper() for c in
+                       os.environ.get("CORE_DIP_TP_CRYPTOS", "BTC,ETH").split(",") if c.strip()}
+CORE_DIP_TP_MIN_SECS = int(os.environ.get("CORE_DIP_TP_MIN_SECS", "30"))
+
+
+def _aligned_ret_1h(core_rec):
+    """The core pick's 1h return, + when the coin moved toward our side."""
+    try:
+        r = float((core_rec.get("indicators") or {}).get("ret_1h"))
+    except (TypeError, ValueError):
+        return None
+    return r if core_rec.get("side") == "yes" else -r
+
+
+def _core_dip_momentum(core_rec, crypto):
+    if CORE_DIP_MOMENTUM_CUT <= 0 or (crypto or "").upper() not in CORE_DIP_MOMENTUM_CRYPTOS:
+        return False
+    a = _aligned_ret_1h(core_rec)
+    return a is not None and a >= CORE_DIP_MOMENTUM_CUT
+
+
+def _core_dip_weekday(window_end_iso, crypto):
+    if not CORE_DIP_WEEKDAY_CUT:
+        return False
+    try:
+        start = (datetime.fromisoformat(window_end_iso) - timedelta(minutes=15)).astimezone(timezone.utc)
+        return ((crypto or "").upper(), _us_central(start).weekday()) in CORE_DIP_WEEKDAY_CUT
+    except Exception:
+        return False
+
+
+def _order_fills(ticker, order_id):
+    """(contracts filled, average YES price, contracts filled as taker) for one
+    order, read from /portfolio/fills and matched on order_id. Raises on API error."""
+    fills = (auth_get("/portfolio/fills", params={"ticker": ticker, "limit": 200}) or {}).get("fills") or []
+    qty = cost = taker = 0.0
+    for f in fills:
+        if f.get("order_id") != order_id:
+            continue
+        n = float(f.get("count_fp") or f.get("count") or 0)
+        if n <= 0:
+            continue
+        yp = f.get("yes_price_dollars")
+        yp = float(yp) if yp is not None else float(f.get("yes_price") or 0) / 100.0
+        qty += n
+        cost += n * yp
+        if f.get("is_taker"):
+            taker += n
+    return qty, (cost / qty if qty else None), taker
+
+
+def place_tp_order(ticker, dip_side, count, tp_price):
+    """Rest a SELL of `count` contracts of `dip_side` at `tp_price`. Kalshi keeps
+    one net position per market, so selling YES is an ask on YES at tp_price and
+    selling NO is a bid on YES at 1 - tp_price; either one reduces the position
+    the dip bought. Returns the order id or None."""
+    if dip_side == "yes":
+        api_side, cents = "ask", int(round(tp_price * 100))
+    else:
+        api_side, cents = "bid", int(round((1.0 - tp_price) * 100))
+    order = {"ticker": ticker, "side": api_side, "count": str(int(count)),
+             "price": f"{cents / 100:.2f}", "time_in_force": "good_till_canceled",
+             "self_trade_prevention_type": "taker_at_cross",
+             "client_order_id": str(uuid.uuid4()), "exchange_index": -1}
+    try:
+        res = auth_post("/portfolio/events/orders", data=order)
+        oid = res.get("order_id", "")
+        if not oid:
+            P(f"    [TP-FAIL] no order_id {ticker} sell {dip_side} n={count} @ {tp_price*100:.0f}c resp={str(res)[:160]}")
+            return None
+        return oid
+    except Exception as e:
+        body = ""
+        try:
+            body = f"  body={e.response.text[:200]}"
+        except Exception:
+            pass
+        P(f"    [TP-FAIL] {ticker} sell {dip_side} n={count} @ {tp_price*100:.0f}c  {type(e).__name__}: {e}{body}")
+        return None
+
+
+def _manage_core_tp(bets, window_end_iso):
+    """Every poll: for this window's core dips, place a take-profit sell for any
+    contracts that filled since the last check."""
+    if CORE_DIP_TP_PRICE <= 0:
+        return
+    try:
+        secs_left = (datetime.fromisoformat(window_end_iso) - datetime.now(timezone.utc)).total_seconds()
+    except Exception:
+        return
+    if secs_left < CORE_DIP_TP_MIN_SECS:
+        return
+    changed = False
+    for b in bets:
+        if not (b.get("dip_add") and b.get("dip_type") == "core" and not b.get("experiment")
+                and b.get("window_end") == window_end_iso and b.get("order_id")
+                and (b.get("crypto") or "").upper() in CORE_DIP_TP_CRYPTOS
+                and b.get("result") in ("dip_pending", "open")):
+            continue
+        try:
+            filled, _, _ = _order_fills(b["ticker"], b["order_id"])
+        except Exception as e:
+            P(f"    [TP] fill check failed {b.get('ticker')}: {type(e).__name__}")
+            continue
+        have = sum(int(o.get("qty") or 0) for o in b.get("tp_orders") or [])
+        need = int(round(filled)) - have
+        if need <= 0:
+            continue
+        oid = place_tp_order(b["ticker"], b["side"], need, CORE_DIP_TP_PRICE)
+        if oid:
+            b.setdefault("tp_orders", []).append({"id": oid, "qty": need, "price": CORE_DIP_TP_PRICE,
+                                                  "ts": datetime.now(timezone.utc).isoformat()})
+            changed = True
+            P(f"  [CORE-TP] {b['crypto']} {b['side']} — dip filled {int(round(filled))}, "
+              f"resting sell {need} @ {CORE_DIP_TP_PRICE*100:.0f}c")
+    if changed:
+        save_bets(bets)
+
+
 def _split_expiry_week(window_end_iso):
     """True if this window STARTS Mon-Thu (US Central) of a quarterly expiry week."""
     if not SPLIT_DIP_EXPIRY_FREEZE:
@@ -1303,12 +1452,18 @@ def _place_core_dips(bets, window_end_iso):
             continue
         _reduced = _core_dip_reduced(window_end_iso, cr)
         _frozen = _dip_frozen(window_end_iso)
+        _mom = _core_dip_momentum(b, cr)
+        _wday = _core_dip_weekday(window_end_iso, cr)
         for _price, _count in [(CORE_DIP_PRICE, _core_dip_size(b["side"], cr))] + CORE_DIP_EXTRA:
             _full = _count
             if _reduced:
                 _count = min(_count, CORE_DIP_REDUCED_COUNT)
             if _frozen:
                 _count = min(_count, DIP_FREEZE_COUNT)
+            if _mom:
+                _count = min(_count, CORE_DIP_MOMENTUM_COUNT)
+            if _wday:
+                _count = min(_count, CORE_DIP_WEEKDAY_COUNT)
             if _count <= 0:
                 continue
             _is_exp = _price in _CORE_EXPERIMENT_TIERS
@@ -1322,6 +1477,8 @@ def _place_core_dips(bets, window_end_iso):
                     "experiment": _is_exp,
                     "order_id": oid, "contracts": _count,
                     "reduced_hours": _reduced, "frozen": _frozen, "full_count": _full,
+                    "momentum_cut": _mom, "weekday_cut": _wday,
+                    "ret_1h_aligned": _aligned_ret_1h(b),
                     "event_ticker": b.get("event_ticker", ""),
                     "window_end": window_end_iso,
                     "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -1333,7 +1490,9 @@ def _place_core_dips(bets, window_end_iso):
                     done.add(cr)      # only the production tier latches the window
                 P(f"  [CORE-DIP] {cr} {b['side']} — rested {_count}x @ "
                   f"{_price*100:.0f}c{' [experiment]' if _is_exp else ''}"
-                  f"{f' [reduced hour, full size {_full}]' if _reduced else ''}")
+                  f"{f' [reduced hour, full size {_full}]' if _reduced else ''}"
+                  f"{f' [momentum cut, full size {_full}]' if _mom else ''}"
+                  f"{f' [weekday cut, full size {_full}]' if _wday else ''}")
             time.sleep(0.25)
     # Latch the window only when every configured cell is covered. Returning
     # True as soon as ANYTHING was placed is what stranded the second leg: the
@@ -2275,10 +2434,34 @@ def _resolve_open_bets(bets):
                     fee = 0.0
                 else:
                     fee = math.ceil(0.07 * contracts * price * (1 - price) * 100) / 100.0 if 0 < price < 1 else 0.0
-            if won:
-                bet["pnl"] = round(contracts * (1.0 - price) - fee, 2)
-            else:
-                bet["pnl"] = round(-contracts * price - fee, 2)
+            tp_qty = 0.0
+            tp_proceeds = 0.0
+            tp_fee = 0.0
+            if bet.get("tp_orders"):
+                # Contracts sold by the take-profit earn the sale price; only the
+                # rest ride to settlement. A failed lookup leaves the bet open
+                # so it is retried, rather than booking the wrong P&L.
+                try:
+                    for o in bet["tp_orders"]:
+                        q, ayp, tk = _order_fills(ticker, o["id"])
+                        if q:
+                            per = ayp if side == "yes" else 1.0 - ayp
+                            tp_qty += q
+                            tp_proceeds += q * per
+                            if tk:
+                                tp_fee += math.ceil(0.07 * tk * per * (1 - per) * 100) / 100.0
+                except Exception as e:
+                    P(f"  [RESOLVE] TP fill lookup failed {ticker}: {type(e).__name__} — left open")
+                    bet["result"] = "open"
+                    continue
+                if tp_qty > contracts:
+                    tp_proceeds *= contracts / tp_qty
+                    tp_qty = float(contracts)
+                bet["tp_filled"] = round(tp_qty, 2)
+                bet["tp_proceeds"] = round(tp_proceeds, 2)
+            rest = contracts - tp_qty
+            held = rest * (1.0 - price) if won else -rest * price
+            bet["pnl"] = round(tp_proceeds - tp_qty * price + held - fee - tp_fee, 2)
             changed = True
             resolved_since_save += 1
             P(f"  [RESOLVE] {bet.get('crypto','')} {ticker}: {bet['result']}")
@@ -2754,6 +2937,8 @@ def run(live=False):
             if CORE_DIP_ENABLED and not core_dips_done_this_window:
                 if _place_core_dips(bets, window_end.isoformat()):
                     core_dips_done_this_window = True
+            if CORE_DIP_TP_PRICE > 0:
+                _manage_core_tp(bets, window_end.isoformat())
 
             # ── Phase 3: Check pending orders once, cancel unfilled ──
             if pending_orders:
