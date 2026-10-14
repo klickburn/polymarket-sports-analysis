@@ -325,6 +325,53 @@ def _parse_until(s, name="DIP_FREEZE_UNTIL_UTC"):
 DIP_FREEZE_UNTIL = _parse_until(os.environ.get("DIP_FREEZE_UNTIL_UTC", ""))
 
 
+# ── Quarterly-expiry week: split dips only ───────────────────────────────
+# The big BTC/ETH futures and options expire on the LAST FRIDAY of March, June,
+# September and December. In the Mon-Thu before each one, split dips won 5.6%
+# over 143 fills in Kalshi's Dec 2025 - Oct 2026 history (every one of the four
+# expiry weeks below break-even; live Sep 2026: 5.3% of 57), against ~11% on
+# other days -- collapsed legs tend to stay pinned down into a big expiry. So in
+# windows STARTING Monday 00:00 to Thursday 23:59 US Central time before the
+# expiry Friday, every split tier rests at SPLIT_DIP_EXPIRY_COUNT. Core dips are
+# unaffected (no such pattern there). SPLIT_DIP_EXPIRY_FREEZE=0 (default) = off.
+SPLIT_DIP_EXPIRY_FREEZE = os.environ.get("SPLIT_DIP_EXPIRY_FREEZE", "0") == "1"
+SPLIT_DIP_EXPIRY_COUNT = max(1, int(os.environ.get("SPLIT_DIP_EXPIRY_COUNT", "1")))
+
+
+def _us_central(dt_utc):
+    """UTC datetime -> US Central local time (CDT from the 2nd Sunday of March
+    02:00 to the 1st Sunday of November 02:00, CST otherwise). Self-contained
+    so it does not depend on a tz database being installed."""
+    y = dt_utc.year
+    mar1, nov1 = datetime(y, 3, 1, tzinfo=timezone.utc), datetime(y, 11, 1, tzinfo=timezone.utc)
+    dst_start = mar1 + timedelta(days=(6 - mar1.weekday()) % 7 + 7, hours=8)   # 2nd Sun Mar, 02:00 CST = 08:00 UTC
+    dst_end = nov1 + timedelta(days=(6 - nov1.weekday()) % 7, hours=7)        # 1st Sun Nov, 02:00 CDT = 07:00 UTC
+    off = -5 if dst_start <= dt_utc < dst_end else -6
+    return (dt_utc + timedelta(hours=off)).replace(tzinfo=None)
+
+
+def _quarterly_expiry(year, month):
+    """Last Friday of `month` (a date)."""
+    nxt = datetime(year + (month == 12), month % 12 + 1, 1)
+    last = nxt - timedelta(days=1)
+    return (last - timedelta(days=(last.weekday() - 4) % 7)).date()
+
+
+def _split_expiry_week(window_end_iso):
+    """True if this window STARTS Mon-Thu (US Central) of a quarterly expiry week."""
+    if not SPLIT_DIP_EXPIRY_FREEZE:
+        return False
+    try:
+        start = (datetime.fromisoformat(window_end_iso) - timedelta(minutes=15)).astimezone(timezone.utc)
+        d = _us_central(start).date()
+        if d.month not in (3, 6, 9, 12):
+            return False
+        days_left = (_quarterly_expiry(d.year, d.month) - d).days
+        return 1 <= days_left <= 4
+    except Exception:
+        return False
+
+
 def _dip_frozen(window_end_iso):
     """True if this window STARTS in a freeze block (UTC weekday + hour) or
     before the one-off DIP_FREEZE_UNTIL_UTC time."""
@@ -1066,6 +1113,7 @@ def _place_split_dips(bets, window_end_iso):
     _split_leg_results = []
     reduced = _split_dip_reduced(window_end_iso)
     frozen = _dip_frozen(window_end_iso)
+    expiry = _split_expiry_week(window_end_iso)
     tier_str = ", ".join(f"{c}@{p*100:.0f}c" for p, c in SPLIT_DIP_TIERS)
     P(f"  [DIP] split window ({sides[0]}/{sides[1]}) — resting tiers [{tier_str}] on both sides")
     if reduced:
@@ -1074,6 +1122,9 @@ def _place_split_dips(bets, window_end_iso):
     if frozen:
         P(f"  [DIP] freeze (DIP_FREEZE_UTC / DIP_FREEZE_UNTIL_UTC) — every split tier capped at "
           f"{DIP_FREEZE_COUNT} contract(s)")
+    if expiry:
+        P(f"  [DIP] quarterly-expiry week (Mon-Thu) — every split tier capped at "
+          f"{SPLIT_DIP_EXPIRY_COUNT} contract(s)")
     if SPLIT_DIP_CRYPTO_SIZES:
         P(f"  [DIP] per-crypto {SPLIT_DIP_PRICE*100:.0f}c size: " + ", ".join(
             f"{c} {SPLIT_DIP_CRYPTO_SIZES.get(c, SPLIT_DIP_COUNT)}" for c in wtr))
@@ -1096,6 +1147,8 @@ def _place_split_dips(bets, window_end_iso):
                 count = min(count, SPLIT_DIP_REDUCED_COUNT)
             if frozen:
                 count = min(count, DIP_FREEZE_COUNT)
+            if expiry:
+                count = min(count, SPLIT_DIP_EXPIRY_COUNT)
             if count <= 0:
                 continue
             oid = place_dip_order(b["ticker"], b["side"], count, price)
@@ -1110,6 +1163,7 @@ def _place_split_dips(bets, window_end_iso):
                     "order_id": oid, "contracts": count,
                     "reduced_hours": reduced,
                     "frozen": frozen,
+                    "expiry_week": expiry,
                     "full_count": full_count,
                     "event_ticker": b.get("event_ticker", ""),
                     "window_end": window_end_iso,
