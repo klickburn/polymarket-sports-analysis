@@ -1417,7 +1417,8 @@ def _build_score_report(bets, status, balance_info=None):
                                    "split_blk_fills": 0, "split_blk_wins": 0,
                                    "split_dip_pnl_100": 0.0,
                                    "core_dip_pnl_100": 0.0,
-                                   "core_dip_fills": 0, "core_dip_wins": 0})
+                                   "core_dip_fills": 0, "core_dip_wins": 0,
+                                   "core_blk_fills": 0, "core_blk_wins": 0})
         e["days"].add((b.get("timestamp") or "")[:10])
         won = b.get("result") == "win"
         pnl = b.get("pnl", 0)
@@ -1435,6 +1436,20 @@ def _build_score_report(bets, status, balance_info=None):
                     e["core_dip_pnl"] += pnl
                     e["core_dip_fills"] += 1
                     e["core_dip_wins"] += 1 if won else 0
+                    # BTC core dips in windows STARTING 00:00-05:45 UTC
+                    # (7pm-1am CDT, 6pm-midnight CST after Nov 1) -- the block
+                    # the bot trades at 1 contract (CORE_DIP_REDUCED_HOURS_UTC).
+                    # Window start from window_end, falling back to placement.
+                    if b.get("crypto") == "BTC":
+                        try:
+                            _st = (datetime.fromisoformat(b["window_end"]) - timedelta(minutes=15)
+                                   if b.get("window_end") else datetime.fromisoformat(b.get("timestamp")))
+                            _ch = _st.astimezone(timezone.utc).hour
+                        except Exception:
+                            _ch = None
+                        if _ch is not None and _ch < 6:
+                            e["core_blk_fills"] += 1
+                            e["core_blk_wins"] += 1 if won else 0
                     # Same normalisation as split dips. This book has swung
                     # between 1 and 100 contracts repeatedly, so its raw
                     # monthly P&L is almost entirely a record of those changes.
@@ -1495,6 +1510,10 @@ def _build_score_report(bets, status, balance_info=None):
             "split_blk_wins": e["split_blk_wins"],
             "split_blk_wr": (round(e["split_blk_wins"] / e["split_blk_fills"] * 100, 1)
                              if e["split_blk_fills"] else None),
+            "core_blk_fills": e["core_blk_fills"],
+            "core_blk_wins": e["core_blk_wins"],
+            "core_blk_wr": (round(e["core_blk_wins"] / e["core_blk_fills"] * 100, 1)
+                            if e["core_blk_fills"] else None),
             "core_dip_fills": e["core_dip_fills"],
             "core_dip_wins": e["core_dip_wins"],
             "core_dip_pnl_100": round(e["core_dip_pnl_100"], 2),
