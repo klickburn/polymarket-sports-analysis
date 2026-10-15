@@ -2159,6 +2159,38 @@ def _central_date(epoch):
     return _us_central(datetime.fromtimestamp(epoch, timezone.utc)).date().isoformat()
 
 
+_RULES = {"report": None}
+_ETH_CORE_RAISED = datetime(2026, 10, 15, 3, 15, tzinfo=timezone.utc).timestamp()   # 1 -> 100 contracts
+
+
+def _rules_loop():
+    """Every 5 minutes: check new late cancels against public prices and rebuild the
+    rule tracker, from one read of the bets file. Read-only."""
+    import late_cancels
+    import rule_effects
+    from crypto_score_bot import DIP_FREEZE
+    checks = os.path.join(SCORE_DATA_DIR, "late_cancel_checks.json")
+    while True:
+        try:
+            bets = _late_cancel_bets()
+            late = late_cancels.run_pass(lambda: bets, checks, _central_date)
+            _RULES["report"] = rule_effects.build(
+                bets, "kalshi", _central_date, DIP_FREEZE, late=late,
+                raises=[("eth_raise", "ETH core raise", "what ETH core dips made above 1 contract since the raise on Oct 14",
+                         "ETH", "core", _ETH_CORE_RAISED)])
+            del bets
+        except Exception as e:
+            P(f"  [RULES] pass failed: {type(e).__name__} {str(e)[:120]}")
+        time.sleep(late_cancels.PASS_EVERY)
+
+
+@app.get("/api/rule-effects")
+def api_rule_effects():
+    """Rule tracker: what each sizing and exit rule changed vs not having it
+    (rule_effects.py). Read-only; rebuilt every 5 minutes."""
+    return JSONResponse(_RULES["report"] or {"rows": [], "working": True})
+
+
 @app.get("/api/late-cancel-savings")
 def api_late_cancel_savings():
     """What the late cancels saved, per book: each really-cancelled order checked
@@ -2502,12 +2534,9 @@ def start_threads():
     t4.start()
     P("  [SERVER] Score resolve thread started")
 
-    # Late-cancel savings checker: read-only, public prices only
-    import late_cancels
-    threading.Thread(target=late_cancels.loop, daemon=True,
-                     args=(_late_cancel_bets, os.path.join(SCORE_DATA_DIR, "late_cancel_checks.json"),
-                           _central_date), kwargs={"log": P}).start()
-    P("  [SERVER] Late-cancel savings thread started")
+    # Late-cancel savings + rule tracker: read-only, public prices only
+    threading.Thread(target=_rules_loop, daemon=True).start()
+    P("  [SERVER] Rule tracker thread started")
 
     # Load cached history (no auto-fetch — use /api/history/refresh manually)
     _load_history_cache()

@@ -553,6 +553,7 @@
   <div class="kpi-row" id="scoreKpis"></div>
   <div id="monthlyPnl"></div>
   <div id="lateCancels"></div>
+  <div id="ruleTracker"></div>
 
   <!-- Hero charts -->
   <div class="grid-2">
@@ -1584,6 +1585,40 @@ async function renderLateCancels() {
   </div>`;
 }
 
+// Rule tracker: what each sizing and exit rule changed compared with not having
+// it, at real size (rule_effects.py). Positive = the rule made or saved money.
+async function renderRuleTracker() {
+  const el = document.getElementById('ruleTracker');
+  if (!el) return;
+  let d;
+  try { d = await (await fetch('/api/rule-effects')).json(); } catch (e) { return; }
+  const rows = d.rows || [];
+  if (!rows.length) { el.innerHTML = ''; return; }
+  const money = v => {
+    const c = v > 0 ? 'var(--green)' : (v < 0 ? 'var(--red)' : 'var(--muted)');
+    return `<td style="color:${c}">${v > 0 ? '+' : v < 0 ? '-' : ''}$${Math.abs(v).toFixed(2)}</td>`;
+  };
+  const day = t => t ? new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+  const body = rows.map(r => {
+    const idle = !r.applied;
+    return `<tr${idle ? ' style="opacity:.55"' : ''}><td><b>${r.label}</b>
+        <div style="color:var(--muted);font-size:11px;font-weight:400">${r.note}</div></td>
+      <td>${idle ? 'not yet' : day(r.since)}</td><td>${r.applied}</td>
+      <td>${r.filled}<span style="color:var(--muted);font-size:11px"> (won ${r.won} / lost ${r.lost})</span>${r.waiting ? `<span style="color:var(--muted);font-size:11px"> · ${r.waiting} not settled</span>` : ''}</td>
+      ${money(r.net)}${money(r.today)}</tr>`;
+  }).join('');
+  el.innerHTML = `<div class="card" style="margin-bottom:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:10px;flex-wrap:wrap">
+      <h3 style="margin:0">Rule tracker</h3>
+      <div style="font-size:12px;color:var(--muted)">money each rule made (+) or cost (&minus;) compared with not having it, at real size &mdash;
+        a cut assumes the full-size order would have filled like the smaller one</div>
+    </div>
+    <div class="scroll-table"><table>
+      <thead><tr><th>Rule</th><th>Since</th><th>Orders it changed</th><th>Made a difference</th><th>Effect</th><th>Today</th></tr></thead>
+      <tbody>${body}</tbody></table></div>
+  </div>`;
+}
+
 function renderMonthlyPnl(d) {
   const el = document.getElementById('monthlyPnl');
   if (!el) return;
@@ -1904,6 +1939,7 @@ function renderScoreBot() {
   ).join('');
   renderMonthlyPnl(d);
   renderLateCancels();
+  renderRuleTracker();
 
   // Cumulative P&L chart — with time filters
   const _allScoreTrades = (d.recent_bets || []).filter(b => b.action === 'trade' && (b.result === 'win' || b.result === 'loss') && !b.dip_add);
