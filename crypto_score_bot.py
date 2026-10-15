@@ -506,6 +506,62 @@ def _manage_core_tp(bets, window_end_iso):
         save_bets(bets)
 
 
+# ── Late-window cancels (from our own live fills, Jul 28 - Oct 14 2026) ────
+# Split dips that filled in the LAST minute won 5.5-5.9% (1,051 fills) against
+# 13-16% for fills in minutes 11-14; cancelling unfilled split orders at minute 14
+# raised P&L@100 from +$2,350 to +$2,910 (10c) and +$9,435 to +$13,118 (tiers),
+# better in both halves. ETH core dips filled after minute 13 won ~6.4%; a
+# minute-13 cancel took them from -$690 to +$1,460. BTC core: no difference, so
+# it keeps resting to the close. Filled parts settle as before.
+SPLIT_DIP_CANCEL_AT_MIN = float(os.environ.get("SPLIT_DIP_CANCEL_AT_MIN", "0") or 0)
+CORE_DIP_CANCEL_AT = {}
+for _part in os.environ.get("CORE_DIP_CANCEL_AT", "").split(","):
+    try:
+        _c, _m = _part.strip().split(":")
+        CORE_DIP_CANCEL_AT[_c.strip().upper()] = float(_m)
+    except Exception:
+        if _part.strip():
+            print(f"  [DIP] ignoring bad CORE_DIP_CANCEL_AT entry {_part!r}", flush=True)
+
+
+def _cancel_late_dips(bets, window_end_iso):
+    """Every poll: cancel this window's unfilled dip orders once past their cutoff."""
+    if SPLIT_DIP_CANCEL_AT_MIN <= 0 and not CORE_DIP_CANCEL_AT:
+        return
+    try:
+        mins_in = 15 - (datetime.fromisoformat(window_end_iso)
+                        - datetime.now(timezone.utc)).total_seconds() / 60
+    except Exception:
+        return
+    changed = False
+    for b in bets:
+        if not (b.get("dip_add") and b.get("window_end") == window_end_iso and b.get("order_id")
+                and b.get("result") == "dip_pending" and not b.get("cancelled_at")
+                and int(b.get("cancel_tries") or 0) < 5):
+            continue
+        if b.get("dip_type") == "core":
+            cutoff = CORE_DIP_CANCEL_AT.get((b.get("crypto") or "").upper())
+        else:
+            cutoff = SPLIT_DIP_CANCEL_AT_MIN or None
+        if not cutoff or mins_in < cutoff:
+            continue
+        try:
+            _cancel_order(b["order_id"], b.get("ticker"))
+            b["cancelled_at"] = datetime.now(timezone.utc).isoformat()
+            P(f"  [DIP] minute-{cutoff:g} cancel: {b.get('crypto')} {b.get('dip_type')} "
+              f"{float(b.get('price') or 0)*100:.0f}c x{b.get('contracts')}")
+        except Exception as e:
+            code = getattr(getattr(e, "response", None), "status_code", None)
+            if code == 404:                 # already filled or gone: nothing to cancel
+                b["cancelled_at"] = "gone"
+            else:
+                b["cancel_tries"] = int(b.get("cancel_tries") or 0) + 1
+                P(f"  [DIP] cancel failed {b.get('ticker')} {b.get('order_id')}: {type(e).__name__} {code or ''}")
+        changed = True
+    if changed:
+        save_bets(bets)
+
+
 def _split_expiry_week(window_end_iso):
     """True if this window STARTS Mon-Thu (US Central) of a quarterly expiry week."""
     if not SPLIT_DIP_EXPIRY_FREEZE:
@@ -2939,6 +2995,7 @@ def run(live=False):
                     core_dips_done_this_window = True
             if CORE_DIP_TP_PRICE > 0:
                 _manage_core_tp(bets, window_end.isoformat())
+            _cancel_late_dips(bets, window_end.isoformat())
 
             # ── Phase 3: Check pending orders once, cancel unfilled ──
             if pending_orders:
