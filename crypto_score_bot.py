@@ -2413,6 +2413,54 @@ def _resolve_dip_orders(bets):
         save_bets(bets)
     return bets
 
+def _tp_fills(bet, ticker, side, contracts):
+    """(qty sold, proceeds, taker fee) of a core dip's take-profit orders, also
+    written onto the bet. Raises if a lookup fails."""
+    tp_qty = tp_proceeds = tp_fee = 0.0
+    for o in bet["tp_orders"]:
+        q, ayp, tk = _order_fills(ticker, o["id"])
+        if q:
+            per = ayp if side == "yes" else 1.0 - ayp
+            tp_qty += q
+            tp_proceeds += q * per
+            if tk:
+                tp_fee += math.ceil(0.07 * tk * per * (1 - per) * 100) / 100.0
+    if tp_qty > contracts:
+        tp_proceeds *= contracts / tp_qty
+        tp_qty = float(contracts)
+    bet["tp_filled"] = round(tp_qty, 2)
+    bet["tp_proceeds"] = round(tp_proceeds, 2)
+    bet["tp_fee"] = round(tp_fee, 2)
+    return tp_qty, tp_proceeds, tp_fee
+
+
+def _backfill_tp(bets):
+    """Core dips with a take-profit that were settled before their sale was looked
+    up: dashboard_server's resolver used to settle them as if held to the end.
+    Read the take-profit fills now and book the real P&L."""
+    changed = False
+    for bet in bets:
+        if not (bet.get("tp_orders") and "tp_filled" not in bet and bet.get("result") in ("win", "loss")):
+            continue
+        ticker, side = bet.get("ticker", ""), bet.get("side", "")
+        price = bet.get("fill_price", bet.get("price", 0))
+        contracts = bet.get("filled_count", bet.get("contracts", 1))
+        try:
+            tp_qty, tp_proceeds, tp_fee = _tp_fills(bet, ticker, side, contracts)
+        except Exception as e:
+            P(f"  [RESOLVE] TP backfill lookup failed {ticker}: {type(e).__name__} — retry next cycle")
+            continue
+        rest = contracts - tp_qty
+        held = rest * (1.0 - price) if bet["result"] == "win" else -rest * price
+        old = bet.get("pnl")
+        bet["pnl"] = round(tp_proceeds - tp_qty * price + held - float(bet.get("fee") or 0) - tp_fee, 2)
+        P(f"  [RESOLVE] TP backfill {bet.get('crypto','')} {ticker}: {tp_qty:g} sold at the take-profit, "
+          f"pnl {old} -> {bet['pnl']}")
+        changed = True
+    if changed:
+        save_bets(bets)
+
+
 def _resolve_open_bets(bets):
     """Resolve open bets from past windows so scaling/cool-off/trailing see the
     COMPLETE realized P&L sequence. Unresolved trades are invisible to the sizing
@@ -2437,6 +2485,8 @@ def _resolve_open_bets(bets):
     # is toggled off while orders are still outstanding
     if any(b.get("result") == "dip_pending" for b in bets):
         bets = _resolve_dip_orders(bets)
+    if any(b.get("tp_orders") and "tp_filled" not in b and b.get("result") in ("win", "loss") for b in bets):
+        _backfill_tp(bets)
 
     def _we(bet):
         try:
@@ -2512,23 +2562,11 @@ def _resolve_open_bets(bets):
                 # rest ride to settlement. A failed lookup leaves the bet open
                 # so it is retried, rather than booking the wrong P&L.
                 try:
-                    for o in bet["tp_orders"]:
-                        q, ayp, tk = _order_fills(ticker, o["id"])
-                        if q:
-                            per = ayp if side == "yes" else 1.0 - ayp
-                            tp_qty += q
-                            tp_proceeds += q * per
-                            if tk:
-                                tp_fee += math.ceil(0.07 * tk * per * (1 - per) * 100) / 100.0
+                    tp_qty, tp_proceeds, tp_fee = _tp_fills(bet, ticker, side, contracts)
                 except Exception as e:
                     P(f"  [RESOLVE] TP fill lookup failed {ticker}: {type(e).__name__} — left open")
                     bet["result"] = "open"
                     continue
-                if tp_qty > contracts:
-                    tp_proceeds *= contracts / tp_qty
-                    tp_qty = float(contracts)
-                bet["tp_filled"] = round(tp_qty, 2)
-                bet["tp_proceeds"] = round(tp_proceeds, 2)
             rest = contracts - tp_qty
             held = rest * (1.0 - price) if won else -rest * price
             bet["pnl"] = round(tp_proceeds - tp_qty * price + held - fee - tp_fee, 2)

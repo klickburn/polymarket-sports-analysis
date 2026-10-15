@@ -534,11 +534,16 @@ def _resolve_score_bets():
             actual_price = bet.get("fill_price", bet.get("price", 0))
             contracts = bet.get("filled_count", bet.get("contracts", 1))
             fee = _bet_fee(bet, contracts, actual_price)
-            if bet["result"] == "win":
-                correct_pnl = round(contracts * (1.0 - actual_price) - fee, 2)
-            else:
-                correct_pnl = round(-contracts * actual_price - fee, 2)
-            if abs((bet.get("pnl", 0)) - correct_pnl) > 0.001:
+            # Contracts sold by a core dip's take-profit earn the sale price; only
+            # the rest ride to settlement (same formula as the bot's resolver).
+            tq = float(bet.get("tp_filled") or 0)
+            rest = contracts - tq
+            held = rest * (1.0 - actual_price) if bet["result"] == "win" else -rest * actual_price
+            correct_pnl = round(float(bet.get("tp_proceeds") or 0) - tq * actual_price + held
+                                - fee - float(bet.get("tp_fee") or 0), 2)
+            if bet.get("tp_orders") and "tp_filled" not in bet:
+                pass   # take-profit not looked up yet: the bot's _backfill_tp books it
+            elif abs((bet.get("pnl", 0)) - correct_pnl) > 0.001:
                 bet["pnl"] = correct_pnl
                 changed = True
 
@@ -554,7 +559,10 @@ def _resolve_score_bets():
     # over a large backlog makes one or two API calls per bet, and an unbounded
     # pass never finishes.
     RESOLVE_CAP = int(os.environ.get("SERVER_RESOLVE_MAX", "150"))
-    _open = [b for b in bets if b.get("result") == "open"]
+    # Core dips with a take-profit are left to the bot's resolver: only it reads
+    # the take-profit sale, and settling them here as held-to-the-end booked the
+    # wrong P&L.
+    _open = [b for b in bets if b.get("result") == "open" and not b.get("tp_orders")]
     _open.sort(key=lambda b: b.get("window_end") or b.get("timestamp") or "")
     _attempt = set(id(b) for b in _open[:RESOLVE_CAP])
     if len(_open) > RESOLVE_CAP:
