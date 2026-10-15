@@ -323,6 +323,20 @@ def _parse_until(s, name="DIP_FREEZE_UNTIL_UTC"):
         print(f"  [DIP] ignoring bad {name} value {s!r}", flush=True)
         return None
 DIP_FREEZE_UNTIL = _parse_until(os.environ.get("DIP_FREEZE_UNTIL_UTC", ""))
+# Split-only version: every split tier rests at DIP_FREEZE_COUNT in windows
+# starting before this UTC time; core dips are untouched. Ends by itself.
+SPLIT_DIP_FREEZE_UNTIL = _parse_until(os.environ.get("SPLIT_DIP_FREEZE_UNTIL_UTC", ""),
+                                      "SPLIT_DIP_FREEZE_UNTIL_UTC")
+
+
+def _split_frozen_until(window_end_iso):
+    if not SPLIT_DIP_FREEZE_UNTIL:
+        return False
+    try:
+        start = (datetime.fromisoformat(window_end_iso) - timedelta(minutes=15)).astimezone(timezone.utc)
+        return start < SPLIT_DIP_FREEZE_UNTIL
+    except Exception:
+        return False
 
 
 # ── Quarterly-expiry week: split dips only ───────────────────────────────
@@ -1317,7 +1331,7 @@ def _place_split_dips(bets, window_end_iso):
     absorbed = _absorb_core_dips(bets, window_end_iso) if CORE_DIP_ENABLED else {}
     _split_leg_results = []
     reduced = _split_dip_reduced(window_end_iso)
-    frozen = _dip_frozen(window_end_iso)
+    frozen = _dip_frozen(window_end_iso) or _split_frozen_until(window_end_iso)
     expiry = _split_expiry_week(window_end_iso)
     tier_str = ", ".join(f"{c}@{p*100:.0f}c" for p, c in SPLIT_DIP_TIERS)
     P(f"  [DIP] split window ({sides[0]}/{sides[1]}) — resting tiers [{tier_str}] on both sides")
@@ -1325,7 +1339,7 @@ def _place_split_dips(bets, window_end_iso):
         P(f"  [DIP] reduced-size hour (UTC) — every split tier capped at "
           f"{SPLIT_DIP_REDUCED_COUNT} contract(s) to keep tracking the win rate")
     if frozen:
-        P(f"  [DIP] freeze (DIP_FREEZE_UTC / DIP_FREEZE_UNTIL_UTC) — every split tier capped at "
+        P(f"  [DIP] freeze (DIP_FREEZE_UTC / _UNTIL_UTC / SPLIT_DIP_FREEZE_UNTIL_UTC) — every split tier capped at "
           f"{DIP_FREEZE_COUNT} contract(s)")
     if expiry:
         P(f"  [DIP] quarterly-expiry week (Mon-Thu) — every split tier capped at "
