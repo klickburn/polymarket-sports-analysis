@@ -2141,6 +2141,60 @@ def _live_fills_by_order():
     return agg
 
 
+def _late_cancel_bets():
+    with open(SCORE_BETS_FILE) as f:
+        return json.load(f)
+
+
+def _central_date(epoch):
+    from crypto_score_bot import _us_central
+    return _us_central(datetime.fromtimestamp(epoch, timezone.utc)).date().isoformat()
+
+
+@app.get("/api/late-cancel-savings")
+def api_late_cancel_savings():
+    """What the late cancels saved, per book: each really-cancelled order checked
+    against the public price after the cancel and the market result (late_cancels.py).
+    Read-only; refreshed every 5 minutes in the background."""
+    import late_cancels
+    return JSONResponse(late_cancels.report())
+
+
+@app.get("/api/late-cancels")
+def api_late_cancels(limit: int = 5000):
+    """Dip orders the late-cancel rule really cancelled (read-only, newest first).
+
+    cancelled_at is the time the cancel succeeded. Records marked "gone" (the
+    order had already filled, so the cancel got a 404) are left out and only
+    counted. Cancelled orders end as dip_expired, which /api/score-data cuts,
+    so this is the only feed that has them. cancelled_qty = contracts minus
+    anything that filled before the cancel (None while the fill check is still
+    pending). Touches no trading code and writes nothing.
+    """
+    try:
+        with open(SCORE_BETS_FILE) as f:
+            bets = json.load(f)
+    except Exception as e:
+        return JSONResponse({"error": str(e), "cancels": []}, status_code=200)
+    keys = ("window_end", "crypto", "dip_type", "dip_tier", "price", "experiment", "side", "ticker",
+            "contracts", "timestamp", "cancelled_at", "filled_count", "result")
+    rows, gone = [], 0
+    for b in bets:
+        if not b.get("dip_add") or not b.get("cancelled_at"):
+            continue
+        if b["cancelled_at"] == "gone":
+            gone += 1
+            continue
+        r = {k: b.get(k) for k in keys}
+        filled = int(b.get("filled_count") or 0)
+        r["cancelled_qty"] = (None if b.get("result") == "dip_pending"
+                              else max(0, int(b.get("contracts") or 0) - filled))
+        rows.append(r)
+    rows.sort(key=lambda r: str(r.get("cancelled_at")), reverse=True)
+    return JSONResponse({"count": len(rows), "gone_already_filled": gone,
+                         "cancels": rows[:max(1, limit)]})
+
+
 @app.get("/api/window-sides")
 def api_window_sides(limit: int = 8):
     """Per-window BTC/ETH sides — a few hundred bytes, for the Polymarket bot.
@@ -2439,6 +2493,13 @@ def start_threads():
     t4 = threading.Thread(target=score_resolve_loop, daemon=True)
     t4.start()
     P("  [SERVER] Score resolve thread started")
+
+    # Late-cancel savings checker: read-only, public prices only
+    import late_cancels
+    threading.Thread(target=late_cancels.loop, daemon=True,
+                     args=(_late_cancel_bets, os.path.join(SCORE_DATA_DIR, "late_cancel_checks.json"),
+                           _central_date), kwargs={"log": P}).start()
+    P("  [SERVER] Late-cancel savings thread started")
 
     # Load cached history (no auto-fetch — use /api/history/refresh manually)
     _load_history_cache()

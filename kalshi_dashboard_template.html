@@ -552,6 +552,7 @@
 <div class="mode-section active" id="sectionScore">
   <div class="kpi-row" id="scoreKpis"></div>
   <div id="monthlyPnl"></div>
+  <div id="lateCancels"></div>
 
   <!-- Hero charts -->
   <div class="grid-2">
@@ -1537,6 +1538,52 @@ function dipDailyTable(dip) {
 // dips are a flat 1-contract probe -- so one blended monthly number hides which
 // one actually changed. Phantom sits in its own column and is never added in:
 // that money was recorded but never ordered.
+// Late cancels: what cancelling unfilled dip orders near the window's end saved.
+// Each cancelled order is checked after its market settles: would it have filled
+// (public price after the cancel reached the limit) and did that side win? A fill
+// on a losing side is a loss avoided, a fill on a winning side a win given up.
+async function renderLateCancels() {
+  const el = document.getElementById('lateCancels');
+  if (!el) return;
+  let d;
+  try { d = await (await fetch('/api/late-cancel-savings')).json(); } catch (e) { return; }
+  const rows = d.rows || [];
+  if (!rows.length) { el.innerHTML = ''; return; }
+  const money = v => {
+    const c = v > 0 ? 'var(--green)' : (v < 0 ? 'var(--red)' : 'var(--muted)');
+    return `<td style="color:${c}">${v >= 0 ? '+' : '-'}$${Math.abs(v).toFixed(2)}</td>`;
+  };
+  const sub = t => `<span style="color:var(--muted);font-size:11px"> ${t}</span>`;
+  const line = (name, g, today) => `<tr><td><b>${name}</b></td><td>${g.cancelled}</td>
+    <td>${g.fill_lost}${sub('avoided $' + g.avoided.toFixed(2))}</td>
+    <td>${g.fill_won}${sub('gave up $' + g.given_up.toFixed(2))}</td>
+    <td>${g.no_fill}</td><td style="color:var(--muted)">${g.waiting}</td>${money(today)}${money(g.saved)}</tr>`;
+  const t = { cancelled: 0, fill_lost: 0, fill_won: 0, no_fill: 0, waiting: 0, avoided: 0, given_up: 0, saved: 0 };
+  let today = 0;
+  const body = rows.map(r => {
+    for (const k in t) t[k] += r[k] || 0;
+    today += r.today.saved;
+    return line(r.type === 'split' ? 'Split dips' : r.type === 'core' ? 'Core dips' : r.type, r, r.today.saved);
+  }).join('');
+  const since = d.since ? new Date(d.since).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+  el.innerHTML = `<div class="card" style="margin-bottom:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:10px;flex-wrap:wrap">
+      <h3 style="margin:0">Late cancels &mdash; money saved</h3>
+      <div style="font-size:12px;color:var(--muted)">unfilled split dips cancelled at minute 14, ETH core at 13 &mdash;
+        each checked after settlement: would it have filled, and did that side win?</div>
+    </div>
+    <div class="scroll-table"><table>
+      <thead><tr><th>Book</th><th>Cancelled</th><th>Would have filled &amp; lost</th><th>Would have filled &amp; won</th>
+        <th>Would not have filled</th><th>Not settled yet</th><th>Saved today</th><th>Saved since ${since}</th></tr></thead>
+      <tbody>${body}
+        <tr style="border-top:2px solid var(--border);font-weight:700"><td>ALL</td><td>${t.cancelled}</td>
+          <td>${t.fill_lost}${sub('avoided $' + t.avoided.toFixed(2))}</td>
+          <td>${t.fill_won}${sub('gave up $' + t.given_up.toFixed(2))}</td>
+          <td>${t.no_fill}</td><td style="color:var(--muted)">${t.waiting}</td>${money(today)}${money(t.saved)}</tr>
+      </tbody></table></div>
+  </div>`;
+}
+
 function renderMonthlyPnl(d) {
   const el = document.getElementById('monthlyPnl');
   if (!el) return;
@@ -1856,6 +1903,7 @@ function renderScoreBot() {
     `<div class="kpi"><div class="label">${k.label}</div><div class="value ${k.cls}">${k.value}</div><div class="sub">${k.sub}</div></div>`
   ).join('');
   renderMonthlyPnl(d);
+  renderLateCancels();
 
   // Cumulative P&L chart — with time filters
   const _allScoreTrades = (d.recent_bets || []).filter(b => b.action === 'trade' && (b.result === 'win' || b.result === 'loss') && !b.dip_add);
